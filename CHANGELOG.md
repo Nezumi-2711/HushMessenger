@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.23.2 (2026-10-12)
+
+This release adds Hide People tab, Hide Notifications tab, Stop MQTT logging and Bold and italic text, keeps a reply's Seen to its own chat with Hide read receipts on, and makes settings easier to scan.
 
 - Replying with Hide read receipts on now allows Seen only for that chat in the same account. A reply no longer opens a brief Seen window in other chats.
 - Release checks record stage timings. A local development preflight checks a frozen bundle while keeping the public feed held, with separate receipts that can't advance a public release.
