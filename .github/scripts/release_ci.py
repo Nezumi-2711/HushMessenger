@@ -9,8 +9,10 @@
 check   Holds patches/build/libs/patches-<version>.mpp to what scripts/check_release.py asks of the
         bundle itself: both dex halves, the manifest's version and pinned timestamp, and the catalog
         evidence :patches:checkPatchCatalog wrote for exactly these bytes. Prints the SHA-256.
-notes   The GitHub release notes: the version's whole CHANGELOG section, as scripts/release/release.ps1
-        publishes it, and a "What was checked" list that says what CI checked and nothing more.
+notes   The GitHub release notes: what changed, and a "What was checked" list that says what CI checked
+        and nothing more. What changed is the version's dated CHANGELOG section, as
+        scripts/release/release.ps1 publishes it, else the Unreleased section, else the commits since the
+        previous tag. A release never waits on the CHANGELOG: the version in gradle.properties decides.
 index   patches-bundle.json for the release, which Morphe Manager reads to find the newest bundle,
         so download_url points at this repository's release.
 
@@ -25,6 +27,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -67,13 +70,44 @@ def check_arguments(args) -> None:
         fail(f"{args.commit} isn't a full commit hash")
 
 
-def section(root: Path, version: str) -> str:
-    """The body of `## <version> (date)` in CHANGELOG.md, up to the next `## `."""
-    text = read(root / "CHANGELOG.md").replace("\r\n", "\n")
-    match = re.search(rf"^## {re.escape(version)} \(\d{{4}}-\d{{2}}-\d{{2}}\)\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
-    if match is None or not match.group(1).strip():
-        fail(f"CHANGELOG.md has no dated, non-empty {version} section")
-    return match.group(1).strip()
+def changelog(root: Path, version: str) -> str:
+    """The body of `## <version> (date)` in CHANGELOG.md, else of `## Unreleased`, else "".
+
+    Upstream keeps working under Unreleased and only dates a section when it cuts its own release, so
+    a version synced from upstream mid-development usually has no section of its own yet.
+    """
+    path = root / "CHANGELOG.md"
+    text = read(path).replace("\r\n", "\n") if path.is_file() else ""
+    for heading in (rf"{re.escape(version)} \(\d{{4}}-\d{{2}}-\d{{2}}\)", "Unreleased"):
+        match = re.search(rf"^## {heading}[ \t]*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
+        if match and match.group(1).strip():
+            return match.group(1).strip()
+    return ""
+
+
+def commits_since_previous_tag(root: Path) -> tuple:
+    """The previous release tag and the subjects of the commits after it, merges and bot commits left out."""
+    def git(*arguments):
+        result = subprocess.run(["git", "-C", str(root), *arguments], capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else ""
+
+    previous = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD")
+    span = f"{previous}..HEAD" if previous else "HEAD"
+    subjects = git("log", "--no-merges", "--format=%an%x09%s", "--max-count=200", span).splitlines()
+    return previous, [subject for author, _, subject in (line.partition("\t") for line in subjects)
+                      if not author.endswith("[bot]")]
+
+
+def changes(root: Path, version: str) -> str:
+    body = changelog(root, version)
+    if body:
+        return body
+    previous, subjects = commits_since_previous_tag(root)
+    if not subjects:
+        return "No changes are listed for this version."
+    since = f" since {previous}" if previous else ""
+    return f"CHANGELOG.md has no entry for {version}, so these are the commits{since}.\n\n" + \
+        "\n".join(f"- {subject}" for subject in subjects)
 
 
 def plain(text: str) -> str:
@@ -160,7 +194,7 @@ def notes(args) -> None:
         "* No release receipt, no fixture replays and no signature: the runner has no Messenger APKs and no release key, "
         "so the patches weren't applied to a build here and SHA256SUMS.txt isn't signed.",
     ])
-    write(Path(args.out), f"{section(root, args.version)}\n\n### What was checked\n\n{checked}\n")
+    write(Path(args.out), f"{changes(root, args.version)}\n\n### What was checked\n\n{checked}\n")
     print(f"[release] notes for {args.version} written")
 
 
@@ -175,7 +209,7 @@ def index(args) -> None:
     named = [f"{version} ({len(codes)} arm64 builds)" if len(targets) > 1 else f"{version}, all {len(codes)} arm64 builds"
              for version, codes in targets]
     opening = f"HushMessenger v{args.version} for Messenger {spoken(named)}. {count} patches."
-    summary = intro(section(root, args.version))
+    summary = intro(changelog(root, args.version))
     description = " ".join(part for part in (
         opening,
         summary,

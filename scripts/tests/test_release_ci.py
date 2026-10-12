@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -152,13 +153,53 @@ class ReleaseCi(unittest.TestCase):
 
     def test_a_section_that_opens_with_a_list_adds_no_summary(self):
         self.write("CHANGELOG.md", "# Changelog\n\n## 1.2.3 (2026-10-11)\n\n### New\n\n- A switch.\n")
-        self.assertEqual(release_ci.intro(release_ci.section(self.root, "1.2.3")), "")
+        self.assertEqual(release_ci.intro(release_ci.changelog(self.root, "1.2.3")), "")
 
-    def test_a_missing_section_is_refused(self):
-        code, _, err = self.run_command(release_ci.notes, version="1.2.4", repository="owner/repo",
-                                        commit=COMMIT, run_url="u", out=str(self.root / "n.md"))
-        self.assertEqual(code, 1)
-        self.assertIn("1.2.4", err)
+    def notes_for(self, version):
+        out = self.root / "notes.md"
+        code, _, err = self.run_command(release_ci.notes, version=version, repository="owner/repo",
+                                        commit=COMMIT, run_url="u", out=str(out))
+        self.assertEqual(code, 0, err)
+        return out.read_text(encoding="utf-8")
+
+    def test_a_version_without_its_own_section_uses_unreleased(self):
+        text = self.notes_for("1.2.4")
+        self.assertTrue(text.startswith("- Next."))
+        self.assertNotIn("This release does a thing.", text)
+
+    def test_a_version_without_any_entry_lists_the_commits_since_the_previous_tag(self):
+        self.write("CHANGELOG.md", "# Changelog\n\n## Unreleased\n\n## 1.2.3 (2026-10-11)\n\n- Old.\n")
+
+        def git(*arguments, author="Dev"):
+            subprocess.run(["git", "-C", str(self.root), "-c", f"user.name={author}", "-c", "user.email=d@x.test",
+                            "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *arguments],
+                           check=True, capture_output=True)
+
+        git("init", "-q")
+        git("commit", "-q", "--allow-empty", "-m", "before the release")
+        git("tag", "-a", "v1.2.3", "-m", "v1.2.3")
+        git("commit", "-q", "--allow-empty", "-m", "fix: keep the log through rotation")
+        git("commit", "-q", "--allow-empty", "-m", "chore(release): point Manager", author="github-actions[bot]")
+        text = self.notes_for("1.2.4")
+        self.assertTrue(text.startswith("CHANGELOG.md has no entry for 1.2.4, so these are the commits since v1.2.3."))
+        self.assertIn("- fix: keep the log through rotation", text)
+        self.assertNotIn("before the release", text)
+        self.assertNotIn("point Manager", text)
+        self.assertIn("### What was checked", text)
+
+    def test_no_changelog_and_no_history_still_gives_notes(self):
+        (self.root / "CHANGELOG.md").unlink()
+        text = self.notes_for("1.2.4")
+        self.assertTrue(text.startswith("No changes are listed for this version."))
+
+    def test_the_index_needs_no_changelog_entry(self):
+        (self.root / "CHANGELOG.md").unlink()
+        out = self.root / "index.json"
+        code, _, err = self.run_command(release_ci.index, repository="owner/repo", commit=COMMIT,
+                                        created="2026-10-12T05:00:00Z", out=str(out))
+        self.assertEqual(code, 0, err)
+        self.assertTrue(json.loads(out.read_text())["description"].startswith(
+            "HushMessenger v1.2.3 for Messenger 582.0.0.61.92, all 2 arm64 builds. 3 patches. Built by GitHub Actions"))
 
     def test_the_newest_version_is_named_first(self):
         count, targets = release_ci.catalog(self.root)

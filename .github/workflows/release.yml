@@ -1,8 +1,10 @@
 # Publishes a release whenever main carries a version that has no tag yet.
 #
-# To cut one: rename "## Unreleased" in CHANGELOG.md to "## X.Y.Z (YYYY-MM-DD)", set version = X.Y.Z
-# in gradle.properties, run ./gradlew :patches:generatePatchCatalog, commit and push to main. A push
-# that leaves the version alone does nothing past the first job.
+# The version in gradle.properties is the only trigger, so a version bump synced from upstream is
+# released as it is. A push that leaves the version alone does nothing past the first job. The notes
+# use the version's dated CHANGELOG section when there is one, else Unreleased, else the commits since
+# the previous tag; the CHANGELOG never holds a release back. patches-list.json has to match the
+# bundle, which upstream keeps true with ./gradlew :patches:generatePatchCatalog.
 #
 # The bundle is built from the pushed commit, checked the way scripts/release/release.ps1 checks the
 # bundle itself (.github/scripts/release_ci.py check), attested, and published with SHA256SUMS.txt.
@@ -79,13 +81,6 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-
-      - name: Check the release text
-        run: |
-          if ! grep -Eq "^## $VERSION \([0-9]{4}-[0-9]{2}-[0-9]{2}\)" CHANGELOG.md; then
-            echo "::error file=CHANGELOG.md::No '## $VERSION (date)' section. Rename '## Unreleased' to '## $VERSION (YYYY-MM-DD)'."
-            exit 1
-          fi
 
       - name: Set up Java
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
