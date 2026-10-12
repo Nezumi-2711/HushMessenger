@@ -6,12 +6,16 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.TextView;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.After;
@@ -29,14 +33,21 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {28, 36}, qualifiers = "en-rUS-w390dp-h844dp-mdpi")
 public class SettingsDialogTest {
+    private MessageLog.Vault originalVault;
+
     @Before public void reset() {
         Settings.initialize(RuntimeEnvironment.getApplication());
         Settings.preferences.edit().clear().commit();
+        originalVault = MessageLog.vault;
+        MessageLog.vault = new MessageLogTest.SoftwareVault();
+        MessageLog.clear();
     }
 
     @After public void closeDialog() {
         Dialog dialog = ShadowDialog.getLatestDialog();
         if (dialog != null && dialog.isShowing()) dialog.dismiss();
+        MessageLog.clear();
+        MessageLog.vault = originalVault;
     }
 
     private Dialog open(SettingsActivity activity) {
@@ -157,5 +168,131 @@ public class SettingsDialogTest {
             assertEquals(View.LAYOUT_DIRECTION_RTL, sheet.getLayoutDirection());
             assertEquals(View.TEXT_DIRECTION_RTL, sheet.getTextDirection());
         }
+    }
+
+    @Test public void userContentKeepsItsOwnParagraphDirectionInRtlSheets() throws Exception {
+        RuntimeEnvironment.setQualifiers("ar-rXB-w390dp-h844dp-mdpi");
+        String latin = "Meet at 5 p.m.!", arabic = "مرحبا بالعالم!";
+        MessageLog.write(Settings.appContext, List.of(new MessageLog.Entry(System.currentTimeMillis(), "t", latin)));
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            Dialog dialog = open(screen.get());
+            View root = dialog.getWindow().getDecorView();
+            EditText field = root.findViewWithTag("auto_reply_reply");
+            field.setText(latin);
+            layout(root);
+            assertEquals(1, field.getLayout().getParagraphDirection(0));
+            field.setText(arabic);
+            layout(root);
+            assertEquals(-1, field.getLayout().getParagraphDirection(0));
+            dialog.dismiss();
+            screen.get().getWindow().getDecorView().findViewWithTag("message_log_view").performClick();
+            root = ShadowDialog.getLatestDialog().getWindow().getDecorView();
+            TextView body = awaitText(root, latin);
+            layout(root);
+            assertEquals(1, body.getLayout().getParagraphDirection(0));
+            assertTrue(body.isTextSelectable());
+        }
+    }
+
+    @Test public void longRepliesGrowAndTheSheetCanReachTheirLastLine() {
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = open(screen.get()).getWindow().getDecorView();
+            EditText reply = root.findViewWithTag("auto_reply_reply");
+            reply.setText("First line\nSecond line");
+            layout(root);
+            int shortHeight = reply.getHeight();
+            reply.setText("A reply line\n".repeat(12) + "Last line");
+            layout(root);
+            assertEquals(13, reply.getLineCount());
+            assertTrue(reply.getHeight() > shortHeight * 3);
+            assertEquals(0, reply.getScrollY());
+            ScrollView scroll = root.findViewWithTag("dialog_scroll");
+            scroll.setSmoothScrollingEnabled(false);
+            scroll.fullScroll(View.FOCUS_DOWN);
+            assertTrue(scroll.getScrollY() > 0);
+            android.graphics.Rect lastLine = new android.graphics.Rect(0, reply.getTotalPaddingTop() + reply.getLayout().getLineTop(12),
+                reply.getWidth(), reply.getTotalPaddingTop() + reply.getLayout().getLineBottom(12));
+            // View translates the supplied rectangle into ancestor coordinates while scrolling.
+            reply.requestRectangleOnScreen(new android.graphics.Rect(lastLine), true);
+            android.graphics.Rect visible = new android.graphics.Rect();
+            assertTrue("The last reply line is visible", reply.getGlobalVisibleRect(visible));
+            int[] position = new int[2];
+            reply.getLocationOnScreen(position);
+            assertTrue(position[1] + lastLine.bottom <= visible.bottom);
+        }
+    }
+
+    @Test public void aClearFailureAfterRotationStaysVisibleAndCanBeRetried() throws Exception {
+        CountDownLatch started = new CountDownLatch(1), release = new CountDownLatch(1), finished = new CountDownLatch(1);
+        MessageLog.Vault working = MessageLog.vault;
+        MessageLog.write(Settings.appContext, List.of(new MessageLog.Entry(System.currentTimeMillis(), "t", "A saved message")));
+        MessageLog.vault = new MessageLog.Vault() {
+            @Override public byte[] seal(byte[] plain) throws Exception { return working.seal(plain); }
+            @Override public byte[] open(byte[] blob) throws Exception { return working.open(blob); }
+            @Override public void forget() throws Exception {
+                started.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("Clear wasn't released");
+                    throw new java.io.IOException("test key deletion failure");
+                } finally { finished.countDown(); }
+            }
+        };
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            screen.get().getWindow().getDecorView().findViewWithTag("message_log_view").performClick();
+            Dialog old = ShadowDialog.getLatestDialog();
+            awaitText(old.getWindow().getDecorView(), "A saved message");
+            old.getWindow().getDecorView().findViewWithTag("message_log_dialog_clear").performClick();
+            assertTrue(started.await(5, TimeUnit.SECONDS));
+            screen.recreate();
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            assertFalse(old.isShowing());
+            Dialog restored = ShadowDialog.getLatestDialog();
+            assertTrue(restored.isShowing());
+            assertFalse(restored.getWindow().getDecorView().findViewWithTag("message_log_dialog_clear").isEnabled());
+            release.countDown();
+            assertTrue(finished.await(5, TimeUnit.SECONDS));
+            View root = restored.getWindow().getDecorView();
+            awaitText(root, new SettingsText(screen.get()).get("message_log_clear_failed"));
+            assertTrue(root.findViewWithTag("message_log_dialog_clear").isEnabled());
+            MessageLog.vault = working;
+            root.findViewWithTag("message_log_retry").performClick();
+            awaitText(root, new SettingsText(screen.get()).get("message_log_empty"));
+            assertFalse(root.findViewWithTag("message_log_dialog_clear").isEnabled());
+        } finally {
+            release.countDown();
+            assertTrue(finished.await(5, TimeUnit.SECONDS));
+            MessageLog.vault = working;
+        }
+    }
+
+    private static void layout(View root) {
+        for (int pass = 0; pass < 2; pass++) {
+            root.measure(View.MeasureSpec.makeMeasureSpec(390, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(844, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, 390, 844);
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+        }
+    }
+
+    private static TextView awaitText(View root, String value) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        do {
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            TextView match = findText(root, value);
+            if (match != null) return match;
+            Thread.sleep(10);
+        } while (System.nanoTime() < deadline);
+        throw new AssertionError("Text didn't appear: " + value);
+    }
+
+    private static TextView findText(View root, String value) {
+        if (root instanceof TextView && value.contentEquals(((TextView) root).getText())) return (TextView) root;
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                TextView match = findText(group.getChildAt(i), value);
+                if (match != null) return match;
+            }
+        }
+        return null;
     }
 }

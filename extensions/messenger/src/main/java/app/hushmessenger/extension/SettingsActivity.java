@@ -276,10 +276,22 @@ public final class SettingsActivity extends Activity {
                 if (target != null && target.isShown()) target.requestFocus();
             });
             Bundle draft = state.getBundle("auto_reply_draft");
+            messageLogClearFailed = state.getBoolean("message_log_clear_failed");
             if (draft != null) root.post(() -> showAutoReplies(draft));
             else if (state.getBoolean("message_log_open")) root.post(this::showMessageLog);
         }
+        Object retained = getLastNonConfigurationInstance();
+        if (retained instanceof MessageLogClearJob) {
+            messageLogClearJob = (MessageLogClearJob) retained;
+            messageLogClearJob.owner = new java.lang.ref.WeakReference<>(this);
+            if (messageLogClearJob.finished) {
+                messageLogClearFailed = !messageLogClearJob.cleared;
+                root.post(() -> messageLogCleared(messageLogClearJob));
+            }
+        }
     }
+
+    @Override public Object onRetainNonConfigurationInstance() { return messageLogClearJob; }
 
     @Override protected void onStart() {
         super.onStart();
@@ -300,6 +312,7 @@ public final class SettingsActivity extends Activity {
     @Override protected void onDestroy() {
         if (autoReplyDialog != null) autoReplyDialog.dismiss();
         if (messageLogDialog != null) messageLogDialog.dismiss();
+        if (messageLogClearJob != null && messageLogClearJob.owner.get() == this) messageLogClearJob.owner.clear();
         documentGeneration++;
         if (documentJob != null && documentJob.request == SAVE_CHOICES) {
             // The provider may already have truncated the file. Finish this authorized save,
@@ -334,9 +347,10 @@ public final class SettingsActivity extends Activity {
 
     private void adaptToHeight(int height) {
         if (header == null || reminder == null || appContent == null || height <= 0) return;
-        boolean next = height < ui.dp(480);
+        float fontScale = Math.max(1f, getResources().getConfiguration().fontScale);
+        boolean next = height < ui.dp(Math.round(480 * fontScale));
         // Let focused content use the full viewport when the keyboard leaves little room.
-        boolean nextScrollHeader = height < ui.dp(160);
+        boolean nextScrollHeader = height < ui.dp(Math.round(160 * fontScale));
         if (compact == next && scrollHeader == nextScrollHeader) return;
         compact = next;
         scrollHeader = nextScrollHeader;
@@ -785,6 +799,7 @@ public final class SettingsActivity extends Activity {
     @SuppressWarnings("deprecation")
     private LinearLayout controlRow(String key, String title, String description, boolean divided) {
         boolean appRow = !divided && !"paused".equals(key);
+        boolean overlay = appRow && !ui.largeText;
         boolean available = Settings.available(key);
         if (!available) description += " " + text.format(CameraActivity.KEY.equals(key) ? "camera_unsupported"
             : TextStyleActivity.KEY.equals(key) ? "text_style_unsupported"
@@ -793,7 +808,7 @@ public final class SettingsActivity extends Activity {
         LinearLayout labels = ui.column();
         labels.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         LinearLayout titleLine = ui.row();
-        if (appRow) titleLine.setPaddingRelative(0, 0, ui.dp(60), 0);
+        if (overlay) titleLine.setPaddingRelative(0, 0, ui.dp(60), 0);
         if (ui.largeText) titleLine.setOrientation(LinearLayout.VERTICAL);
         titleLine.addView(ui.text(text.display(title), appRow ? 14 : 16, ui.text, false), new LinearLayout.LayoutParams(-2, -2));
         if ("ads".equals(key)) {
@@ -815,12 +830,12 @@ public final class SettingsActivity extends Activity {
             activityLabels.put(key, activeLabel);
             ui.add(labels, activeLabel, 4);
         }
-        row.addView(labels, new LinearLayout.LayoutParams(appRow ? -1 : 0, -2, appRow ? 0 : 1));
+        row.addView(labels, new LinearLayout.LayoutParams(overlay ? -1 : 0, -2, overlay ? 0 : 1));
         Switch control = ui.toggle(key, text.display(title), text.display(("ads".equals(key) ? text.format("experimental") + ". " : "") + description), Settings.preferences.getBoolean(key, false));
         LinearLayout.LayoutParams switchParams = new LinearLayout.LayoutParams(ui.dp(48), -2);
-        // App descriptions use the full panel width below the title. The switch overlays only its title line.
-        switchParams.setMarginStart(ui.dp(appRow ? -48 : 12));
-        if (appRow) {
+        // Normal-size App descriptions span the panel. Large text reserves a separate switch column.
+        switchParams.setMarginStart(ui.dp(overlay ? -48 : 12));
+        if (overlay) {
             row.setGravity(Gravity.TOP);
             control.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         }
@@ -1333,7 +1348,8 @@ public final class SettingsActivity extends Activity {
     private LinearLayout messageLogList;
     private Button messageLogClear;
     private long messageLogGeneration;
-    private boolean messageLogClearing;
+    private boolean messageLogClearFailed;
+    private MessageLogClearJob messageLogClearJob;
     private Dialog autoReplyDialog;
     private LinearLayout autoReplyList;
     private android.widget.CheckBox autoReplyGroups;
@@ -1374,7 +1390,6 @@ public final class SettingsActivity extends Activity {
             }
         });
         messageLogList = sheet.body;
-        messageLogList.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         messageLogClear = ui.button(text.get("message_log_clear"));
         messageLogClear.setTag("message_log_dialog_clear");
         messageLogClear.setOnClickListener(clicked -> clearMessageLog());
@@ -1392,25 +1407,30 @@ public final class SettingsActivity extends Activity {
         if (list == null) return;
         final long generation = ++messageLogGeneration;
         list.removeAllViews();
-        list.addView(ui.text(text.get("message_log_loading"), 14, ui.muted, false));
+        TextView loading = ui.text(text.get("message_log_loading"), 14, ui.muted, false);
+        loading.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        list.addView(loading);
         if (messageLogClear != null) messageLogClear.setEnabled(false);
+        if (messageLogClearJob != null && !messageLogClearJob.finished) return;
         new Thread(() -> {
             final MessageLog.LoadResult result = MessageLog.loadResult();
             runOnUiThread(() -> {
                 if (messageLogList != list || generation != messageLogGeneration) return;
                 list.removeAllViews();
-                if (messageLogClear != null) messageLogClear.setEnabled(result.failed || !result.entries.isEmpty());
-                if (result.failed) {
+                if (messageLogClear != null) messageLogClear.setEnabled(result.failed || messageLogClearFailed || !result.entries.isEmpty());
+                if (result.failed || messageLogClearFailed) {
                     LinearLayout failure = ui.panel();
-                    failure.addView(ui.text(text.get("message_log_load_failed"), 18, ui.error, true));
-                    ui.add(failure, ui.text(text.get("message_log_load_help"), 14, ui.muted, false), 8);
-                    Button retry = ui.button(text.get("retry"));
+                    failure.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+                    failure.addView(ui.text(text.get(messageLogClearFailed ? "message_log_clear_failed" : "message_log_load_failed"), 18, ui.error, true));
+                    ui.add(failure, ui.text(text.get(messageLogClearFailed ? "message_log_clear_help" : "message_log_load_help"), 14, ui.muted, false), 8);
+                    Button retry = ui.button(text.get(messageLogClearFailed ? "message_log_clear" : "retry"));
                     retry.setTag("message_log_retry");
-                    retry.setOnClickListener(view -> loadMessageLog());
+                    retry.setOnClickListener(view -> { if (messageLogClearFailed) clearMessageLog(); else loadMessageLog(); });
                     ui.add(failure, retry, 16);
                     ui.add(list, failure, 0);
                 } else if (result.entries.isEmpty()) {
                     LinearLayout empty = ui.panel();
+                    empty.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
                     empty.addView(ui.text(text.get("message_log_empty"), 18, ui.text, true));
                     ui.add(empty, ui.text(text.get(Settings.wouldUse(MessageLog.KEY) ? "message_log_empty_on" : "message_log_empty_off"), 14, ui.muted, false), 8);
                     ui.add(list, empty, 0);
@@ -1433,6 +1453,7 @@ public final class SettingsActivity extends Activity {
             android.text.format.DateFormat.getTimeFormat(this).format(new java.util.Date(entry.time)));
         card.addView(metadata);
         TextView body = ui.text(entry.text == null || entry.text.isEmpty() ? text.get("message_log_no_text") : entry.text, 15, ui.text, false);
+        body.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
         body.setTextIsSelectable(true);
         ui.add(card, body, 8);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
@@ -1641,7 +1662,7 @@ public final class SettingsActivity extends Activity {
             field.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES |
                 android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
             field.setMinLines(2);
-            field.setMaxLines(6);
+            // The sheet owns vertical scrolling, so long replies grow instead of trapping drags in a nested editor.
             field.setGravity(Gravity.TOP | Gravity.START);
         }
         TextView label = ui.text(title, 14, ui.text, true);
@@ -1676,19 +1697,40 @@ public final class SettingsActivity extends Activity {
     }
 
     private void clearMessageLog() {
-        if (messageLogClearing) return;
-        messageLogClearing = true;
-        messageLogGeneration++;
-        if (messageLogClear != null) messageLogClear.setEnabled(false);
-        new Thread(() -> {
-            boolean cleared = MessageLog.clear();
-            runOnUiThread(() -> {
-                messageLogClearing = false;
-                if (isFinishing() || isDestroyed()) return;
-                feedback(text.get(cleared ? "message_log_cleared" : "message_log_clear_failed"), Toast.LENGTH_LONG);
-                if (messageLogList != null) loadMessageLog();
-            });
-        }, "HushMessageLogClear").start();
+        if (messageLogClearJob != null && !messageLogClearJob.finished) return;
+        messageLogClearJob = new MessageLogClearJob(this);
+        loadMessageLog();
+        messageLogClearJob.start();
+    }
+
+    private void messageLogCleared(MessageLogClearJob job) {
+        if (job != messageLogClearJob || isFinishing() || isDestroyed()) return;
+        messageLogClearFailed = !job.cleared;
+        if (!job.notified) {
+            job.notified = true;
+            feedback(text.get(job.cleared ? "message_log_cleared" : "message_log_clear_failed"), Toast.LENGTH_LONG);
+        }
+        if (messageLogList != null) loadMessageLog();
+    }
+
+    /** Only the work and its outcome survive rotation. The worker never owns a screen or chat text. */
+    private static final class MessageLogClearJob {
+        java.lang.ref.WeakReference<SettingsActivity> owner;
+        boolean finished, cleared, notified;
+
+        MessageLogClearJob(SettingsActivity activity) { owner = new java.lang.ref.WeakReference<>(activity); }
+
+        void start() {
+            new Thread(() -> {
+                boolean result = MessageLog.clear();
+                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                    cleared = result;
+                    finished = true;
+                    SettingsActivity activity = owner.get();
+                    if (activity != null) activity.messageLogCleared(this);
+                });
+            }, "HushMessageLogClear").start();
+        }
     }
 
     private String formatSince(long timestamp, String now, String ago) {
@@ -2236,6 +2278,7 @@ public final class SettingsActivity extends Activity {
         Bundle draft = autoReplyDraft();
         if (draft != null) state.putBundle("auto_reply_draft", draft);
         state.putBoolean("message_log_open", messageLogDialog != null && messageLogDialog.isShowing());
+        state.putBoolean("message_log_clear_failed", messageLogClearFailed);
         state.putString("page", page);
         state.putString("category", category);
         state.putString("query", search.getText().toString());

@@ -1,6 +1,6 @@
 {
     "NOTE": "Generated locally from the built MPP with :patches:generatePatchCatalog. Do not edit by hand.",
-    "version": "0.23.2",
+    "version": "0.23.3",
     "patches": [
         {
             "name": "Allow chat bubbles",

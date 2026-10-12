@@ -133,6 +133,7 @@ final class SettingsUi {
         view.setHint(hint);
         view.setTextSize(15);
         view.setSingleLine(singleLine);
+        view.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
         view.setFilters(new android.text.InputFilter[] {new android.text.InputFilter.LengthFilter(limit)});
         view.setTextColor(text);
         view.setHintTextColor(muted);

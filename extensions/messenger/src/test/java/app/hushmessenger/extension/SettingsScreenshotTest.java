@@ -13,6 +13,8 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.EditText;
+import android.widget.ScrollView;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,6 +44,7 @@ public class SettingsScreenshotTest {
     private PackageInfo installedPackage;
     private Bundle originalMetadata;
     private boolean originalStarted, originalFailed;
+    private MessageLog.Vault originalVault;
 
     @Before public void prepareProductionFixture() throws Exception {
         String directory = System.getenv("HUSH_SCREENSHOTS");
@@ -67,6 +70,9 @@ public class SettingsScreenshotTest {
         Settings.preferences.edit().clear().commit();
         Settings.activeAt.clear();
         Settings.hookErrors.clear();
+        originalVault = MessageLog.vault;
+        MessageLog.vault = new MessageLogTest.SoftwareVault();
+        MessageLog.clear();
         CrashGuard.resetForTests();
         HostScreens.started = true;
         HostScreens.failed = false;
@@ -76,6 +82,8 @@ public class SettingsScreenshotTest {
         if (installedPackage == null) return;
         Dialog dialog = ShadowDialog.getLatestDialog();
         if (dialog != null && dialog.isShowing()) dialog.dismiss();
+        MessageLog.clear();
+        MessageLog.vault = originalVault;
         installedPackage.applicationInfo.metaData = originalMetadata;
         var app = RuntimeEnvironment.getApplication();
         Shadows.shadowOf(app.getPackageManager()).installPackage(installedPackage);
@@ -83,6 +91,209 @@ public class SettingsScreenshotTest {
         Settings.initialize(app);
         HostScreens.started = originalStarted;
         HostScreens.failed = originalFailed;
+    }
+
+    @Test public void capturePopulatedValidationAndStorageFailureStates() throws Exception {
+        for (boolean light : new boolean[] {false, true}) {
+            Settings.preferences.edit().clear().putBoolean("light", light).commit();
+            String theme = light ? "light" : "dark";
+            AutoReply.save(Settings.preferences, java.util.List.of(new AutoReply.Rule("hello, hours", "We're open until 5 p.m.")), false);
+            MessageLog.write(Settings.appContext, java.util.List.of(
+                new MessageLog.Entry(System.currentTimeMillis() - 240_000, "ONE_TO_ONE:1:2", "See you Saturday!", "Jamie", ""),
+                new MessageLog.Entry(System.currentTimeMillis() - 60_000, "GROUP:1", "I'll bring lunch. Does noon work for everyone?", "Alex", "Weekend plans")));
+            try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                View page = screen.get().getWindow().getDecorView();
+                layout(page);
+                Dialog reply = openDialog(page, "auto_reply_edit");
+                View root = reply.getWindow().getDecorView();
+                layoutDialog(reply);
+                write(root, "settings-auto-reply-filled-" + theme);
+                ((EditText) required(root, "auto_reply_reply")).setText("");
+                required(root, "auto_reply_save").performClick();
+                layoutDialog(reply);
+                assertTrue(reply.isShowing());
+                assertEquals(View.VISIBLE, required(root, "auto_reply_error").getVisibility());
+                write(root, "settings-auto-reply-validation-" + theme);
+                reply.dismiss();
+
+                Dialog log = openDialog(page, "message_log_view");
+                root = log.getWindow().getDecorView();
+                awaitText(root, "See you Saturday!");
+                layoutDialog(log);
+                write(root, "settings-message-log-filled-" + theme);
+                log.dismiss();
+                MessageLog.Vault working = MessageLog.vault;
+                MessageLog.vault = new MessageLog.Vault() {
+                    @Override public byte[] seal(byte[] plain) throws Exception { return working.seal(plain); }
+                    @Override public byte[] open(byte[] blob) throws Exception { throw new java.io.IOException("test read failure"); }
+                    @Override public void forget() throws Exception { working.forget(); }
+                };
+                log = openDialog(page, "message_log_view");
+                root = log.getWindow().getDecorView();
+                awaitText(root, new SettingsText(screen.get()).get("message_log_load_failed"));
+                layoutDialog(log);
+                write(root, "settings-message-log-error-" + theme);
+                MessageLog.vault = working;
+                required(root, "message_log_retry").performClick();
+                awaitText(root, "See you Saturday!");
+                log.dismiss();
+                MessageLog.vault = new MessageLog.Vault() {
+                    @Override public byte[] seal(byte[] plain) throws Exception { return working.seal(plain); }
+                    @Override public byte[] open(byte[] blob) throws Exception { return working.open(blob); }
+                    @Override public void forget() throws Exception { throw new java.io.IOException("test key failure"); }
+                };
+                log = openDialog(page, "message_log_view");
+                root = log.getWindow().getDecorView();
+                awaitText(root, "See you Saturday!");
+                required(root, "message_log_dialog_clear").performClick();
+                awaitText(root, new SettingsText(screen.get()).get("message_log_clear_help"));
+                assertTrue(required(root, "message_log_dialog_clear").isEnabled());
+                layoutDialog(log);
+                write(root, "settings-message-log-clear-error-" + theme);
+                MessageLog.vault = working;
+                required(root, "message_log_retry").performClick();
+                awaitText(root, new SettingsText(screen.get()).get("message_log_empty"));
+                assertFalse(required(root, "message_log_dialog_clear").isEnabled());
+                log.dismiss();
+            }
+        }
+    }
+
+    @Test public void captureFocusHoverAndLongReplyStates() throws Exception {
+        for (boolean light : new boolean[] {false, true}) {
+            Settings.preferences.edit().clear().putBoolean("light", light).commit();
+            String theme = light ? "light" : "dark";
+            try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                View page = screen.get().getWindow().getDecorView();
+                EditText search = (EditText) required(page, "find_control");
+                search.setText("story");
+                search.requestFocus();
+                View clear = required(page, "clear_query");
+                clear.setHovered(true);
+                layout(page);
+                assertTrue(search.hasFocus());
+                assertTrue(clear.isHovered());
+                write(page, "settings-controls-focus-hover-" + theme);
+                clear.performClick();
+                layout(page);
+                required(page, "auto_reply_edit").requestFocus();
+                Dialog dialog = openDialog(page, "auto_reply_edit");
+                View root = dialog.getWindow().getDecorView();
+                EditText reply = (EditText) required(root, "auto_reply_reply");
+                reply.setText("A reply line\n".repeat(12) + "Last line");
+                layoutDialog(dialog);
+                assertEquals(13, reply.getLineCount());
+                assertTrue(reply.getHeight() >= reply.getLayout().getHeight() + reply.getCompoundPaddingTop() + reply.getCompoundPaddingBottom());
+                ScrollView scroll = (ScrollView) required(root, "dialog_scroll");
+                scroll.setSmoothScrollingEnabled(false);
+                scroll.fullScroll(View.FOCUS_DOWN);
+                layoutDialog(dialog);
+                visibleTarget(required(root, "auto_reply_save"));
+                write(root, "settings-auto-reply-long-" + theme);
+                dialog.dismiss();
+            }
+        }
+    }
+
+    @Test public void captureNarrowLargeTextAndRtlSheetsWithKeyboardInsets() throws Exception {
+        RuntimeEnvironment.setFontScale(2f);
+        for (String locale : new String[] {"en-rUS", "ar-rXB"}) {
+            RuntimeEnvironment.setQualifiers(locale + "-w320dp-h640dp-mdpi");
+            for (boolean light : new boolean[] {false, true}) {
+                Settings.preferences.edit().clear().putBoolean("light", light).commit();
+                String variant = (light ? "light" : "dark") + (locale.startsWith("ar") ? "-rtl" : "-large");
+                try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                    View page = screen.get().getWindow().getDecorView();
+                    layout(page, 320, 640);
+                    write(page, "settings-controls-" + variant);
+                    required(page, "tab_app").performClick();
+                    layout(page, 320, 640);
+                    for (String key : new String[] {"hide_drawer_icon", "light", "material_you_black", "check_updates"}) {
+                        View choice = required(page, key);
+                        ViewGroup row = (ViewGroup) choice.getParent();
+                        View labels = row.getChildAt(0);
+                        assertTrue("Large App text leaves room for " + key,
+                            locale.startsWith("ar") ? labels.getLeft() >= choice.getRight() + 12 : choice.getLeft() >= labels.getRight() + 12);
+                    }
+                    write(page, "settings-app-" + variant);
+                    required(page, "tab_controls").performClick();
+                    layout(page, 320, 640);
+                    Dialog dialog = openDialog(page, "auto_reply_edit");
+                    View root = dialog.getWindow().getDecorView();
+                    View sheet = required(root, "settings_dialog");
+                    layout(root, 320, 640);
+                    android.view.WindowInsets simulated = new android.view.WindowInsets.Builder()
+                        .setInsets(android.view.WindowInsets.Type.systemBars(), android.graphics.Insets.of(0, 24, 0, 16))
+                        .setInsets(android.view.WindowInsets.Type.displayCutout(), android.graphics.Insets.of(8, 24, 8, 0))
+                        .setInsets(android.view.WindowInsets.Type.ime(), android.graphics.Insets.of(0, 0, 0, 220)).build();
+                    // Draw the production sheet after applying explicit insets. The host test window otherwise
+                    // redispatches its own zero IME insets while draining the looper. No software keyboard is drawn.
+                    sheet.dispatchApplyWindowInsets(simulated);
+                    layoutNow(sheet, 320, 640);
+                    assertEquals(236, sheet.getPaddingBottom());
+                    write(sheet, "settings-auto-reply-keyboard-" + variant);
+                    ScrollView scroll = (ScrollView) required(root, "dialog_scroll");
+                    scroll.setSmoothScrollingEnabled(false);
+                    scroll.fullScroll(View.FOCUS_DOWN);
+                    layoutNow(sheet, 320, 640);
+                    visibleTarget(required(root, "auto_reply_save"));
+                    Rect visible = new Rect();
+                    required(root, "auto_reply_save").getGlobalVisibleRect(visible);
+                    assertTrue("Save stays above the simulated keyboard", visible.bottom <= 420);
+                    write(sheet, "settings-auto-reply-actions-" + variant);
+                    dialog.dismiss();
+                    View restart = RestartActivity.content(new SettingsUi(screen.get(), light));
+                    screen.get().setContentView(restart);
+                    layout(restart, 320, 640);
+                    write(restart, "settings-restart-" + variant);
+                }
+            }
+        }
+    }
+
+    @Test public void captureFontBackupUpdatesAndMaximumReplies() throws Exception {
+        for (boolean light : new boolean[] {false, true}) {
+            Settings.preferences.edit().clear().putBoolean("light", light).commit();
+            String theme = light ? "light" : "dark";
+            try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                View root = screen.get().getWindow().getDecorView();
+                layout(root);
+                ((EditText) required(root, "find_control")).setText("Use your own font");
+                layout(root);
+                View font = required(root, "font_file");
+                font.requestRectangleOnScreen(new Rect(0, 0, font.getWidth(), font.getHeight()), true);
+                layout(root);
+                write(root, "settings-font-" + theme);
+                required(root, "tab_app").performClick();
+                layout(root);
+                View choices = required(root, "copy_setup");
+                alignSection((View) choices.getParent());
+                layout(root);
+                write(root, "settings-backup-" + theme);
+                View updates = required(root, "check_updates");
+                alignSection((View) updates.getParent().getParent());
+                layout(root);
+                write(root, "settings-updates-" + theme);
+                ((EditText) required(root, "find_control")).setText("");
+                required(root, "tab_controls").performClick();
+                layout(root);
+                java.util.List<AutoReply.Rule> rules = new java.util.ArrayList<>();
+                for (int i = 1; i <= AutoReply.MAX_RULES; i++) rules.add(new AutoReply.Rule("word " + i, "Reply " + i));
+                AutoReply.save(Settings.preferences, rules, false);
+                Dialog dialog = openDialog(root, "auto_reply_edit");
+                View sheet = dialog.getWindow().getDecorView();
+                layoutDialog(dialog);
+                assertFalse(required(sheet, "auto_reply_add").isEnabled());
+                write(sheet, "settings-auto-reply-limit-" + theme);
+                ScrollView scroll = (ScrollView) required(sheet, "dialog_scroll");
+                scroll.setSmoothScrollingEnabled(false);
+                scroll.fullScroll(View.FOCUS_DOWN);
+                layoutDialog(dialog);
+                visibleTarget(required(sheet, "auto_reply_save"));
+                write(sheet, "settings-auto-reply-limit-end-" + theme);
+                dialog.dismiss();
+            }
+        }
     }
 
     @Test public void captureProductionPagesAndDialogsInBothThemes() throws Exception {
@@ -133,25 +344,10 @@ public class SettingsScreenshotTest {
     }
 
     private void captureDialog(View page, String action, String loadedText, String name) throws Exception {
-        View button = required(page, action);
-        button.requestRectangleOnScreen(new Rect(0, 0, button.getWidth(), button.getHeight()), true);
-        layout(page);
-        visibleTarget(button);
-        assertTrue(button.performClick());
-        Dialog dialog = ShadowDialog.getLatestDialog();
-        assertNotNull("Dialog opened by " + action, dialog);
-        assertTrue(dialog.isShowing());
+        Dialog dialog = openDialog(page, action);
         try {
             View root = dialog.getWindow().getDecorView();
-            if (loadedText != null) {
-                String expected = new SettingsText(dialog.getContext()).get(loadedText);
-                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-                while (!containsText(root, expected) && System.nanoTime() < deadline) {
-                    Shadows.shadowOf(Looper.getMainLooper()).idle();
-                    Thread.sleep(10);
-                }
-                assertTrue("Log finished loading", containsText(root, expected));
-            }
+            if (loadedText != null) awaitText(root, new SettingsText(dialog.getContext()).get(loadedText));
             layoutDialog(dialog);
             if ("auto_reply_edit".equals(action)) {
                 visibleTarget(required(root, "auto_reply_save"));
@@ -165,13 +361,51 @@ public class SettingsScreenshotTest {
         }
     }
 
+    private Dialog openDialog(View page, String action) {
+        View button = required(page, action);
+        button.requestRectangleOnScreen(new Rect(0, 0, button.getWidth(), button.getHeight()), true);
+        layout(page, page.getWidth(), page.getHeight());
+        visibleTarget(button);
+        assertTrue(button.performClick());
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull("Dialog opened by " + action, dialog);
+        assertTrue(dialog.isShowing());
+        return dialog;
+    }
+
+    private static void awaitText(View root, String expected) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (!containsText(root, expected) && System.nanoTime() < deadline) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            Thread.sleep(10);
+        }
+        assertTrue("Loaded: " + expected, containsText(root, expected));
+    }
+
     private static void layout(View root) {
+        layout(root, WIDTH, HEIGHT);
+    }
+
+    private static void layout(View root, int width, int height) {
         for (int pass = 0; pass < 2; pass++) {
-            root.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
-            root.layout(0, 0, WIDTH, HEIGHT);
+            layoutNow(root, width, height);
             Shadows.shadowOf(Looper.getMainLooper()).idle();
         }
+    }
+
+    private static void layoutNow(View root, int width, int height) {
+        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, width, height);
+    }
+
+    private static void alignSection(View section) {
+        View ancestor = section;
+        while (!(ancestor instanceof ScrollView)) ancestor = (View) ancestor.getParent();
+        ScrollView scroll = (ScrollView) ancestor;
+        Rect rect = new Rect(0, 0, section.getWidth(), section.getHeight());
+        ((ViewGroup) scroll.getChildAt(0)).offsetDescendantRectToMyCoords(section, rect);
+        scroll.scrollTo(0, Math.max(0, rect.top - 16));
     }
 
     private static void layoutDialog(Dialog dialog) {

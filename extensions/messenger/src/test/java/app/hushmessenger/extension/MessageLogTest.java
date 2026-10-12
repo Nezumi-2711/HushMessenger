@@ -477,7 +477,7 @@ public class MessageLogTest {
     }
 
     /** AES-GCM with a key held in memory, same blob layout as the keystore path: 12-byte nonce, then ciphertext. */
-    private static final class SoftwareVault implements MessageLog.Vault {
+    static final class SoftwareVault implements MessageLog.Vault {
         int generation;
         private SecretKey key = freshKey();
         private final SecureRandom random = new SecureRandom();

@@ -142,7 +142,7 @@ public class SetupSummaryTest {
             android.widget.TextView people = root.findViewWithTag("active_people");
             android.widget.TextView stories = root.findViewWithTag("active_stories");
             assertEquals(View.VISIBLE, people.getVisibility());
-            assertEquals("Not used yet since Messenger started", people.getText().toString());
+            assertEquals("On. Waiting for Messenger to use it", people.getText().toString());
             // An off switch has nothing to report, and turning it on shows its label.
             assertEquals(View.GONE, stories.getVisibility());
             ((android.widget.Switch) root.findViewWithTag("stories")).setChecked(true);

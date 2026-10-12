@@ -151,7 +151,7 @@ public class SettingsReliabilityTest {
                     if ("paused".equals(state)) Settings.preferences.edit().putBoolean("paused", true).commit();
                     screen.resume();
                     String expected = "paused".equals(state) ? "Changes paused" : "failed".equals(state) ? "Stopped with an error just now. Copy setup on the App tab has details."
-                        : "used".equals(state) ? "Used just now" : "Not used yet since Messenger started";
+                        : "used".equals(state) ? "Used just now" : "On. Waiting for Messenger to use it";
                     assertSame(choice, root.findViewWithTag("people"));
                     assertSame(label, root.findViewWithTag("active_people"));
                     assertEquals(expected, label.getText().toString());
@@ -248,8 +248,11 @@ public class SettingsReliabilityTest {
             View root = screen.get().getWindow().getDecorView();
             assertTrue(((Switch) root.findViewWithTag("bubbles")).isChecked());
             assertFalse(root.findViewWithTag("bubbles").isEnabled());
-            // The custom track has no disabled drawable, so the switch itself must look unavailable.
-            assertEquals(0.4f, root.findViewWithTag("bubbles").getAlpha(), 0.001f);
+            Switch unavailable = root.findViewWithTag("bubbles");
+            SettingsUi palette = new SettingsUi(screen.get(), false);
+            assertEquals(1f, unavailable.getAlpha(), 0f);
+            android.graphics.drawable.GradientDrawable track = (android.graphics.drawable.GradientDrawable) unavailable.getTrackDrawable().getCurrent();
+            assertEquals(palette.track, track.getColor().getDefaultColor());
             assertTrue(Settings.preferences.getBoolean("bubbles", false));
             assertFalse(Settings.enableBubbles());
             assertEquals("0 controls enabled", ((TextView) root.findViewWithTag("enabled_count")).getText().toString());
