@@ -89,6 +89,9 @@ public class SettingsScreenshotTest {
         Shadows.shadowOf(app.getPackageManager()).installPackage(installedPackage);
         Settings.preferences.edit().clear().commit();
         Settings.initialize(app);
+        // The failing vaults above record message_log failures, which a later test in this sandbox would read as its own.
+        Settings.activeAt.clear();
+        Settings.hookErrors.clear();
         HostScreens.started = originalStarted;
         HostScreens.failed = originalFailed;
     }
@@ -155,6 +158,19 @@ public class SettingsScreenshotTest {
                 awaitText(root, new SettingsText(screen.get()).get("message_log_empty"));
                 assertFalse(required(root, "message_log_dialog_clear").isEnabled());
                 log.dismiss();
+                // An older file the log can't read is set aside, and newer messages show under the notice.
+                java.nio.file.Files.write(new java.io.File(Settings.appContext.getFilesDir(), MessageLog.FILE).toPath(), new byte[] {1, 2, 3});
+                assertTrue(MessageLog.loadResult().setAside);
+                MessageLog.write(Settings.appContext, java.util.List.of(
+                    new MessageLog.Entry(System.currentTimeMillis() - 60_000, "ONE_TO_ONE:1:2", "See you Saturday!", "Jamie", "")));
+                log = openDialog(page, "message_log_view");
+                root = log.getWindow().getDecorView();
+                awaitText(root, new SettingsText(screen.get()).get("message_log_set_aside"));
+                awaitText(root, "See you Saturday!");
+                layoutDialog(log);
+                write(root, "settings-message-log-set-aside-" + theme);
+                log.dismiss();
+                MessageLog.clear();
             }
         }
     }

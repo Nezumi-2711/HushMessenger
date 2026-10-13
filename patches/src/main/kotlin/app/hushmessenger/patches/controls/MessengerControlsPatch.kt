@@ -84,6 +84,7 @@ internal val settingsExtension = bytecodePatch(description = "Load HushMessenger
         classDefForEach { classes.add(it) }
         communityInboxContract = findCommunityInbox(classes)
         discoveredControls = findControls(classes, communityInboxContract)
+        logoLongPressSites = findLogoLongPress(classes)
         val nativeGate = discoveredControls["bubble_mode"].orEmpty().singleOrNull()
         nativeBubbleRoutesVerified = nativeBubbleActivityVerified && nativeGate != null &&
             findNativeBubbleRoutes(classes, nativeGate.hookId()) == activeProfile.nativeBubbleRoutes
@@ -97,6 +98,7 @@ internal val settingsExtension = bytecodePatch(description = "Load HushMessenger
         nativeBubbleActivityVerified = false
         nativeBubbleRoutesVerified = false
         communityInboxContract = null
+        logoLongPressSites = emptyList()
         messageLogContract = null
         readReceiptThreadFields = emptyMap()
     }
@@ -144,6 +146,7 @@ internal fun injectControl(key: String, methods: Map<String, List<MutableMethod>
             AI_MENTIONS -> method.validateAiMentions()
             AI_COMMANDS -> method.validateAiCommands()
             AI_SEARCH_HINT -> method.validateAiSearchHint()
+            AI_MENTION_ROWS -> method.validateAiMentionRows()
             XHE_AUDIO -> method.validateXheAudio()
             DISAPPEARING_SWIPE -> method.validateDisappearingSwipe()
             HIDE_READ_RECEIPTS -> method.validateChatSeen()
@@ -152,6 +155,7 @@ internal fun injectControl(key: String, methods: Map<String, List<MutableMethod>
             ATTRIBUTION_UPLOADS -> method.validateAttributionUpload()
             AD_EVENTS -> method.validateAdEvent()
             MQTT_TELEMETRY -> method.validateMqttTelemetry()
+            TEXT_STYLE -> method.validateTextStyleField()
             MESSAGE_LOG, AUTO_REPLY -> method.validateMessageLog()
             "original_photo" -> method.validateOriginalPhoto()
             ORIGINAL_VIDEO -> method.validateOriginalVideo()
@@ -201,12 +205,14 @@ internal fun injectControl(key: String, methods: Map<String, List<MutableMethod>
             AI_MENTIONS -> method.injectAiMentions()
             AI_COMMANDS -> method.injectAiCommands()
             AI_SEARCH_HINT -> method.injectAiSearchHint()
+            AI_MENTION_ROWS -> method.injectAiMentionRows()
             XHE_AUDIO -> method.injectXheAudio()
             DISAPPEARING_SWIPE -> method.injectDisappearingSwipe()
             ANALYTICS_UPLOADS -> method.injectAnalyticsUpload()
             ATTRIBUTION_UPLOADS -> method.injectAttributionUpload()
             AD_EVENTS -> method.injectAdEvent()
             MQTT_TELEMETRY -> method.injectMqttTelemetry()
+            TEXT_STYLE -> method.injectTextStyleField()
             MESSAGE_LOG -> method.injectMessageLog()
             AUTO_REPLY -> method.injectAutoReply()
             "original_photo" -> method.injectOriginalPhoto()
@@ -321,9 +327,11 @@ val hideStoriesPatch = controlPatch("stories", "Hide stories and notes", "Hides 
 @Suppress("unused")
 val hideSubtabsPatch = controlPatch("subtabs", "Hide inbox tabs", "Hides the Home and Channels tabs inside your inbox.", "Inbox")
 @Suppress("unused")
-val hideFacebookPatch = controlPatch("facebook", "Hide Facebook shortcuts", "Hides Facebook buttons, profile and sharing shortcuts, and Also from Meta in the Menu tab. Handy if you only use Messenger.", "Navigation")
+val hideMarkReadPatch = controlPatch("mark_read_action", "Hide Mark as read", "Hides Mark as read in the menu you get when you press and hold a chat in your chat list, so you can't mark a chat read by accident. Mark as unread stays.", "Inbox")
 @Suppress("unused")
-val hideMetaAiPatch = controlPatch("meta_ai", "Hide Meta AI", "Hides the Meta AI floating button, toolbar button, tab and menu entries, plus AI in search and in @ suggestions. Restart Messenger to see the tab go.", "Navigation", "ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_search", "ai_search_chip", AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT)
+val hideFacebookPatch = controlPatch("facebook", "Hide Facebook shortcuts", "Hides Facebook buttons, profile and sharing shortcuts, and the Also from Meta and Subscriptions sections in the Menu tab. Handy if you only use Messenger.", "Navigation")
+@Suppress("unused")
+val hideMetaAiPatch = controlPatch("meta_ai", "Hide Meta AI", "Hides the Meta AI floating button, toolbar button, tab and menu entries, plus AI in search and in @ suggestions. Restart Messenger to see the tab go.", "Navigation", "ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_search", "ai_search_chip", AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS)
 @Suppress("unused")
 val hideMomentsPatch = controlPatch("moments", "Hide Chat Moments", "Hides Chat Moments in the menu.", "Navigation")
 @Suppress("unused")
@@ -393,7 +401,7 @@ val stopAdEventsPatch = controlPatch("ad_events", "Stop inbox and ad link loggin
     "Stops two reports Messenger logs. One says which part of your chat list was on screen, which Messenger files under inbox ads. The other says which ad brought you in when a link from an ad opens a chat.", "Privacy")
 @Suppress("unused")
 val stopMqttLoggingPatch = controlPatch("mqtt_telemetry", "Stop MQTT logging",
-    "Stops the health reports and push logging Messenger sends over its live connection (MQTT). Messages, calls and active status share that connection and keep working.", "Privacy")
+    "Drops the health reports and push logging Messenger's MQTT client sends. Messenger 582 sends most of its traffic another way, so there's often little for it to drop. Messages, calls and active status keep working.", "Privacy")
 @Suppress("unused")
 val allowScreenshotPatch = controlPatch("allow_screenshot", "Allow screenshots", "Lets you screenshot protected chat media, such as view-once photos and Quicksnap, and stops screenshot notices. It doesn't add replay or saving.", "Privacy", "allow_screenshot", "screenshot_viewers")
 @Suppress("unused")
@@ -572,8 +580,13 @@ val textStylePatch = bytecodePatch(
     compatibleWith(MessengerTarget.COMPATIBILITY)
     dependsOn(settingsExtension, textStyleResources)
     execute {
-        // Only the manifest changes. Recording it here lets a Root Mount install, which can't add the menu entries,
-        // show the switch as unavailable instead of hiding it.
+        validateControls(discoveredControls, setOf(TEXT_STYLE))
+        val original = discoveredControls.getValue(TEXT_STYLE).single()
+        val field = mutableClassDefBy(original.definingClass).methods.single { it.hookId() == original.hookId() }
+        // The chat box has no view id, and Android keeps every app's text actions out of a field without one.
+        injectControl(TEXT_STYLE, mapOf(TEXT_STYLE to listOf(field)))
+        // Recording it here lets a Root Mount install, which can't add the menu entries, show the switch as
+        // unavailable instead of hiding it. The extension then leaves the chat box alone too.
         recordControl(TEXT_STYLE)
         textStyleApplied = true
     }
@@ -596,7 +609,7 @@ private val menuRowResources = resourcePatch(description = "Record HushMessenger
 @Suppress("unused")
 val menuSettingsPatch = bytecodePatch(
     name = "Open settings from menu",
-    description = "Adds a HushMessenger entry to Messenger's Menu tab and side menu, so you can open these settings from inside Messenger. Works as soon as you patch it in, with no switch.",
+    description = "Adds a HushMessenger entry to Messenger's Menu tab and side menu, and makes a long press on the Messenger logo at the top of Chats open these settings too. Works as soon as you patch it in, with no switch.",
     default = true,
 ) {
     category("Navigation")
@@ -638,6 +651,9 @@ val menuSettingsPatch = bytecodePatch(
         drawerTarget.injectMenuDrawerAdd()
         clickTarget.injectMenuFolderClick(folderItemType)
         refreshTarget.injectLegacyDrawer(legacy.refresh)
+        // And a long press on the Messenger logo at the top of Chats. A build where that handler isn't found in exactly
+        // one place keeps its logo as it was, with a warning, and the rest of this patch still goes in.
+        hookLogoLongPress()
         recordControl("menu_row")
         menuRowApplied = true
     }

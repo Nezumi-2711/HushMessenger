@@ -25,10 +25,10 @@ final class SettingsUi {
     SettingsUi(Context context, boolean light) {
         this.context = context;
         background = light ? 0xfffaf7f9 : 0xff000000;
-        surface = light ? 0xffffffff : 0xff121419;
+        surface = light ? 0xffffffff : 0xff141419;
         text = light ? 0xff211b23 : 0xfff4f1f3;
         muted = light ? 0xff645966 : 0xffaeb3bf;
-        accent = light ? 0xff9e3157 : 0xfff3a6b8;
+        accent = light ? 0xff9e3157 : 0xfff6a9c0;
         line = light ? 0xffded6dd : 0xff303640;
         outline = light ? 0xff8b7c89 : 0xff657080;
         selected = accent;
@@ -95,7 +95,7 @@ final class SettingsUi {
         StateListDrawable states = new StateListDrawable();
         GradientDrawable focused = shape(fill, focus, radius);
         focused.setStroke(dp(2), focus);
-        states.addState(new int[] {-android.R.attr.state_enabled}, shape(fill == accent ? track : fill, line, radius));
+        states.addState(new int[] {-android.R.attr.state_enabled}, shape(fill == accent ? track : fill, border == 0 ? 0 : line, radius));
         states.addState(new int[] {android.R.attr.state_focused}, focused);
         states.addState(new int[] {android.R.attr.state_hovered}, shape(fill == accent ? fill : infoSurface, border, radius));
         states.addState(new int[] {}, shape(fill, border, radius));
@@ -114,7 +114,7 @@ final class SettingsUi {
         view.setMinWidth(0);
         view.setMinimumWidth(0);
         view.setPadding(dp(12), dp(8), dp(12), dp(8));
-        view.setBackground(interactive(background, accent, 8));
+        view.setBackground(interactive(surface, accent, 12));
         view.setStateListAnimator(null);
         return view;
     }
@@ -123,7 +123,7 @@ final class SettingsUi {
         Button view = button(title);
         view.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
         view.setTextColor(new ColorStateList(new int[][] {{-android.R.attr.state_enabled}, {}}, new int[] {muted, selectedText}));
-        view.setBackground(interactive(accent, 0, 4, outline));
+        view.setBackground(interactive(accent, 0, 12, outline));
         return view;
     }
 
@@ -140,7 +140,7 @@ final class SettingsUi {
         view.setHighlightColor(selection);
         view.setMinHeight(dp(48));
         view.setPadding(dp(12), dp(10), dp(12), dp(10));
-        view.setBackground(interactive(surface, outline, 8));
+        view.setBackground(interactive(surface, outline, 12));
         if (android.os.Build.VERSION.SDK_INT >= 29) {
             Drawable cursor = view.getTextCursorDrawable(), middle = view.getTextSelectHandle();
             Drawable left = view.getTextSelectHandleLeft(), right = view.getTextSelectHandleRight();
@@ -161,7 +161,7 @@ final class SettingsUi {
     LinearLayout panel() {
         LinearLayout view = column();
         view.setPadding(dp(16), dp(16), dp(16), dp(16));
-        view.setBackground(shape(surface, line, 8));
+        view.setBackground(shape(surface, line, 12));
         return view;
     }
 

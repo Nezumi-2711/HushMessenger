@@ -108,6 +108,7 @@ public class CompatReport {
         "Lcom/facebook/messaging/marketplace/plugins/folder/navbarmenuitem/NavBarMenuItemImplementation;",
         "Lcom/facebook/messaging/profile/plugins/core/threadsettingsactionbutton/facebookprofile/ThreadSettingsFacebookProfileActionButton;",
         "Lcom/facebook/messaging/navigation/plugins/drawerfoldersections/fbshortcutsfoldersection/FacebookShortcutsFolderSection;",
+        "Lcom/facebook/messaging/navigation/plugins/drawerfoldersections/subscriptionsfoldersection/SubscriptionsFolderSection;",
         "Lcom/facebook/messaging/communitymessaging/plugins/channelinvite/sharetofacebookbutton/ShareToFacebookButtonImplementation;",
         "Lcom/facebook/messaging/publicchats/plugins/externalsharehscrollbuttons/sharetofacebook/ShareToFacebookHScrollButtonImplementation;"
     );
@@ -139,7 +140,8 @@ public class CompatReport {
         Map.entry("ai_toolbar", Set.of("com.facebook.messaging.inbox.tab.plugins.core.tabtoolbarbutton.aihomebutton.AiHomeButtonKillSwitch")),
         Map.entry("ai_tab", Set.of("com.facebook.messaging.aibot.plugins.tab.tabcontent.MetaAiTabContentImplementation")),
         Map.entry("tab_people", Set.of("com.facebook.messaging.peopletab.plugins.tab.tabcontent.PeopleTabContentImplementation")),
-        Map.entry("tab_notifications", Set.of("com.facebook.messaging.inbox.jewel.jeweltab.plugins.core.tabcontent.JewelTabContentImplementation"))
+        Map.entry("tab_notifications", Set.of("com.facebook.messaging.inbox.jewel.jeweltab.plugins.core.tabcontent.JewelTabContentImplementation")),
+        Map.entry("mark_read_action", Set.of("com.facebook.messaging.threadlist.threaditemmenu.plugins.core.markreadmenuitem.MarkReadMenuItemImplementation"))
     );
 
     static final String APP_COMMUNICATION = "com.facebook.permission.prod.FB_APP_COMMUNICATION";
@@ -169,8 +171,9 @@ public class CompatReport {
         PATCHES.put("Hide inbox promotions", List.of("inbox_promotions"));
         PATCHES.put("Hide stories and notes", List.of("stories"));
         PATCHES.put("Hide inbox tabs", List.of("subtabs"));
+        PATCHES.put("Hide Mark as read", List.of("mark_read_action"));
         PATCHES.put("Hide Facebook shortcuts", List.of("facebook"));
-        PATCHES.put("Hide Meta AI", List.of("ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_search", "ai_search_chip", "ai_mentions", "ai_commands", "ai_search_hint"));
+        PATCHES.put("Hide Meta AI", List.of("ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_search", "ai_search_chip", "ai_mentions", "ai_commands", "ai_search_hint", "ai_mention_rows"));
         PATCHES.put("Hide Chat Moments", List.of("moments"));
         PATCHES.put("Hide Reels badge", List.of("reels_badge"));
         PATCHES.put("Hide People tab", List.of("tab_people"));
@@ -207,8 +210,7 @@ public class CompatReport {
         PATCHES.put("View stories anonymously", List.of("anonymous_stories"));
         PATCHES.put("Save any story", List.of("save_stories"));
         PATCHES.put("Slide chats in and out", List.of("chat_animation", "chat_fragment", "chat_inbox", "chat_legacy"));
-        // Manifest only: the selection menu entries need nothing from Messenger's code.
-        PATCHES.put("Bold and italic text", List.of());
+        PATCHES.put("Bold and italic text", List.of("text_style"));
         PATCHES.put("Open settings from menu", List.of("menu_settings"));
     }
 
@@ -2074,8 +2076,90 @@ public class CompatReport {
     static final String MESSAGE_TYPE = "Lcom/facebook/messaging/model/messages/Message;";
     static final String THREAD_SUMMARY_TYPE = "Lcom/facebook/messaging/model/threads/ThreadSummary;";
 
-    /** The non-Parcel NewMessageNotification constructor, whose message and thread parameters the hook reads. */
+    static final String MESSENGER_BROWSER_LAUNCHER = "Lcom/facebook/messaging/browser/util/MessengerBrowserLauncher;";
+    static final String JSON_PUT = "Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;";
+
+    /**
+     * Message String fields the browser launcher reads straight after loading "message_id" and puts into a JSONObject
+     * under that key, all three on the same registers. Mirrors findMessageIdFields.
+     */
+    static Set<String> messageIdFields(List<ClassDef> classes) {
+        var fields = new LinkedHashSet<String>();
+        for (var cls : classes) {
+            if (!MESSENGER_BROWSER_LAUNCHER.equals(cls.getType())) continue;
+            for (var m : cls.getMethods()) {
+                if (m.getImplementation() == null) continue;
+                var code = new ArrayList<Instruction>();
+                m.getImplementation().getInstructions().forEach(code::add);
+                for (int at = 0; at + 2 < code.size(); at++) {
+                    var key = code.get(at);
+                    if ((key.getOpcode() != Opcode.CONST_STRING && key.getOpcode() != Opcode.CONST_STRING_JUMBO) ||
+                        !(((ReferenceInstruction) key).getReference() instanceof StringReference name) || !"message_id".equals(name.getString())) continue;
+                    if (code.get(at + 1).getOpcode() != Opcode.IGET_OBJECT ||
+                        !(((ReferenceInstruction) code.get(at + 1)).getReference() instanceof FieldReference field) ||
+                        !MESSAGE_TYPE.equals(field.getDefiningClass()) || !"Ljava/lang/String;".equals(field.getType())) continue;
+                    if (code.get(at + 2).getOpcode() != Opcode.INVOKE_VIRTUAL || !(code.get(at + 2) instanceof FiveRegisterInstruction put) ||
+                        !JSON_PUT.equals(((ReferenceInstruction) put).getReference().toString()) || put.getRegisterCount() != 3 ||
+                        put.getRegisterD() != ((OneRegisterInstruction) key).getRegisterA() ||
+                        put.getRegisterE() != ((TwoRegisterInstruction) code.get(at + 1)).getRegisterA()) continue;
+                    fields.add(field.getDefiningClass() + "->" + field.getName() + ":" + field.getType());
+                }
+            }
+        }
+        return fields;
+    }
+
+    /** The one id field, public so the notification class can read it, or null when there isn't exactly one. */
+    static String messageIdField(List<ClassDef> classes) {
+        var fields = messageIdFields(classes);
+        if (fields.size() != 1) return null;
+        var id = fields.iterator().next();
+        for (var cls : classes) {
+            if (!MESSAGE_TYPE.equals(cls.getType())) continue;
+            for (var f : cls.getFields()) {
+                if ((MESSAGE_TYPE + "->" + f.getName() + ":" + f.getType()).equals(id) && AccessFlags.PUBLIC.isSet(f.getAccessFlags())) return id;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The Message boolean that the notification text builder, the one (Message, ThreadSummary)String method, reads to
+     * show "Secret conversation" instead of the text. Public, or null when there isn't exactly one. Mirrors
+     * findHiddenTextFields.
+     */
+    static String hiddenTextField(List<ClassDef> classes) {
+        var fields = new LinkedHashSet<String>();
+        for (var cls : classes) {
+            for (var m : cls.getMethods()) {
+                var params = m.getParameterTypes();
+                if (!"Ljava/lang/String;".equals(m.getReturnType()) || params.size() != 2 || !MESSAGE_TYPE.contentEquals(params.get(0)) ||
+                    !THREAD_SUMMARY_TYPE.contentEquals(params.get(1)) || m.getImplementation() == null) continue;
+                for (var insn : m.getImplementation().getInstructions()) {
+                    if (insn.getOpcode() == Opcode.IGET_BOOLEAN && ((ReferenceInstruction) insn).getReference() instanceof FieldReference field &&
+                        MESSAGE_TYPE.equals(field.getDefiningClass()) && "Z".equals(field.getType()))
+                        fields.add(field.getDefiningClass() + "->" + field.getName() + ":" + field.getType());
+                }
+            }
+        }
+        if (fields.size() != 1) return null;
+        var hidden = fields.iterator().next();
+        for (var cls : classes) {
+            if (!MESSAGE_TYPE.equals(cls.getType())) continue;
+            for (var f : cls.getFields()) {
+                if ((MESSAGE_TYPE + "->" + f.getName() + ":" + f.getType()).equals(hidden) && AccessFlags.PUBLIC.isSet(f.getAccessFlags())) return hidden;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The non-Parcel NewMessageNotification constructor, whose message and thread parameters the hook reads. Without one
+     * readable message id the log couldn't tell two messages apart, and without the hidden-text flag it would log a
+     * disappearing chat's stand-in, so either way the build reports no hook.
+     */
     static List<Method> messageLogHooks(List<ClassDef> classes) {
+        if (messageIdField(classes) == null || hiddenTextField(classes) == null) return List.of();
         for (var cls : classes) {
             if (!NEW_MESSAGE_NOTIFICATION.equals(cls.getType())) continue;
             var ctors = new ArrayList<Method>();
@@ -2509,6 +2593,60 @@ public class CompatReport {
         return builders.size() == 1 ? builders : List.of();
     }
 
+    static final Set<Long> META_AI_ROW_FLAGS = Set.of(0x81063b011b2d8aL, 0x81063b01042d83L);
+    static final Set<Long> META_AI_CHAT_FLAGS = Set.of(0x81063b011b2d8aL, 0x81063b00042d40L);
+    static final String CAPABILITIES = "Lcom/facebook/xapp/messaging/capability/vector/Capabilities;";
+    static final String FB_SESSION_TYPE = "Lcom/facebook/auth/usersession/FbUserSession;";
+
+    /**
+     * ai_mention_rows: the instance checks behind the Meta AI, imagine and imagine yourself rows of the newer @ list, told
+     * apart by parameters and the server flag each reads: ()Z reading both META_AI_ROW_FLAGS (community channels),
+     * (FbUserSession, Capabilities)Z reading both META_AI_CHAT_FLAGS (regular chats), (FbUserSession, Capabilities)Z with
+     * no flag that checks a capability and defers to a same-class (FbUserSession)Z reading 0x81063b00052d41 (encrypted
+     * chats), (FbUserSession, ThreadKey, Capabilities, Z, Z)Z reading 0x81063b00402d51 and (FbUserSession, ThreadKey,
+     * Capabilities)Z reading 0x81063b00f92d7f. Counted only when there is exactly one of each and all five share a class.
+     * Mirrors AiMentionRows.kt.
+     */
+    static boolean defersToEncryptedCheck(ClassDef cls, Method method) {
+        var calls = new ArrayList<MethodReference>();
+        for (var i : method.getImplementation().getInstructions())
+            if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof MethodReference mr) calls.add(mr);
+        if (calls.stream().noneMatch(c -> (CAPABILITIES + "->A00(I)Z").equals(c.toString()))) return false;
+        var siblings = calls.stream().filter(c -> c.getDefiningClass().equals(cls.getType()) && "Z".equals(c.getReturnType()) &&
+            c.getParameterTypes().size() == 1 && FB_SESSION_TYPE.equals(c.getParameterTypes().get(0).toString())).toList();
+        if (siblings.size() != 1) return false;
+        for (var other : cls.getMethods()) {
+            if (!other.getName().equals(siblings.get(0).getName()) || other.getImplementation() == null ||
+                !"Z".equals(other.getReturnType()) || other.getParameterTypes().size() != 1 ||
+                !FB_SESSION_TYPE.equals(other.getParameterTypes().get(0).toString())) continue;
+            for (var i : other.getImplementation().getInstructions())
+                if (i.getOpcode() == Opcode.CONST_WIDE && i instanceof WideLiteralInstruction flag && flag.getWideLiteral() == 0x81063b00052d41L) return true;
+        }
+        return false;
+    }
+
+    static List<Method> aiMentionRowChecks(List<ClassDef> classes) {
+        var rows = new TreeMap<String, List<Method>>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (method.getImplementation() == null || AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"Z".equals(method.getReturnType())) continue;
+            var params = new ArrayList<String>();
+            for (var p : method.getParameterTypes()) params.add(p.toString());
+            var flags = new HashSet<Long>();
+            for (var i : method.getImplementation().getInstructions())
+                if (i.getOpcode() == Opcode.CONST_WIDE && i instanceof WideLiteralInstruction flag) flags.add(flag.getWideLiteral());
+            String row = null;
+            if (params.isEmpty() && flags.containsAll(META_AI_ROW_FLAGS)) row = "meta_ai";
+            else if (params.equals(List.of(FB_SESSION_TYPE, CAPABILITIES)) && flags.containsAll(META_AI_CHAT_FLAGS)) row = "meta_ai_chats";
+            else if (params.equals(List.of(FB_SESSION_TYPE, CAPABILITIES)) && flags.isEmpty() && defersToEncryptedCheck(cls, method)) row = "meta_ai_encrypted";
+            else if (params.equals(List.of(FB_SESSION_TYPE, THREAD_KEY, CAPABILITIES, "Z", "Z")) && flags.contains(0x81063b00402d51L)) row = "imagine";
+            else if (params.equals(List.of(FB_SESSION_TYPE, THREAD_KEY, CAPABILITIES)) && flags.contains(0x81063b00f92d7fL)) row = "imagine_yourself";
+            if (row != null) rows.computeIfAbsent(row, k -> new ArrayList<>()).add(method);
+        }
+        if (rows.size() != 5 || rows.values().stream().anyMatch(m -> m.size() != 1)) return List.of();
+        var checks = rows.values().stream().map(m -> m.get(0)).toList();
+        return checks.stream().map(Method::getDefiningClass).distinct().count() == 1 ? checks : List.of();
+    }
+
     /**
      * xhe_audio: the no-argument call() that names its copies "orca_share_media" and ends one copy with
      * new FileOutputStream(File, Z), a static (InputStream, OutputStream)V copy, OutputStream.close() and Uri.fromFile on
@@ -2585,9 +2723,56 @@ public class CompatReport {
             var strings = new HashSet<String>();
             for (var i : method.getImplementation().getInstructions())
                 if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr) strings.add(sr.getString());
-            if (strings.contains("MARK_THREAD_AS_SEEN_JOB") && strings.contains("broadcast_message_seen_internal")) seen.add(method);
+            if (strings.contains("MARK_THREAD_AS_SEEN_JOB") && strings.contains("broadcast_message_seen_internal") && seenThreadStore(cls))
+                seen.add(method);
         }
         return seen;
+    }
+
+    static final String THREAD_KEY = "Lcom/facebook/messaging/model/threadkey/ThreadKey;";
+
+    /**
+     * The seen hook reads the chat from the handler's own ThreadKey field, which ReadReceipts.kt's
+     * resolveReadReceiptThreadFields takes as the class's one public final ThreadKey field, stored once by its
+     * (FbUserSession, ThreadKey, ...) constructor straight from that parameter into this. Mirrored so a changed field or
+     * constructor shows up here instead of at patch time.
+     */
+    static boolean seenThreadStore(ClassDef owner) {
+        Field field = null;
+        for (var f : owner.getFields()) {
+            if (!THREAD_KEY.equals(f.getType()) || !AccessFlags.PUBLIC.isSet(f.getAccessFlags()) || !AccessFlags.FINAL.isSet(f.getAccessFlags())) continue;
+            if (field != null) return false;
+            field = f;
+        }
+        if (field == null) return false;
+        Method ctor = null;
+        for (var m : owner.getMethods()) {
+            var p = m.getParameterTypes();
+            if (!"<init>".equals(m.getName()) || m.getImplementation() == null || p.size() < 2 ||
+                    !"Lcom/facebook/auth/usersession/FbUserSession;".contentEquals(p.get(0)) || !THREAD_KEY.contentEquals(p.get(1))) continue;
+            if (ctor != null) return false;
+            ctor = m;
+        }
+        if (ctor == null) return false;
+        int parameterRegisters = 1;
+        for (var t : ctor.getParameterTypes()) parameterRegisters += t.charAt(0) == 'J' || t.charAt(0) == 'D' ? 2 : 1;
+        int self = ctor.getImplementation().getRegisterCount() - parameterRegisters;
+        int stores = 0;
+        boolean direct = false;
+        for (var i : ctor.getImplementation().getInstructions()) {
+            // Like the patch, a constructor that reuses this or the ThreadKey's register before the store doesn't count.
+            if (stores == 0 && i.getOpcode().setsRegister() && i instanceof OneRegisterInstruction written) {
+                int low = written.getRegisterA(), high = low + (i.getOpcode().setsWideRegister() ? 1 : 0);
+                if (low <= self && self <= high || low <= self + 2 && self + 2 <= high) return false;
+            }
+            if (i.getOpcode() != Opcode.IPUT_OBJECT || !(((ReferenceInstruction) i).getReference() instanceof FieldReference ref) ||
+                    !owner.getType().equals(ref.getDefiningClass()) || !field.getName().equals(ref.getName()) || !field.getType().equals(ref.getType()))
+                continue;
+            stores++;
+            var registers = (TwoRegisterInstruction) i;
+            direct = registers.getRegisterA() == self + 2 && registers.getRegisterB() == self;
+        }
+        return stores == 1 && direct;
     }
 
     static List<Method> replyReadDispatches(List<ClassDef> classes) {
@@ -2601,10 +2786,78 @@ public class CompatReport {
                 var strings = new HashSet<String>();
                 for (var i : method.getImplementation().getInstructions())
                     if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr) strings.add(sr.getString());
-                if (strings.contains("AdapterSender") && strings.contains("meta_ai_invocation")) events.add(method);
+                if (strings.contains("AdapterSender") && strings.contains("meta_ai_invocation") && replyReadShape(method)) events.add(method);
             }
         }
         return events;
+    }
+
+    /**
+     * reply_read injects at fixed indices, so ReadReceipts.kt's validateReplyRead pins the method's shape. The same
+     * outline is checked here, so a changed body shows up as unresolved instead of passing until patch time: 36
+     * registers, 402 instructions, the typed ThreadKey getter on p7's type at 33 with its result in v12, v12 taking
+     * v10 at 237, and at 239 the five-argument dispatch on p4's type that starts with the FbUserSession and ends with
+     * two Strings. The dataflow proof stays in the patch.
+     */
+    static boolean replyReadShape(Method method) {
+        var impl = method.getImplementation();
+        if (impl == null || impl.getRegisterCount() != 36) return false;
+        var code = new ArrayList<Instruction>();
+        impl.getInstructions().forEach(code::add);
+        if (code.size() != 402) return false;
+        var params = method.getParameterTypes();
+        if (code.get(33).getOpcode() != Opcode.INVOKE_INTERFACE_RANGE || !(code.get(33) instanceof ReferenceInstruction g) ||
+                !(g.getReference() instanceof MethodReference getter) || !params.get(7).toString().equals(getter.getDefiningClass()) ||
+                !getter.getParameterTypes().isEmpty() || !"Lcom/facebook/messaging/model/threadkey/ThreadKey;".equals(getter.getReturnType()))
+            return false;
+        if (code.get(34).getOpcode() != Opcode.MOVE_RESULT_OBJECT || ((OneRegisterInstruction) code.get(34)).getRegisterA() != 12) return false;
+        if (code.get(237).getOpcode() != Opcode.MOVE_OBJECT || ((TwoRegisterInstruction) code.get(237)).getRegisterA() != 12 ||
+                ((TwoRegisterInstruction) code.get(237)).getRegisterB() != 10) return false;
+        if (code.get(239).getOpcode() != Opcode.INVOKE_INTERFACE_RANGE || !(code.get(239) instanceof ReferenceInstruction d) ||
+                !(d.getReference() instanceof MethodReference dispatch) || !params.get(4).toString().equals(dispatch.getDefiningClass()) ||
+                !"V".equals(dispatch.getReturnType())) return false;
+        var types = dispatch.getParameterTypes();
+        if (types.size() != 5 || !"Lcom/facebook/auth/usersession/FbUserSession;".contentEquals(types.get(0)) ||
+            !"Ljava/lang/String;".contentEquals(types.get(3)) || !"Ljava/lang/String;".contentEquals(types.get(4)) ||
+            ((RegisterRangeInstruction) code.get(239)).getStartRegister() != 11 || ((RegisterRangeInstruction) code.get(239)).getRegisterCount() != 6)
+            return false;
+        // The registers and branches validateReplyRead proves its dataflow on.
+        int[] p = new int[params.size()];
+        int next = impl.getRegisterCount() - params.stream().mapToInt(t -> t.charAt(0) == 'J' || t.charAt(0) == 'D' ? 2 : 1).sum();
+        for (int at = 0; at < p.length; at++) { p[at] = next; next += params.get(at).charAt(0) == 'J' || params.get(at).charAt(0) == 'D' ? 2 : 1; }
+        var getterArgs = (RegisterRangeInstruction) code.get(33);
+        if (getterArgs.getStartRegister() != p[7] || getterArgs.getRegisterCount() != 1) return false;
+        if (!moves(code.get(4), Opcode.MOVE_OBJECT_FROM16, 7, p[11]) || !moves(code.get(13), Opcode.MOVE_OBJECT_FROM16, 20, p[4]) ||
+            !moves(code.get(25), Opcode.MOVE_OBJECT_FROM16, 10, p[0]) || !moves(code.get(236), Opcode.MOVE_OBJECT_FROM16, 11, 20) ||
+            !moves(code.get(238), Opcode.MOVE_OBJECT, 15, 0) || !moves(code.get(73), Opcode.MOVE_OBJECT, 12, 5)) return false;
+        if (code.get(31).getOpcode() != Opcode.CONST_4 || ((OneRegisterInstruction) code.get(31)).getRegisterA() != 5 ||
+            ((NarrowLiteralInstruction) code.get(31)).getNarrowLiteral() != 0 || code.get(32).getOpcode() != Opcode.IF_EQZ ||
+            ((OneRegisterInstruction) code.get(32)).getRegisterA() != p[7] || !jumpsTo(code, 32, 73)) return false;
+        int[] address = new int[code.size() + 1];
+        var index = new HashMap<Integer, Integer>();
+        for (int at = 0; at < code.size(); at++) { index.put(address[at], at); address[at + 1] = address[at] + code.get(at).getCodeUnits(); }
+        var targets = new HashSet<Integer>();
+        for (int at = 0; at < code.size(); at++) {
+            if (!(code.get(at) instanceof OffsetInstruction jump)) continue;
+            Integer landed = index.get(address[at] + jump.getCodeOffset());
+            if (landed == null) return false;
+            if (code.get(landed) instanceof SwitchPayload payload) {
+                for (var element : payload.getSwitchElements()) targets.add(index.get(address[at] + element.getOffset()));
+            } else targets.add(landed);
+        }
+        for (var block : impl.getTryBlocks()) {
+            for (var handler : block.getExceptionHandlers()) targets.add(index.get(handler.getHandlerCodeAddress()));
+            // Code inserted at 239 would land inside a try that covers the seam.
+            for (int at = 234; at <= 240; at++)
+                if (address[at] >= block.getStartCodeAddress() && address[at] < block.getStartCodeAddress() + block.getCodeUnitCount()) return false;
+        }
+        for (int at : new int[] {31, 32, 33, 34, 237, 238, 239, 240}) if (targets.contains(at)) return false;
+        return true;
+    }
+
+    static boolean moves(Instruction instruction, Opcode opcode, int to, int from) {
+        return instruction.getOpcode() == opcode && instruction instanceof TwoRegisterInstruction move &&
+            move.getRegisterA() == to && move.getRegisterB() == from;
     }
 
     static final String LAT_STATUS_JOB = "Lcom/facebook/attribution/LatStatusJob;";
@@ -2736,6 +2989,53 @@ public class CompatReport {
         return List.of(publish.get(0), keepalive.get(0));
     }
 
+    /** The focus change's one invoke-super of Android's onFocusChanged, made on this. */
+    static boolean hasFocusSuperCall(Method method) {
+        if (AccessFlags.STATIC.isSet(method.getAccessFlags()) || method.getImplementation() == null ||
+            !"onFocusChanged".equals(method.getName()) || !"V".equals(method.getReturnType())) return false;
+        var params = new ArrayList<String>();
+        for (var t : method.getParameterTypes()) params.add(t.toString());
+        if (!params.equals(List.of("Z", "I", "Landroid/graphics/Rect;"))) return false;
+        int self = method.getImplementation().getRegisterCount() - 4;
+        int calls = 0;
+        for (var i : instructions(method)) {
+            if (i.getOpcode() != Opcode.INVOKE_SUPER && i.getOpcode() != Opcode.INVOKE_SUPER_RANGE) continue;
+            if (!(((ReferenceInstruction) i).getReference() instanceof MethodReference call)) continue;
+            int receiver = i instanceof FiveRegisterInstruction f ? f.getRegisterC() : ((RegisterRangeInstruction) i).getStartRegister();
+            var types = new ArrayList<String>();
+            for (var t : call.getParameterTypes()) types.add(t.toString());
+            if (Set.of("Landroid/widget/TextView;", "Landroid/widget/EditText;").contains(call.getDefiningClass()) &&
+                "onFocusChanged".equals(call.getName()) && "V".equals(call.getReturnType()) && types.equals(params) &&
+                receiver == self) calls++;
+        }
+        return calls == 1;
+    }
+
+    /**
+     * text_style: the one method of an EditText subclass that names updateState:TextInputComponent.remeasureForUpdatedText
+     * has to be its instance onTextChanged(CharSequence, III)V, and the hook is the same class's
+     * onFocusChanged(ZILandroid/graphics/Rect;)V that calls Android's own on this. Mirrors TextStyle.kt.
+     */
+    static List<Method> textStyleField(List<ClassDef> classes) {
+        ClassDef field = null;
+        Method anchor = null;
+        int anchors = 0;
+        for (var cls : classes) {
+            if (!"Landroid/widget/EditText;".equals(cls.getSuperclass())) continue;
+            for (var method : cls.getMethods()) {
+                if (!literals(method).contains("updateState:TextInputComponent.remeasureForUpdatedText")) continue;
+                anchors++;
+                field = cls;
+                anchor = method;
+            }
+        }
+        if (anchors != 1 || AccessFlags.STATIC.isSet(anchor.getAccessFlags()) ||
+            !hookId(anchor).endsWith(";->onTextChanged(Ljava/lang/CharSequence;III)V")) return List.of();
+        var focus = new ArrayList<Method>();
+        for (var method : field.getMethods()) if (hasFocusSuperCall(method)) focus.add(method);
+        return focus.size() == 1 ? focus : List.of();
+    }
+
     static Map<String, List<Method>> findControls(List<ClassDef> classes) {
         var found = new LinkedHashMap<String, List<Method>>();
         for (var key : CONTROL_KEYS) found.put(key, new ArrayList<>());
@@ -2749,6 +3049,7 @@ public class CompatReport {
         found.get("ai_mentions").addAll(aiMentionDispatchers(classes));
         found.get("ai_commands").addAll(aiCommandLists(classes));
         found.get("ai_search_hint").addAll(searchBarBuilders(classes));
+        found.get("ai_mention_rows").addAll(aiMentionRowChecks(classes));
         found.get("xhe_audio").addAll(shareCopies(classes));
         found.get("disappearing_swipe").addAll(disappearingSwipeStarts(classes));
         found.get("hide_read_receipts").addAll(chatSeenBroadcasts(classes));
@@ -2759,6 +3060,7 @@ public class CompatReport {
         found.get("attribution_uploads").addAll(attributionUploads(classes));
         found.get("ad_events").addAll(adEvents(classes));
         found.get("mqtt_telemetry").addAll(mqttTelemetry(classes));
+        found.get("text_style").addAll(textStyleField(classes));
         found.get("message_log").addAll(messageLogHooks(classes));
         found.get("auto_reply").addAll(messageLogHooks(classes));
         found.get("system_camera").addAll(systemCameraLaunches(classes));

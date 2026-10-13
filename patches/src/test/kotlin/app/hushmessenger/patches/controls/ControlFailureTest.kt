@@ -125,10 +125,13 @@ class ControlFailureTest {
             for ((group, profile) in controlProfiles.values.distinct().withIndex()) {
                 activeProfile = profile
                 val ids = profile.hooks.getValue("menu_settings")
-                for (broken in listOf("none", "add", "bind", "drawer", "click", "bind-registers", "drawer-registers",
+                for (broken in listOf("none", "no-logo", "add", "bind", "drawer", "click", "bind-registers", "drawer-registers",
                     "refresh-result", "row-store", "factory", "click-branch", "click-late-branch")) {
                     // The fifth mandatory target now needs complete native model contracts, not a MenuRow placeholder.
-                    val classes = legacyDrawerFixture(profile, broken).classes.toSet()
+                    // Every case but no-logo also has the Chats title handler the logo's long press goes in through.
+                    val drawer = legacyDrawerFixture(profile, if (broken == "no-logo") "none" else broken).classes
+                    val classes = (if (broken == "no-logo") drawer else drawer + chatsTitleClasses()).toSet()
+                    val applies = broken == "none" || broken == "no-logo"
                     withResourceContext(temporary.resolve("$group-$broken")) { resources, config ->
                         val context = BytecodePatchContext::class.java.declaredConstructors.single()
                             .newInstance(config, resources.packageMetadata) as BytecodePatchContext
@@ -139,17 +142,23 @@ class ControlFailureTest {
                             record.execute(resources)
                             discoveredControls = findControls(classes)
                             validateControls(discoveredControls, setOf("menu_settings"))
+                            logoLongPressSites = findLogoLongPress(classes)
                             bundledControls.clear()
                             val targets = classes.flatMap { it.methods }.filter { it.hookId() in ids }
                             val allMethods = classes.flatMap { it.methods }.filter { it.implementation != null }
                             val originalFactory = classes.single { it.type == SETTINGS }.methods.single { it.hookId() == LEGACY_SECTION }
                             val before = allMethods.map { it.implementation!!.instructions.toList() }
-                            if (broken == "none") {
+                            if (applies) {
                                 menuSettingsPatch.execute(context)
                                 assertTrue(targets.all { method -> method.implementation!!.instructions.any {
                                     (it as? com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction)
                                         ?.reference.toString().startsWith("$SETTINGS->")
                                 } })
+                                // The logo gets its long press where the handler is, and a build without one keeps the rest.
+                                val logoCalls = allMethods.filter { it.hookId() == SYNTHETIC_LOGO_LONG_PRESS }.flatMap { method ->
+                                    method.implementation!!.instructions.filter { (it as? ReferenceInstruction)?.reference?.toString() == LOGO_LONG_PRESSED }
+                                }
+                                assertEquals(if (broken == "none") 1 else 0, logoCalls.size, "$group $broken logo")
                                 // The stub is swapped for the generated factory in both method views the dex writer reads.
                                 val settings = classes.single { it.type == SETTINGS }
                                 val factory = settings.methods.single { it.hookId() == LEGACY_SECTION }
@@ -162,8 +171,8 @@ class ControlFailureTest {
                                 assertSame(originalFactory, classes.single { it.type == SETTINGS }.methods.single { it.hookId() == LEGACY_SECTION })
                             }
                             record.finalize(resources)
-                            assertEquals(broken == "none", resources.hasFeature("menu_row"))
-                            assertEquals(if (broken == "none") setOf("menu_row") else emptySet(), bundledControls.toSet())
+                            assertEquals(applies, resources.hasFeature("menu_row"))
+                            assertEquals(if (applies) setOf("menu_row") else emptySet(), bundledControls.toSet())
                         }
                     }
                 }

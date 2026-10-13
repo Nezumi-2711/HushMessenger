@@ -6,18 +6,35 @@ This release adds Hide People tab, Hide Notifications tab, Stop MQTT logging and
 
 Development v0.23.3.
 
+- Compatibility profiles now match their generated form exactly, so the profile checks pass without changing any hooks.
+
+- Long-press the Messenger logo at the top of Chats to open HushMessenger settings. It's a way in from inside Messenger even when your launcher has no long-press menu, and it works while changes are paused. It comes with **Open settings from menu**. Messenger's own long press on the logo still runs first.
+- The README is much shorter and sticks to installing and using the patches. The Messenger internals audit and the version history it used to carry are still in the repository history, last at commit 3cf54ff.
+- With **Hide Meta AI** on, typing @ in a chat no longer suggests Meta AI or its imagine entries. Messenger had started building that list a newer way that went around the switch. Silent and the rest of the list stay.
+- New **Hide Mark as read** switch. It takes Mark as read out of the menu you get when you press and hold a chat in your chat list, so you can't mark a chat read by accident. Mark as unread stays where it is. Like every switch it starts off.
 - Replying with Hide read receipts on now allows Seen only for that chat in the same account. A reply no longer opens a brief Seen window in other chats.
 - Release checks record stage timings. A local development preflight checks a frozen bundle while keeping the public feed held, with separate receipts that can't advance a public release.
+- **Keep a message log** tells messages apart by Messenger's own message ID instead of their words. Two messages that say the same thing in one chat are both kept when Messenger gives each one an ID, and the second notification Messenger builds for one message is still dropped. A copy that arrives without an ID pairs with one earlier capture of the same words in that chat, so a third "ok" in the same minute still gets logged. A sender is only shown when the chat's notification makes it clear who sent it, so the same words from two people in a group stay unnamed rather than borrowing someone's name. Your own lines in the notification never name you as the sender. Names that **Auto reply** hands over before answering stay with the message they came from. The ID only lives in memory and is never saved to the log.
+- The message log's screen now stays out of the Recents preview on Android 12 and older too. Those versions can only do it by blocking screenshots, so screenshots of settings don't work while the log is open there. Android 13 and newer still allow them.
+- **Auto reply** drops a message it hasn't answered yet when you turn it off or pause, and when you edit your replies, so an older message can't get a new answer. One message delivered twice gets one answer, at most 20 messages wait at once (messages it couldn't answer anyway don't count), and a phone clock set back no longer stretches a chat's five-minute wait.
+- When HushMessenger's settings can't start, the **Bold and italic text** entries leave the selection menu instead of staying there from an earlier run.
+- **Bold and italic text** now puts Bold and Italic in the chat box's menu too. Messenger's text field there had kept every app's text actions out, not just these two. On a Samsung phone you may need to turn on **Messenger Bold** and **Messenger Italic** once under **Manage apps** in that menu.
+- **Keep a message log** and **Auto reply** now skip messages from a chat with disappearing messages on. Messenger hides the words of those messages, so the log used to save a "Secret conversation" placeholder in place of the text. The check uses Messenger's own hidden-text flag, not the wording, so it works in every language.
 
 ### Settings
 
+- Settings have a more compact header, filled page navigation and grouped controls. Message log, auto replies and restart use matching panels and buttons in both themes. Reply and log actions share the bottom of the screen and still scroll into reach in short windows.
+- Font size and position values stay readable at large text sizes, with their adjustment buttons on a separate row.
+
+- Restoring a settings backup no longer turns **Auto reply** on, since backups don't include the replies. A backup with it off still turns it off. If a backup would have turned it on, the restore message says why it stayed off. The restore message also puts a period after the count now.
 - Auto replies keep their labels while you type, show how many replies are available and flag an unfinished reply before saving. Cancel leaves saved replies alone. Drafts, group choice and text selection survive a recreated settings screen.
-- Message log now explains an empty log, distinguishes a read failure from an empty result and offers retry. Clear log reports a failure if it can't remove the file or key. Saved message text can be selected.
+- Message log now explains an empty log, distinguishes a read failure from an empty result and offers retry. Clear log reports a failure if it can't remove the file or key. Saved message text can be selected. When an older log can't be read, it's set aside and new messages keep showing under a short notice with a Remove old log button. The 30-day note under that notice no longer sits right against it.
 - Reply and message-log dialogs keep their actions reachable in short windows and large text, with matching keyboard, cutout and right-to-left spacing.
 - A failed log clear keeps its retry action available, even if the messages are already gone or the screen rotated during the clear. The settings header and restart reminder adapt to larger text to leave more room for controls.
 - Long replies grow with their text so the editor scrolls as one page. Replies and saved messages keep their own text direction in right-to-left layouts.
 - Large App-page labels reserve a separate switch column, including in right-to-left layouts.
 - Enabled controls explain when they're waiting for Messenger to use them. Clearing a search keeps the category you picked.
+- New **Hide the Menu row** choice on the App tab takes the HushMessenger row out of Messenger's Menu tab and side menu, so the long-press **Patch controls** shortcut and the Messenger logo are the ways in. It can be turned on once you've opened settings from that shortcut, and the row comes back by itself if the shortcut ever goes missing. Together with **Hide app drawer icon** that leaves just those two.
 - Switches have clearer on and disabled states in both themes. Focus and pointer feedback match the rest of settings, and restart text fits narrower windows.
 - Settings now use rose accents with graphite panels on black. Search and category filters stay together, and the App page gives Restart a filled button. The uninstall warning sits in its own panel. Backup actions have a separate Your choices section.
 - Restart Messenger now shows that choices are being saved before the app reopens. Message log and auto reply screens follow the same style, including the light theme.
@@ -28,12 +45,15 @@ Development v0.23.3.
 - Completed the remaining attribution-upload checks using the released build's device evidence.
 - Retired the outstanding Messenger 580 installation checks. Current builds support Messenger 582 only.
 - Checked that a failed system-emoji font merge retries the same file and stops after three failures.
+- The compatibility report now checks everything the reply and Seen hooks rely on in Messenger's code, so a build that moved them shows up in the report instead of failing at patch time.
+- The Meta AI, People and Notifications tab switches and the emoji drawer switch no longer wait on settings to start while holding their own lock. Nothing took those locks in the other order, so there was no hang to fix.
 
 ### New
 
 - [#43](https://github.com/SysAdminDoc/HushMessenger/issues/43) **Hide People tab** and **Hide Notifications tab** are new Navigation switches. Each one takes its tab out of the bar at the bottom once Messenger restarts, and both start off.
-- [#44](https://github.com/SysAdminDoc/HushMessenger/issues/44) **Stop MQTT logging** is a new Privacy switch that starts off. Messenger's live connection also carries a health report and some push logging, and this stops both. Messages, calls and active status ride the same connection and keep working. When Messenger was sending the health report as its keepalive, it sends its own plain ping instead.
-- [#42](https://github.com/SysAdminDoc/HushMessenger/issues/42) **Bold and italic text** is a new Conversations switch that starts off. With it on, select words you typed and pick **Bold** or **Italic** in the text menu (it can be behind the three dots). Picking the same one again turns the words back. They come out as special Unicode letters, which show on any phone.
+- [#44](https://github.com/SysAdminDoc/HushMessenger/issues/44) **Stop MQTT logging** is a new Privacy switch that starts off. It drops the health report and push logging Messenger's MQTT client sends, and when that client uses the health report as its keepalive, it sends Messenger's plain ping instead. Messenger 582 sends most of its traffic another way, so there's often little for it to drop. Messages, calls and active status keep working.
+- [#42](https://github.com/SysAdminDoc/HushMessenger/issues/42) **Bold and italic text** is a new Conversations switch that starts off. With it on, select words you typed and pick **Bold** or **Italic** in the text menu (it can be behind the three dots). Picking the same one again turns the words back. They come out as special Unicode letters, which show on any phone. Keycap emoji like 1️⃣ stay as they are, and picking an entry on text you can't edit shows a short tip.
+- [#48](https://github.com/SysAdminDoc/HushMessenger/issues/48) A font file you pick under **Use your own font** can now be made smaller or larger, from 70% to 160%, and its text can be moved up or down in steps of 2% of its size. That's for a font that looks small or sits too high in a message bubble. Only HushMessenger's copy of the file changes, so your phone's own font and text size settings stay as they are. Restart Messenger to see a change.
 
 ## 0.23.0 (2026-10-11)
 

@@ -32,6 +32,17 @@ final class FontFile {
 
     private static final int FVAR = 0x66766172;
     private static final int WGHT = 0x77676874;
+    private static final int HEAD = 0x68656164;
+    private static final int HHEA = 0x68686561;
+    private static final int OS2 = 0x4F532F32;
+
+    /** #48: the picked font's size in percent, and how far its text sits lower in the line, in percent of that size. */
+    static final String ADJUSTED = NAME + "-adjusted";
+    /** A copy still being written. Another process only removes one this old, so it never pulls one out from under a writer. */
+    static final String SIZING = NAME + "-sizing";
+    static final long SIZING_STALE_MS = 10 * 60_000L;
+    static final int SCALE_LEAST = 70, SCALE_MOST = 160, SCALE_STEP = 5;
+    static final int SHIFT_MOST = 20, SHIFT_STEP = 2;
     private static final int MAX_TABLES = 512;
     private static final int MAX_AXES = 64;
 
@@ -237,6 +248,106 @@ final class FontFile {
         } catch (IOException | RuntimeException unreadable) {
             return null;
         }
+    }
+
+    /**
+     * A copy of [source] drawn at [scale] percent of the size Messenger asks for, with its text [shift] percent of that size
+     * lower in the line (higher when negative). Null when the copy can't be made, so the picked file is used as it is. The
+     * name carries the choices and the source's time and length, so a new pick or choice never reuses an old copy, and
+     * older copies are removed.
+     */
+    static File adjusted(File source, int scale, int shift) {
+        File folder = source.getParentFile();
+        long length = source.length();
+        if (folder == null || length <= 0 || length > MAX_BYTES) return null;
+        String name = ADJUSTED + "-" + scale + "-" + (shift + SHIFT_MOST) + "-" + Long.toHexString(source.lastModified()) + "-" + length;
+        File target = new File(folder, name);
+        dropAdjusted(folder, name);
+        // Only a finished copy ever carries the name, so one that's there is whole.
+        if (target.isFile() && target.length() == length) return target;
+        File partial = null;
+        try {
+            byte[] font = Files.readAllBytes(source.toPath());
+            if (!adjust(font, scale, shift)) return null;
+            // Each of Messenger's processes can get here at once, so each writes its own partial file.
+            partial = File.createTempFile(SIZING + "-", null, folder);
+            Files.write(partial.toPath(), font);
+            Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            return target;
+        } catch (IOException | RuntimeException | OutOfMemoryError failure) {
+            if (partial != null) partial.delete();
+            android.util.Log.w("HushMessenger", "custom_font: couldn't size the font file: " + failure.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /** Removes the sized copies other than [keep], or all of them when it's null, and partial files left behind by a crash. */
+    static void dropAdjusted(File folder, String keep) {
+        String prefix = ADJUSTED + "-", sizing = SIZING + "-";
+        long abandoned = System.currentTimeMillis() - SIZING_STALE_MS;
+        File[] found = folder == null ? null : folder.listFiles((dir, file) -> file.startsWith(prefix) && !file.equals(keep)
+                || file.startsWith(sizing) && new File(dir, file).lastModified() < abandoned);
+        if (found != null) for (File stale : found) stale.delete();
+    }
+
+    /**
+     * Rewrites the first font in [font] in place. The outlines stay as they are: the head table's units per em shrinks or
+     * grows, which draws every glyph and its advance at [scale] percent, and [shift] moves between the ascent and descent in
+     * hhea, OS/2 and the head table's box, so the line keeps its height while the text moves. False when a table it needs
+     * is missing or a value would leave its range.
+     */
+    static boolean adjust(byte[] font, int scale, int shift) {
+        if (scale < SCALE_LEAST || scale > SCALE_MOST || Math.abs(shift) > SHIFT_MOST) return false;
+        java.nio.ByteBuffer bytes = java.nio.ByteBuffer.wrap(font);
+        try {
+            int start = 0;
+            if (bytes.getInt(0) == COLLECTION) {
+                if (bytes.getInt(8) < 1) return false;
+                start = bytes.getInt(12);
+            }
+            if (!isFontTag(bytes.getInt(start)) || bytes.getInt(start) == COLLECTION) return false;
+            int tables = bytes.getShort(start + 4) & 0xFFFF;
+            if (tables > MAX_TABLES) return false;
+            int head = -1, hhea = -1, os2 = -1;
+            for (int index = 0; index < tables; index++) {
+                int record = start + 12 + 16 * index;
+                int tag = bytes.getInt(record), at = bytes.getInt(record + 8), size = bytes.getInt(record + 12);
+                if (tag != HEAD && tag != HHEA && tag != OS2) continue;
+                if (at < 0 || size < 0 || at > font.length - size) return false;
+                if (tag == HEAD && size >= 54) head = at;
+                else if (tag == HHEA && size >= 36) hhea = at;
+                else if (tag == OS2 && size >= 78) os2 = at;
+            }
+            if (head < 0 || hhea < 0) return false;
+            int upem = bytes.getShort(head + 18) & 0xFFFF;
+            int units = Math.round(upem * 100f / scale);
+            if (upem < 16 || units < 16 || units > 16384) return false;
+            int move = Math.round(units * shift / 100f);
+            // A pair left at zero means "not set", and the reader falls back to the next pair, so it stays zero.
+            int hheaMove = unset(bytes, hhea + 4, hhea + 6) ? 0 : move;
+            int typoMove = os2 < 0 || unset(bytes, os2 + 68, os2 + 70) ? 0 : move;
+            int winMove = os2 < 0 || unset(bytes, os2 + 74, os2 + 76) ? 0 : move;
+            int[][] signed = {{head + 38, move}, {head + 42, move}, {hhea + 4, hheaMove}, {hhea + 6, hheaMove}};
+            int[][] typo = os2 < 0 ? new int[0][] : new int[][] {{os2 + 68, typoMove}, {os2 + 70, typoMove}};
+            int[][] win = os2 < 0 ? new int[0][] : new int[][] {{os2 + 74, winMove}, {os2 + 76, -winMove}};
+            for (int[][] group : new int[][][] {signed, typo})
+                for (int[] field : group) if (!fits(bytes.getShort(field[0]) + field[1], Short.MIN_VALUE, Short.MAX_VALUE)) return false;
+            for (int[] field : win) if (!fits((bytes.getShort(field[0]) & 0xFFFF) + field[1], 0, 0xFFFF)) return false;
+            bytes.putShort(head + 18, (short) units);
+            for (int[][] group : new int[][][] {signed, typo, win})
+                for (int[] field : group) bytes.putShort(field[0], (short) (bytes.getShort(field[0]) + field[1]));
+            return true;
+        } catch (IndexOutOfBoundsException truncated) {
+            return false;
+        }
+    }
+
+    private static boolean unset(java.nio.ByteBuffer bytes, int first, int second) {
+        return bytes.getShort(first) == 0 && bytes.getShort(second) == 0;
+    }
+
+    private static boolean fits(int value, int least, int most) {
+        return value >= least && value <= most;
     }
 
     private static int readInt(RandomAccessFile font, long at) throws IOException {

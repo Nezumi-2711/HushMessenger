@@ -349,6 +349,52 @@ public class SetupSummaryTest {
         assertNotEquals(PackageManager.COMPONENT_ENABLED_STATE_DISABLED, packages.getComponentEnabledSetting(alias));
     }
 
+    /** #22: Hide the Menu row stays off until settings have opened from the long-press shortcut on this install. */
+    @Test public void hideTheMenuRowWaitsForTheLongPressShortcut() throws Exception {
+        installedFeatures("people", "menu_row");
+        try {
+            HostScreensTest.answerControlsShortcut(true);
+            try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                View root = screen.get().getWindow().getDecorView();
+                root.findViewWithTag("tab_app").performClick();
+                android.widget.Switch hide = root.findViewWithTag("hide_menu_row");
+                assertFalse(hide.isEnabled());
+                String reason = new SettingsText(screen.get()).format("menu_row_needs_shortcut");
+                assertTrue(hide.getContentDescription().toString().endsWith(reason));
+                assertEquals(new SettingsText(screen.get()).get("access_help_missing_menu"),
+                    ((android.widget.TextView) root.findViewWithTag("access_help")).getText().toString());
+                // The shortcut brings this same screen back, so it has to unlock without a new one.
+                screen.pause();
+                Settings.noteShortcutUsed();
+                screen.resume();
+                hide = root.findViewWithTag("hide_menu_row");
+                assertTrue(hide.isEnabled());
+                assertFalse(hide.getContentDescription().toString().contains(reason));
+            }
+            try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                View root = screen.get().getWindow().getDecorView();
+                root.findViewWithTag("tab_app").performClick();
+                android.widget.Switch hide = root.findViewWithTag("hide_menu_row");
+                assertTrue(hide.isEnabled());
+                hide.setChecked(true);
+                assertTrue(Settings.menuRowHidden());
+                // The same screen stops pointing at the row as soon as it's hidden.
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+                assertEquals(new SettingsText(screen.get()).get("access_help_missing"),
+                    ((android.widget.TextView) root.findViewWithTag("access_help")).getText().toString());
+            }
+            // With the row gone, the App tab stops pointing at it.
+            try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                View root = screen.get().getWindow().getDecorView();
+                root.findViewWithTag("tab_app").performClick();
+                assertEquals(new SettingsText(screen.get()).get("access_help_missing"),
+                    ((android.widget.TextView) root.findViewWithTag("access_help")).getText().toString());
+            }
+        } finally {
+            HostScreens.controlsShortcut = null;
+        }
+    }
+
     @Test public void drawerAliasExplainsThatUninstallingItRemovesMessenger() throws Exception {
         installedFeatures("people", "menu_row");
         var app = RuntimeEnvironment.getApplication();

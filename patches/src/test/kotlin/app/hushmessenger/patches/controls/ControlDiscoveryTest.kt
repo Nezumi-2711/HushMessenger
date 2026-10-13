@@ -30,7 +30,7 @@ class ControlDiscoveryTest {
     )
 
     private fun completeFixture(): List<MutableClass> {
-        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, XHE_AUDIO, DISAPPEARING_SWIPE, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
+        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS, XHE_AUDIO, DISAPPEARING_SWIPE, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, TEXT_STYLE, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
             ids.map { id ->
                 if (key == "people_jewel") return@map peopleJewelMethod()
                 if (key == "people_tab") return@map peopleTabMethod()
@@ -127,7 +127,7 @@ class ControlDiscoveryTest {
             fixtureMethod("$IMMUTABLE_LIST->copyOf(Ljava/util/Collection;)$IMMUTABLE_LIST",
                 "const/4 v0, 0x0\nreturn-object v0", flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value),
         )), peopleJewelKeyHolder(), storyCardKeyHolder(), debugDumperFixture(), messageWrapperFixture(type = "LX/K1Y;"), searchFieldFixture()) +
-            aiStickerCellFixture() + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + aiMentionsFixture() + searchBarFixture() + shareCopyFixture() + disappearingSwipeFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + customFontFixture() +
+            aiStickerCellFixture() + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + aiMentionsFixture() + searchBarFixture() + aiMentionRowsFixture() + shareCopyFixture() + disappearingSwipeFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + textFieldFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + customFontFixture() +
             syntheticHooks.getValue("screenshot_viewers").map { screenshotViewerFixture(it) }
                 .groupBy { it.definingClass }.map { (type, group) -> fixtureClass(type, group) })
         .let { classes ->
@@ -322,5 +322,40 @@ class ControlDiscoveryTest {
         assertEquals(listOf("LX/1iN;->A0D(LX/1iN;)Z"), found.getValue(TAB_PEOPLE).map { it.hookId() })
         assertEquals(listOf("LX/1iN;->A08(LX/1iN;)Z"), found.getValue(TAB_NOTIFICATIONS).map { it.hookId() })
         validateControls(found, setOf(TAB_PEOPLE, TAB_NOTIFICATIONS, "ai_tab"))
+    }
+
+    // 582's Menu tab gives Meta's subscriptions (Facebook Plus, Meta Verified, Meta One) a section of their own next to
+    // Also from Meta. Both are Facebook shortcuts. The tab's own sections, built by the same class, aren't.
+    @Test fun theMenuTabsMetaSectionsAreFacebookShortcutGates() {
+        val section = { name: String, plugin: String ->
+            fixtureMethod("LX/WRg;->$name()Z", """
+                new-instance v0, Lcom/facebook/messaging/navigation/plugins/drawerfoldersections/$plugin;
+                const/4 v0, 0x1
+                return v0
+            """.trimIndent())
+        }
+        val drawer = fixtureClass("LX/WRg;", listOf(
+            section("A02", "fbshortcutsfoldersection/FacebookShortcutsFolderSection"),
+            section("A05", "subscriptionsfoldersection/SubscriptionsFolderSection"),
+            section("A04", "settingsfoldersection/SettingsDrawerFolderSectionImplementation"),
+        ))
+        val found = findControls(listOf(drawer))
+        assertEquals(setOf("LX/WRg;->A02()Z", "LX/WRg;->A05()Z"), found.getValue("facebook").map { it.hookId() }.toSet())
+    }
+
+    // Both chat menu builders gate Mark as read by its plugin name. Mark as unread has the same shape and its own name.
+    @Test fun markAsReadIsBothChatMenuGatesAndNotMarkAsUnread() {
+        val unread = fixtureMethod("LX/MKS;->A0G()Z",
+            pluginBody("com.facebook.messaging.threadlist.threaditemmenu.plugins.core.markunreadmenuitem.MarkUnreadMenuItemImplementation"))
+        val classes = completeFixture().map { cls ->
+            if (cls.type != unread.definingClass) cls
+            else fixtureClass(cls.type, cls.methods.toList() + unread)
+        }
+        val found = findControls(classes)
+        assertEquals(setOf("LX/KHu;->A0W()Z", "LX/MKS;->A0F()Z"), found.getValue("mark_read_action").map { it.hookId() }.toSet())
+        validateControls(found, setOf("mark_read_action"))
+        assertFailsWith<PatchException> {
+            validateControls(findControls(classes.filter { it.type != "LX/KHu;" }), setOf("mark_read_action"))
+        }
     }
 }

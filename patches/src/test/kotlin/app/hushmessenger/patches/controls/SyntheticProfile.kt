@@ -77,12 +77,15 @@ internal val syntheticHooks: Map<String, Set<String>> = mapOf(
     ATTRIBUTION_UPLOADS to setOf(ATTRIBUTION_WORKER),
     AD_EVENTS to setOf(SYNTHETIC_INBOX_VISIBILITY, SYNTHETIC_AD_ENTRY),
     MQTT_TELEMETRY to setOf(SYNTHETIC_MQTT_PUBLISH, SYNTHETIC_MQTT_KEEPALIVE),
+    TEXT_STYLE to setOf(SYNTHETIC_TEXT_FIELD_FOCUS),
     MESSAGE_LOG to setOf(newMessageNotificationCtor("LX/5qJ;", "LX/5Yc;")),
     AUTO_REPLY to setOf(newMessageNotificationCtor("LX/5qJ;", "LX/5Yc;")),
     EMOJI_SEARCH to setOf("LX/7TX;->A8Y(Landroid/text/Editable;Z)V"),
     AI_MENTIONS to setOf(SYNTHETIC_MENTION_AI, SYNTHETIC_IMAGINE, SYNTHETIC_COMMUNITY_AI),
     AI_COMMANDS to setOf(SYNTHETIC_AI_COMMANDS),
     AI_SEARCH_HINT to setOf(SYNTHETIC_SEARCH_BAR),
+    AI_MENTION_ROWS to setOf(SYNTHETIC_META_AI_ROW, SYNTHETIC_META_AI_CHATS_ROW, SYNTHETIC_META_AI_ENCRYPTED_ROW,
+        SYNTHETIC_IMAGINE_ROW, SYNTHETIC_IMAGINE_YOURSELF_ROW),
     XHE_AUDIO to setOf(SYNTHETIC_SHARE_COPY),
     DISAPPEARING_SWIPE to setOf(OVERSCROLL_START),
     EMOJI_DRAWER to setOf(DRAWER_RENDERER, DRAWER_EFFECT),
@@ -125,6 +128,7 @@ internal val syntheticHooks: Map<String, Set<String>> = mapOf(
     "ai_tab" to setOf("LX/1iN;->A02(LX/1iN;)Z"),
     TAB_PEOPLE to setOf("LX/1iN;->A0D(LX/1iN;)Z"),
     TAB_NOTIFICATIONS to setOf("LX/1iN;->A08(LX/1iN;)Z"),
+    "mark_read_action" to setOf("LX/KHu;->A0W()Z", "LX/MKS;->A0F()Z"),
 )
 
 /**

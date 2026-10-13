@@ -220,6 +220,32 @@ class ReleaseStages(unittest.TestCase):
         self.assertIn("uncommitted changes", result.stderr)
         self.assertFalse(self.development_state.exists())
 
+    def test_a_feed_change_git_status_misses_still_stops_the_preflight(self):
+        self.builder_action(
+            "& git -C $ProjectDir update-index --assume-unchanged patches-bundle.json\n"
+            "Set-Content -LiteralPath (Join-Path $ProjectDir 'patches-bundle.json') -Value 'changed'"
+        )
+        result = self.run_stage(extra=self.development_inputs())
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("held public feed changed", result.stderr)
+        self.assertFalse(self.development_state.exists())
+
+    def test_uppercase_hashes_are_accepted_and_recorded_in_lowercase(self):
+        result = self.run_stage(
+            extra=self.development_inputs(
+                **{
+                    "-BundleSha256": self.bundle_hash.upper(),
+                    "-HeldIndexSha256": self.feed_hash.upper(),
+                }
+            )
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        receipt = json.loads(self.development_state.read_text(encoding="utf-8-sig"))[
+            "preflight"
+        ]
+        self.assertEqual(self.bundle_hash, receipt["bundle_sha256"])
+        self.assertEqual(self.feed_hash, receipt["held_index_sha256"])
+
     def test_builder_cannot_stamp_a_different_commit_as_validated(self):
         self.builder_action(
             "& git -C $ProjectDir commit --allow-empty -qm 'later commit'"
@@ -242,6 +268,12 @@ class ReleaseStages(unittest.TestCase):
         missing = self.run_stage(extra=["-Development"])
         self.assertNotEqual(0, missing.returncode)
         self.assertIn("requires a frozen", missing.stderr)
+        # .NET's $ also matches before a final newline, which would only fail after the whole test run.
+        trailing = self.run_stage(
+            extra=self.development_inputs(**{"-BundleSha256": self.bundle_hash + "\n"})
+        )
+        self.assertNotEqual(0, trailing.returncode)
+        self.assertIn("requires a frozen", trailing.stderr)
         (self.root / "gradle.properties").write_text("version=0.23.1\nchanged=true\n")
         dirty = self.run_stage(extra=self.development_inputs())
         self.assertNotEqual(0, dirty.returncode)

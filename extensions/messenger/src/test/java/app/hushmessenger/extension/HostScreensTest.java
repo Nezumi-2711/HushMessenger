@@ -11,6 +11,7 @@ import android.content.pm.ShortcutManager;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.TextView;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -25,6 +26,7 @@ import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowApplication;
 import org.robolectric.shadows.ShadowLog;
+import org.robolectric.shadows.ShadowSystemClock;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
@@ -32,14 +34,27 @@ import static org.junit.Assert.*;
 public class HostScreensTest {
     private static final int SEPARATE = Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 
+    /** Stands in for the shortcut answer, fresh as of now, so its 30 s expiry can't swap in a real ShortcutManager read. */
+    static void answerControlsShortcut(boolean present) {
+        HostScreens.controlsShortcut = present;
+        HostScreens.controlsShortcutAt = android.os.SystemClock.elapsedRealtime();
+    }
+
     @Before public void reset() {
         Settings.initialize(RuntimeEnvironment.getApplication());
         Settings.preferences.edit().clear().commit();
         CrashGuard.resetForTests();
+        HostScreens.controlsShortcut = null;
         HostScreens.shortcutWork = Runnable::run;
+        // A failed start takes the Bold and Italic entries out on this executor, so it runs inline here too.
+        realTextStyleWork = TextStyleActivity.work;
+        TextStyleActivity.work = Runnable::run;
     }
 
+    private java.util.concurrent.Executor realTextStyleWork;
+
     @After public void forgetApplication() {
+        TextStyleActivity.work = realTextStyleWork;
         HostScreens.applicationCreated(null);
         Settings.initialize(RuntimeEnvironment.getApplication());
     }
@@ -250,6 +265,43 @@ public class HostScreensTest {
         Application app = RuntimeEnvironment.getApplication();
         startWithoutProvider(app);
         assertEquals(Set.of(), dynamicIds(app.getSystemService(ShortcutManager.class)));
+    }
+
+    /** #22: settings opened from the long-press shortcut prove that way back works. Restart Messenger doesn't count. */
+    @Test public void onlyOpeningSettingsFromTheShortcutCountsAsAWayBack() {
+        Application app = RuntimeEnvironment.getApplication();
+        Intent restart = host("restart").setClassName(app, HostScreens.SHORTCUT_HOST);
+        try (var trampoline = Robolectric.buildActivity(HostScreens.ShortcutTrampoline.class, restart).setup()) {
+            assertFalse(Settings.preferences.getBoolean(Settings.SHORTCUT_USED, false));
+        }
+        Intent settings = host("settings").setClassName(app, HostScreens.SHORTCUT_HOST);
+        try (var trampoline = Robolectric.buildActivity(HostScreens.ShortcutTrampoline.class, settings).setup()) {
+            assertTrue(Settings.preferences.getBoolean(Settings.SHORTCUT_USED, false));
+        }
+    }
+
+    /** #22: the Menu row comes back whenever Patch controls is missing from the long-press menu, as after a failed publish. */
+    @Test public void theMenuRowHidesOnlyWhilePatchControlsIsPublished() {
+        Application app = RuntimeEnvironment.getApplication();
+        ShortcutManager manager = app.getSystemService(ShortcutManager.class);
+        Settings.preferences.edit().putBoolean("hide_menu_row", true).putBoolean(Settings.SHORTCUT_USED, true).commit();
+        assertFalse(Settings.menuRowHidden());
+        Shadows.shadowOf(manager).setManifestShortcuts(List.of(new ShortcutInfo.Builder(app, HostScreens.STATIC_CONTROLS_SHORTCUT)
+            .setShortLabel("Patch controls").setIntent(new Intent(Intent.ACTION_VIEW)).build()));
+        assertFalse("an answer holds for a while", Settings.menuRowHidden());
+        ShadowSystemClock.advanceBy(Duration.ofMillis(HostScreens.SHORTCUT_ANSWER_MS));
+        assertTrue(Settings.menuRowHidden());
+        // Root Mount publishes a dynamic copy at its late start, and the next ask sees it.
+        Shadows.shadowOf(manager).setManifestShortcuts(List.of());
+        mount();
+        startWithoutProvider(app);
+        assertTrue(Settings.menuRowHidden());
+        // Messenger's conversation shortcuts push it out while Messenger runs, with no start in between.
+        manager.removeDynamicShortcuts(List.of(HostScreens.CONTROLS_SHORTCUT));
+        assertTrue("still held", Settings.menuRowHidden());
+        ShadowSystemClock.advanceBy(Duration.ofMillis(HostScreens.SHORTCUT_ANSWER_MS));
+        assertFalse("the row comes back", Settings.menuRowHidden());
+        assertFalse(Settings.available("hide_menu_row"));
     }
 
     /** The two fields Messenger's Menu row view holder keeps, under their obfuscated names. */

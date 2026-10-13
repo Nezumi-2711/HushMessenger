@@ -383,6 +383,35 @@ public class SettingsTest {
         assertEquals(java.util.List.of(qrCode), qrOnly);
     }
 
+    /** #22: both menus lose the row only while Hide the Menu row is on and the long-press shortcut has proved itself. */
+    @Test public void hideTheMenuRowNeedsTheShortcutToHaveOpenedSettingsAndStillBeThere() {
+        var application = RuntimeEnvironment.getApplication();
+        java.util.List<Object> side = java.util.List.of(new Object(), new Object());
+        try {
+            HostScreensTest.answerControlsShortcut(true);
+            Settings.preferences.edit().putBoolean("hide_menu_row", true).commit();
+            assertEquals("not opened from the shortcut yet", 2, menuRows(application).size());
+            Settings.noteShortcutUsed();
+            assertEquals(1, menuRows(application).size());
+            assertSame(side, Settings.addMenuDrawerEntry(side));
+            HostScreensTest.answerControlsShortcut(false);
+            assertEquals("the shortcut went missing", 2, menuRows(application).size());
+            HostScreensTest.answerControlsShortcut(true);
+            Settings.preferences.edit().putBoolean("hide_menu_row", false).commit();
+            assertEquals(2, menuRows(application).size());
+            assertTrue(Settings.hookErrors.isEmpty());
+        } finally {
+            HostScreens.controlsShortcut = null;
+        }
+    }
+
+    private static java.util.ArrayList<Object> menuRows(Context context) {
+        java.util.ArrayList<Object> rows = new java.util.ArrayList<>(
+            java.util.List.of(new FolderRow(context, new FakeSettingsFolderKey(), null, null, "Settings")));
+        Settings.addMenuSettingsEntry(rows);
+        return rows;
+    }
+
     @Test public void menuSettingsRowLeavesListsItCannotLabelAlone() {
         java.util.ArrayList<Object> rows = new java.util.ArrayList<>(java.util.List.of(new TwoTitleRow()));
         Settings.addMenuSettingsEntry(rows);

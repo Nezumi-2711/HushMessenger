@@ -120,6 +120,13 @@ internal val pluginGates = mapOf(
             "com.facebook.messaging.inbox.jewel.jeweltab.plugins.core.tabcontent.JewelTabContentImplementation",
         ),
     ),
+    // Mark as read in the menu a long press on a chat opens. Both of the menu's builders gate the row by this plugin
+    // name. Mark as unread and the community chats' own Mark as read are other plugins.
+    "mark_read_action" to PluginGate(
+        setOf(
+            "com.facebook.messaging.threadlist.threaditemmenu.plugins.core.markreadmenuitem.MarkReadMenuItemImplementation",
+        ),
+    ),
 )
 
 /**

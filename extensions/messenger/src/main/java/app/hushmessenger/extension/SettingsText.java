@@ -93,11 +93,14 @@ final class SettingsText {
         ENGLISH.put("tagline", "Make Messenger yours.");
         ENGLISH.put("open", "Open");
         ENGLISH.put("open_messenger", "Open Messenger");
-        ENGLISH.put("reopen", "Apply inbox changes with App > Restart Messenger.");
+        ENGLISH.put("reopen", "Some changes apply after App > Restart Messenger.");
         ENGLISH.put("quick_access", "QUICK ACCESS");
         ENGLISH.put("access_help", "Long-press Messenger's home screen icon for Patch controls or Restart Messenger. You can also open HushMessenger settings from your app drawer.");
         ENGLISH.put("hide_drawer_icon", "Hide app drawer icon");
         ENGLISH.put("hide_drawer_icon_help", "Keep access through Messenger's Menu or its home screen icon shortcut.");
+        ENGLISH.put("hide_menu_row", "Hide the Menu row");
+        ENGLISH.put("hide_menu_row_help", "Takes the HushMessenger row out of Messenger's Menu tab and side menu. Long-press Messenger's home screen icon and tap Patch controls to get back here. If that shortcut goes missing, the row comes back.");
+        ENGLISH.put("menu_row_needs_shortcut", "Open these settings once from the long-press shortcut first (long-press Messenger's home screen icon, then Patch controls), so you have a way back without the row.");
         ENGLISH.put("shared_install_help", "Uninstalling this entry also removes Messenger and its local data. Use Hide app drawer icon instead.");
         ENGLISH.put("access_help_hosted", "Long-press Messenger's home screen icon for Patch controls or Restart Messenger. A Root Mount install has no separate settings icon in your app drawer.");
         ENGLISH.put("access_help_hosted_menu", "Long-press Messenger's home screen icon for Patch controls or Restart Messenger, or open HushMessenger settings from its row in Messenger's Menu tab or side menu. A Root Mount install has no separate settings icon in your app drawer.");
@@ -125,6 +128,7 @@ final class SettingsText {
         ENGLISH.put("unavailable", "Not available on this version of Android. Your choice is saved.");
         ENGLISH.put("camera_unsupported", "This install has no screen for opening the phone's camera app, so the chat camera stays Messenger's own. Root Mount installs can't add one. Your choice is saved.");
         ENGLISH.put("text_style_unsupported", "This install has no Bold and Italic entries for the text menu. Root Mount installs can't add them. Your choice is saved.");
+        ENGLISH.put("text_style_read_only", "Bold and Italic only work on text you're typing.");
         ENGLISH.put("bubble_stock", "Stock");
         ENGLISH.put("bubble_chat_heads", "Chat heads");
         ENGLISH.put("bubble_native", "Native Bubbles");
@@ -171,8 +175,9 @@ final class SettingsText {
         ENGLISH.put("export_failed", "Couldn't export. Try again.");
         ENGLISH.put("import_choices", "Import choices");
         ENGLISH.put("import_help", "Restores choices from text you copied with Export choices. Copy it first, then tap here.");
-        ENGLISH.put("imported_one", "Restored %d choice");
-        ENGLISH.put("imported_many", "Restored %d choices");
+        ENGLISH.put("imported_one", "Restored %d choice.");
+        ENGLISH.put("imported_many", "Restored %d choices.");
+        ENGLISH.put("import_auto_reply_off", "Auto reply stays off. Backups don't carry replies.");
         ENGLISH.put("import_empty", "Nothing to import. Copy your exported choices first, then tap Import choices.");
         ENGLISH.put("import_invalid", "Not a valid HushMessenger backup. Copy an export you haven't edited, 16 KB or smaller.");
         ENGLISH.put("restore_failed", "Couldn't read that file. Try again, or pick another file.");
@@ -259,7 +264,11 @@ final class SettingsText {
         ENGLISH.put("message_log_empty_on", "New messages with notification text will appear here. Messages already in your chats aren't added.");
         ENGLISH.put("message_log_empty_off", "Turn on Keep a message log in Controls to save new messages with notification text. Messages already in your chats aren't added.");
         ENGLISH.put("message_log_load_failed", "Couldn't open the message log");
-        ENGLISH.put("message_log_load_help", "Try again. If a saved log is damaged, Clear log removes it so new messages can be saved.");
+        ENGLISH.put("message_log_load_help", "Try again. If it keeps failing, Clear log deletes the saved log and its key so new messages can be saved.");
+        ENGLISH.put("message_log_set_aside", "An older log couldn't be read");
+        ENGLISH.put("message_log_set_aside_help", "It was set aside so new messages keep saving. Nothing can open it now, and removing it doesn't touch newer messages.");
+        ENGLISH.put("message_log_set_aside_remove", "Remove old log");
+        ENGLISH.put("message_log_set_aside_failed", "Couldn't remove the old log. Try again.");
         ENGLISH.put("message_log_clear_failed", "Couldn't clear the whole log");
         ENGLISH.put("message_log_clear_help", "Some saved data or its key couldn't be removed. Try Clear log again.");
         ENGLISH.put("retry", "Try again");
@@ -310,6 +319,16 @@ final class SettingsText {
         ENGLISH.put("font_file_busy", "Couldn't start that. Try again in a moment.");
         ENGLISH.put("font_phone_set", "Back to your phone's font. Restart Messenger to see it.");
         ENGLISH.put("font_phone_failed", "Couldn't go back to your phone's font. Try again.");
+        ENGLISH.put("font_size", "Text size %1$d%%");
+        ENGLISH.put("font_size_smaller", "Smaller");
+        ENGLISH.put("font_size_larger", "Larger");
+        ENGLISH.put("font_shift_none", "Text sits where the font puts it");
+        ENGLISH.put("font_shift_down", "Text moved down %1$d%%");
+        ENGLISH.put("font_shift_up", "Text moved up %1$d%%");
+        ENGLISH.put("font_shift_up_button", "Move up");
+        ENGLISH.put("font_shift_down_button", "Move down");
+        ENGLISH.put("font_adjust_help", "If your font looks too small or sits too high or low in a message bubble, size it or move it here. Each move is 2%% of the text size. Restart Messenger to see a change.");
+        ENGLISH.put("font_adjust_saved", "%1$s. Restart Messenger to see it.");
     }
 
     static String english(String id) {

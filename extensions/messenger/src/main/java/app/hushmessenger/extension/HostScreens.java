@@ -142,7 +142,40 @@ public final class HostScreens {
         } catch (RuntimeException error) {
             // A rate limit or launcher refusal leaves the Menu tab and side menu rows as the way in.
             Log.w("HushMessenger", "Can't add HushMessenger's launcher shortcuts", error);
+        } finally {
+            controlsShortcut = null;
         }
+    }
+
+    /** Whether Patch controls is on the launcher's long-press menu, and when that was read. Null until asked. */
+    static volatile Boolean controlsShortcut;
+    static volatile long controlsShortcutAt;
+    /**
+     * Messenger's conversation shortcuts can push the Root Mount copy out while Messenger runs, so an answer holds only
+     * this long. The Menu row then comes back on the next build of the Menu tab or side menu.
+     */
+    static final long SHORTCUT_ANSWER_MS = 30_000;
+
+    /** The static shortcut on a normal install, the dynamic copy on Root Mount. A failed read counts as missing. */
+    static boolean controlsShortcutPresent(Context context) {
+        Boolean known = controlsShortcut;
+        if (known != null && android.os.SystemClock.elapsedRealtime() - controlsShortcutAt < SHORTCUT_ANSWER_MS) return known;
+        if (context == null) return false;
+        boolean present = false;
+        try {
+            ShortcutManager manager = context.getSystemService(ShortcutManager.class);
+            if (manager != null) {
+                for (ShortcutInfo shortcut : manager.getManifestShortcuts())
+                    if (STATIC_CONTROLS_SHORTCUT.equals(shortcut.getId()) && shortcut.isEnabled()) present = true;
+                for (ShortcutInfo shortcut : manager.getDynamicShortcuts())
+                    if (CONTROLS_SHORTCUT.equals(shortcut.getId()) && shortcut.isEnabled()) present = true;
+            }
+        } catch (RuntimeException error) {
+            Log.w("HushMessenger", "Can't read HushMessenger's launcher shortcuts", error);
+        }
+        controlsShortcutAt = android.os.SystemClock.elapsedRealtime();
+        controlsShortcut = present;
+        return present;
     }
 
     /** Same target and extra as the static shortcut, so ShortcutTrampoline opens the hosted screen. */
@@ -178,6 +211,9 @@ public final class HostScreens {
         // After CrashGuard too: Bold and Italic sit in every text field's menu, so safe mode has to take them out.
         if (started && !failed && Settings.installed.contains(TextStyleActivity.KEY)
                 && context.getPackageName().equals(Application.getProcessName())) TextStyleActivity.watch();
+        // A failed start can't follow the switch, so entries an earlier run left on come out. Settings.installed may
+        // never have loaded here, and TextStyleActivity checks the manifest itself.
+        if (failed && context.getPackageName().equals(Application.getProcessName())) TextStyleActivity.turnOff(context);
     }
 
     /** The settings provider's authority is the package name plus this, on a clone install too. */
@@ -225,7 +261,11 @@ public final class HostScreens {
         @Override @SuppressWarnings("deprecation") protected void onCreate(Bundle state) {
             super.onCreate(state);
             try {
-                open(this, getIntent().getStringExtra(EXTRA));
+                String screen = getIntent().getStringExtra(EXTRA);
+                if (SETTINGS.equals(screen)) start(this);
+                open(this, screen);
+                // Proven only once settings actually opened from it.
+                if (SETTINGS.equals(screen)) Settings.noteShortcutUsed();
             } catch (RuntimeException error) {
                 Log.e("HushMessenger", "Can't open a HushMessenger screen", error);
             }

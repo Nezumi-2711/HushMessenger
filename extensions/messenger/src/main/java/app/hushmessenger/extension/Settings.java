@@ -201,6 +201,8 @@ public final class Settings {
     public static boolean hideMetaAiTab() {
         Boolean hidden = metaAiTab;
         if (hidden != null) return hidden;
+        // Started before the lock below, so nothing waits on HostScreens' startup lock while holding it.
+        if (!HostScreens.started) HostScreens.initializeLate();
         // Its own lock, so two first askers can't get different answers if the switch flips between them.
         synchronized (META_AI_TAB) {
             if (metaAiTab == null) metaAiTab = hideMetaAi();
@@ -219,8 +221,15 @@ public final class Settings {
     public static boolean hideNotificationsTab() { return hideBottomTab("tab_notifications"); }
 
     private static boolean hideBottomTab(String key) {
-        // computeIfAbsent runs once per key, so two first askers can't get different answers.
-        boolean hidden = bottomTabs.computeIfAbsent(key, Settings::wouldUse);
+        // putIfAbsent keeps whichever answer landed first, so two first askers can't get different answers. wouldUse runs
+        // outside the map's lock because it can reach HostScreens.initializeLate, which takes a lock of its own.
+        Boolean held = bottomTabs.get(key);
+        if (held == null) {
+            boolean answer = wouldUse(key);
+            held = bottomTabs.putIfAbsent(key, answer);
+            if (held == null) held = answer;
+        }
+        boolean hidden = held;
         if (hidden) activeAt.put(key, System.currentTimeMillis());
         return hidden;
     }
@@ -239,6 +248,7 @@ public final class Settings {
         if (!original) return false;
         Boolean old = oldEmojiDrawer;
         if (old == null) {
+            if (!HostScreens.started) HostScreens.initializeLate();
             synchronized (EMOJI_DRAWER) {
                 if (oldEmojiDrawer == null) oldEmojiDrawer = wouldUse("emoji_drawer");
                 old = oldEmojiDrawer;
@@ -349,14 +359,29 @@ public final class Settings {
     /** The notification hook asks this before it reads a message, so nothing is read when the switch is off or paused. */
     public static boolean logReceivedMessages() { return wouldUse("message_log"); }
 
+    /**
+     * The message's own id, which the notification hook hands over just before the text and thread (the constructor it
+     * runs in has room for two values at a time). The sink right after takes it on the same thread.
+     */
+    private static final ThreadLocal<String> INCOMING_ID = new ThreadLocal<>();
+
+    public static void incomingMessageId(String id) { INCOMING_ID.set(id); }
+
+    static String takeIncomingMessageId() {
+        String id = INCOMING_ID.get();
+        INCOMING_ID.remove();
+        return id;
+    }
+
     /** The notification hook hands the message here; the log stores it off this thread and swallows its own failures. */
-    public static void recordReceivedMessage(String text, String thread) { MessageLog.record(text, thread); }
+    public static void recordReceivedMessage(String text, String thread) { MessageLog.record(text, thread, takeIncomingMessageId()); }
 
     /** The same notification hook asks this for an auto reply: on, not paused, and with at least one reply written. */
     public static boolean autoReplyWanted() { return AutoReply.wanted(); }
 
     /** Hands an incoming message to the auto reply, which answers it off this thread. */
-    public static void autoReplyTo(String text, String thread) { AutoReply.received(text, thread); }
+    public static void autoReplyTo(String text, String thread) { AutoReply.received(text, thread, takeIncomingMessageId()); }
+
     /**
      * The chat camera button's intent, right before Messenger starts it. With the switch on it opens the capture screen,
      * which uses the phone's camera app. Off, Pause, safe mode and an install without the capture screen get Messenger's.
@@ -434,6 +459,7 @@ public final class Settings {
             Context context = appContext;
             return context == null || TextStyleActivity.present(context);
         }
+        if ("hide_menu_row".equals(key)) return menuRowCanHide();
         if (!"bubbles".equals(key)) return true;
         if (Build.VERSION.SDK_INT < 30) return false;
         if (!HostScreens.started) HostScreens.initializeLate();
@@ -635,6 +661,28 @@ public final class Settings {
     static boolean drawerIconHidden() {
         SharedPreferences prefs = preferences;
         return installed.contains("menu_row") && prefs != null && prefs.getBoolean("hide_drawer_icon", false);
+    }
+
+    /** Set the first time settings open from the long-press shortcut, which proves that way in works on this phone. */
+    static final String SHORTCUT_USED = "shortcut_used";
+
+    static void noteShortcutUsed() {
+        SharedPreferences prefs = preferences;
+        if (prefs != null && !prefs.getBoolean(SHORTCUT_USED, false)) prefs.edit().putBoolean(SHORTCUT_USED, true).apply();
+    }
+
+    /**
+     * The Menu row can stay out only once the long-press shortcut has opened settings here and is still published. If
+     * the shortcut goes missing, as after a Root Mount start that couldn't publish it, the row comes back.
+     */
+    static boolean menuRowCanHide() {
+        SharedPreferences prefs = preferences;
+        return prefs != null && prefs.getBoolean(SHORTCUT_USED, false) && HostScreens.controlsShortcutPresent(appContext);
+    }
+
+    static boolean menuRowHidden() {
+        SharedPreferences prefs = preferences;
+        return prefs != null && prefs.getBoolean("hide_menu_row", false) && menuRowCanHide();
     }
 
     private static final String KEPT_UNSENT_KEY = "kept_unsent_ids";
@@ -1020,6 +1068,7 @@ public final class Settings {
     public static List addLegacyDrawerEntry(Object fragment, List sections) {
         if (fragment == null || sections == null) return sections;
         try {
+            if (menuRowHidden()) return sections;
             java.lang.reflect.Method getContext = fragment.getClass().getMethod("getContext");
             getContext.setAccessible(true);
             Object current = getContext.invoke(fragment);
@@ -1092,7 +1141,7 @@ public final class Settings {
     @SuppressWarnings("unchecked")
     public static void addMenuSettingsEntry(ArrayList list) {
         try {
-            if (list == null || list.isEmpty()) return;
+            if (list == null || list.isEmpty() || menuRowHidden()) return;
             // Messenger builds its QR code row into the same list, so find Settings by its folder key.
             int at = -1;
             for (int i = 0; i < list.size() && at < 0; i++) if (holdsSettingsKey(list.get(i))) at = i;
@@ -1182,10 +1231,11 @@ public final class Settings {
     }
 
     // The menu entry hooks don't ask Pause or safe mode first, on purpose: they're the way back into settings to undo either.
+    // Only Hide the Menu row takes them out, and only while the long-press shortcut is a proven way back.
     @SuppressWarnings("unchecked")
     public static java.util.List addMenuDrawerEntry(java.util.List list) {
         try {
-            if (list == null || list.size() < 2) return list;
+            if (list == null || list.size() < 2 || menuRowHidden()) return list;
             for (Object item : list) {
                 try {
                     java.lang.reflect.Field f = item.getClass().getDeclaredField("A05");
@@ -1266,6 +1316,28 @@ public final class Settings {
                 }
             } else if (stock != null) {
                 stock.onClick(v);
+            }
+        }
+    }
+
+    /**
+     * A long press on the Messenger logo at the top of Chats ends here, after Messenger's own handling of that press. The
+     * patch calls this just before the Chats title's long press handler returns, with the toolbar's context. Messenger
+     * hands the press to a title shortcut plugin that only its internal builds have, so for everyone else it did nothing
+     * but vibrate. Like the Menu rows, this doesn't ask Pause or safe mode first: it's a way back into settings to undo
+     * either. A launch Android refuses gets the same toast as the side menu row, pointing at the launcher shortcut.
+     */
+    public static void logoLongPressed(Context context) {
+        if (context == null) return;
+        try {
+            HostScreens.open(context, HostScreens.SETTINGS);
+        } catch (RuntimeException | LinkageError error) {
+            hookFailed("menu_row", "Opening settings from the Messenger logo failed", error);
+            try {
+                android.widget.Toast.makeText(context, new SettingsText(context).get("settings_open_failed"),
+                        android.widget.Toast.LENGTH_LONG).show();
+            } catch (RuntimeException | LinkageError feedbackError) {
+                hookFailedPrivately("menu_row", "Messenger logo feedback unavailable", feedbackError);
             }
         }
     }

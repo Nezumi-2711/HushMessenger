@@ -8,6 +8,7 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Looper;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.TextView;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -261,6 +262,115 @@ public class CustomFontSettingsTest {
             assertEquals("", Settings.preferences.getString(OwnFont.NAME_KEY, null));
             assertEquals("Back to your phone's font. Restart Messenger to see it.", ShadowToast.getTextOfLatestToast());
             assertTrue(status.getText().toString().startsWith("None chosen"));
+        }
+    }
+
+    /** #48: a picked file can be sized and moved in steps, held to what the font file takes. */
+    @Test public void aPickedFileIsSizedAndMovedInSteps() throws Exception {
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = screen.get().getWindow().getDecorView();
+            assertEquals("nothing picked, nothing to size", View.GONE, root.findViewWithTag("font_adjust").getVisibility());
+        }
+        OwnFontTest.pick(FontFileTest.STATIC_FONT, "Rubik-Regular.ttf");
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            SettingsActivity activity = screen.get();
+            View root = activity.getWindow().getDecorView();
+            assertEquals(View.VISIBLE, root.findViewWithTag("font_adjust").getVisibility());
+            TextView size = root.findViewWithTag("font_size_value"), place = root.findViewWithTag("font_shift_value");
+            View smaller = root.findViewWithTag("font_size_smaller"), larger = root.findViewWithTag("font_size_larger");
+            View up = root.findViewWithTag("font_shift_up"), down = root.findViewWithTag("font_shift_down");
+            assertEquals("Text size 100%", size.getText().toString());
+            assertEquals("Text sits where the font puts it", place.getText().toString());
+
+            larger.performClick();
+            assertEquals(105, Settings.preferences.getInt(OwnFont.SCALE_KEY, 0));
+            assertEquals("Text size 105%", size.getText().toString());
+            assertEquals("Text size 105%. Restart Messenger to see it.", ShadowToast.getTextOfLatestToast());
+            for (int step = 0; step < 20; step++) larger.performClick();
+            assertEquals(FontFile.SCALE_MOST, Settings.preferences.getInt(OwnFont.SCALE_KEY, 0));
+            assertFalse(larger.isEnabled());
+            for (int step = 0; step < 20; step++) smaller.performClick();
+            assertEquals(FontFile.SCALE_LEAST, Settings.preferences.getInt(OwnFont.SCALE_KEY, 0));
+            assertEquals("Text size 70%", size.getText().toString());
+            assertFalse(smaller.isEnabled());
+            assertTrue(larger.isEnabled());
+
+            up.performClick();
+            assertEquals(-2, Settings.preferences.getInt(OwnFont.SHIFT_KEY, 0));
+            assertEquals("Text moved up 2%", place.getText().toString());
+            down.performClick();
+            down.performClick();
+            assertEquals("Text moved down 2%", place.getText().toString());
+            assertEquals("Text moved down 2%. Restart Messenger to see it.", ShadowToast.getTextOfLatestToast());
+            for (int step = 0; step < 20; step++) down.performClick();
+            assertEquals(FontFile.SHIFT_MOST, Settings.preferences.getInt(OwnFont.SHIFT_KEY, 0));
+            assertFalse(down.isEnabled());
+            assertTrue(up.isEnabled());
+
+            // Going back to the phone's font takes the sized copies with the picked one, and the rows go.
+            File sized = FontFile.adjusted(FontFile.file(activity), 120, 0);
+            assertNotNull(sized);
+            root.findViewWithTag("font_phone").performClick();
+            assertFalse(sized.exists());
+            assertEquals(View.GONE, root.findViewWithTag("font_adjust").getVisibility());
+        }
+    }
+
+    @Test @Config(sdk = 36) public void fontAdjustmentValuesAndButtonsFitLargeTextInBothDirections() throws Exception {
+        OwnFontTest.pick(FontFileTest.STATIC_FONT, "Rubik-Regular.ttf");
+        for (String locale : new String[] {"en-rUS", "ar-rXB"}) {
+            RuntimeEnvironment.setQualifiers(locale + "-w320dp-h640dp-mdpi");
+            RuntimeEnvironment.setFontScale(2f);
+            for (boolean light : new boolean[] {false, true}) {
+                Settings.preferences.edit().putBoolean("light", light).commit();
+                try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                    View root = screen.get().getWindow().getDecorView();
+                    ((EditText) root.findViewWithTag("find_control")).setText("Use your own font");
+                    for (int pass = 0; pass < 2; pass++) {
+                        root.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(640, View.MeasureSpec.EXACTLY));
+                        root.layout(0, 0, 320, 640);
+                        Shadows.shadowOf(Looper.getMainLooper()).idle();
+                    }
+                    for (String tag : new String[] {"font_size_value", "font_shift_value"}) {
+                        TextView value = root.findViewWithTag(tag);
+                        assertTrue(locale + " " + tag + " has room for its text", value.getWidth() > 0);
+                        assertTrue(locale + " " + tag + " stays readable", value.getLineCount() >= 1 && value.getLineCount() <= 3);
+                        assertEquals(0, value.getLayout().getEllipsisCount(value.getLineCount() - 1));
+                        assertTrue(value.getLayout().getHeight() <= value.getHeight() - value.getTotalPaddingTop() - value.getTotalPaddingBottom());
+                    }
+                    for (String[] pair : new String[][] {{"font_size_smaller", "font_size_larger"}, {"font_shift_up", "font_shift_down"}}) {
+                        View first = root.findViewWithTag(pair[0]), second = root.findViewWithTag(pair[1]);
+                        View row = (View) first.getParent();
+                        for (View button : new View[] {first, second}) {
+                            assertTrue(locale + " " + button.getTag() + " has a usable width", button.getWidth() > 0);
+                            assertTrue(button.getLeft() >= 0 && button.getRight() <= row.getWidth());
+                        }
+                        assertTrue("Step buttons share the available width", Math.abs(first.getWidth() - second.getWidth()) <= 1);
+                    }
+                    String screenshots = System.getenv("HUSH_SCREENSHOTS");
+                    if (screenshots != null && !screenshots.isBlank()) {
+                        Files.createDirectories(new File(screenshots).toPath());
+                        for (String tag : new String[] {"font_size_value", "font_shift_value"}) {
+                            View value = root.findViewWithTag(tag);
+                            android.view.ViewGroup adjustment = (android.view.ViewGroup) value.getParent();
+                            View actions = adjustment.getChildAt(adjustment.indexOfChild(value) + 1);
+                            adjustment.requestRectangleOnScreen(new android.graphics.Rect(Math.min(value.getLeft(), actions.getLeft()),
+                                value.getTop(), Math.max(value.getRight(), actions.getRight()), actions.getBottom()), true);
+                            root.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY),
+                                View.MeasureSpec.makeMeasureSpec(640, View.MeasureSpec.EXACTLY));
+                            root.layout(0, 0, 320, 640);
+                            android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(320, 640, android.graphics.Bitmap.Config.ARGB_8888);
+                            try (var stream = new java.io.ByteArrayOutputStream()) {
+                                root.draw(new android.graphics.Canvas(bitmap));
+                                assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream));
+                                Files.write(new File(screenshots, "settings-" + tag + "-" + (light ? "light" : "dark") + "-" +
+                                    (locale.equals("ar-rXB") ? "rtl" : "large") + ".png").toPath(), stream.toByteArray());
+                            } finally { bitmap.recycle(); }
+                        }
+                    }
+                }
+            }
         }
     }
 

@@ -265,6 +265,77 @@ public class SettingsDialogTest {
         }
     }
 
+    /**
+     * Before Android 13 the log stays out of Recents through FLAG_SECURE on the screen's window and its own, both set
+     * before it loads and kept through a rotation. Closing it leaves a flag the screen already had. Android 13 and newer
+     * hide it from Recents without the flag, so screenshots still work there.
+     */
+    @Test public void theLogStaysOutOfRecentsAndLeavesExistingSecureFlagsAlone() {
+        int secure = android.view.WindowManager.LayoutParams.FLAG_SECURE;
+        boolean legacy = Build.VERSION.SDK_INT < 33;
+        for (boolean alreadySecure : new boolean[] {false, true}) {
+            try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                android.view.Window window = screen.get().getWindow();
+                if (alreadySecure) window.addFlags(secure);
+                window.getDecorView().findViewWithTag("message_log_view").performClick();
+                Dialog dialog = ShadowDialog.getLatestDialog();
+                assertEquals(legacy || alreadySecure, (window.getAttributes().flags & secure) != 0);
+                assertEquals(legacy, (dialog.getWindow().getAttributes().flags & secure) != 0);
+                dialog.getWindow().getDecorView().findViewWithTag("message_log_dialog_close").performClick();
+                // Dialog delivers its dismiss listener as a message, so the looper runs it before the flag is checked.
+                Shadows.shadowOf(Looper.getMainLooper()).idle();
+                assertFalse(dialog.isShowing());
+                assertEquals(alreadySecure, (window.getAttributes().flags & secure) != 0);
+            }
+        }
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            screen.get().getWindow().getDecorView().findViewWithTag("message_log_view").performClick();
+            screen.recreate();
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            Dialog restored = ShadowDialog.getLatestDialog();
+            assertTrue(restored.isShowing());
+            android.view.Window window = screen.get().getWindow();
+            assertEquals(legacy, (window.getAttributes().flags & secure) != 0);
+            assertEquals(legacy, (restored.getWindow().getAttributes().flags & secure) != 0);
+            restored.dismiss();
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            assertEquals(0, window.getAttributes().flags & secure);
+        }
+    }
+
+    @Test public void aSetAsideLogShowsANoticeAboveTheNewMessagesInsteadOfAFailure() throws Exception {
+        java.io.File aside = new java.io.File(Settings.appContext.getFilesDir(), MessageLog.DAMAGED);
+        java.nio.file.Files.write(new java.io.File(Settings.appContext.getFilesDir(), MessageLog.FILE).toPath(), new byte[] {1, 2, 3});
+        assertTrue(MessageLog.loadResult().setAside);
+        MessageLog.write(Settings.appContext, List.of(new MessageLog.Entry(System.currentTimeMillis(), "t", "A newer message")));
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            screen.get().getWindow().getDecorView().findViewWithTag("message_log_view").performClick();
+            View root = ShadowDialog.getLatestDialog().getWindow().getDecorView();
+            SettingsText text = new SettingsText(screen.get());
+            awaitText(root, text.get("message_log_set_aside"));
+            awaitText(root, "A newer message");
+            assertNull(findText(root, text.get("message_log_load_failed")));
+            assertTrue(root.findViewWithTag("message_log_dialog_clear").isEnabled());
+            assertTrue("the retention line keeps a gap under the notice", topMargin(findText(root, text.get("message_log_retention"))) > 0);
+            root.findViewWithTag("message_log_set_aside_remove").performClick();
+            awaitGone(root, "message_log_set_aside_remove");
+            awaitText(root, "A newer message");
+            assertNull(root.findViewWithTag("message_log_set_aside_remove"));
+            assertEquals(0, topMargin(findText(root, text.get("message_log_retention"))));
+            assertFalse(aside.exists());
+        }
+    }
+
+    private static void awaitGone(View root, String tag) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        do {
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            if (root.findViewWithTag(tag) == null) return;
+            Thread.sleep(10);
+        } while (System.nanoTime() < deadline);
+        throw new AssertionError("View didn't go away: " + tag);
+    }
+
     private static void layout(View root) {
         for (int pass = 0; pass < 2; pass++) {
             root.measure(View.MeasureSpec.makeMeasureSpec(390, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(844, View.MeasureSpec.EXACTLY));
@@ -282,6 +353,10 @@ public class SettingsDialogTest {
             Thread.sleep(10);
         } while (System.nanoTime() < deadline);
         throw new AssertionError("Text didn't appear: " + value);
+    }
+
+    private static int topMargin(View view) {
+        return ((ViewGroup.MarginLayoutParams) view.getLayoutParams()).topMargin;
     }
 
     private static TextView findText(View root, String value) {

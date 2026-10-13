@@ -39,13 +39,17 @@ final class SettingsDialog extends LinearLayout {
         heading.setAccessibilityHeading(true);
         header.addView(heading);
         ui.add(header, ui.text(hint, 14, ui.muted, false), 8);
-        header.setPadding(0, 0, 0, ui.dp(12));
+        header.setPadding(0, 0, 0, ui.dp(16));
         body = ui.column();
         body.setPadding(0, 0, 0, ui.dp(12));
         actions = ui.row();
         actions.setTag("dialog_actions");
         actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        actions.setPadding(0, ui.dp(8), 0, 0);
+        actions.setBackground(new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[] {
+            ui.shape(ui.line, 0, 0),
+            new android.graphics.drawable.InsetDrawable(ui.shape(ui.background, 0, 0), 0, ui.dp(1), 0, 0)
+        }));
+        actions.setPadding(0, ui.dp(16), 0, 0);
         if (ui.largeText) actions.setOrientation(VERTICAL);
         scrolled = ui.column();
         scrolled.addView(body);
@@ -93,10 +97,14 @@ final class SettingsDialog extends LinearLayout {
     }
 
     void action(Button button) {
-        LayoutParams params = new LayoutParams(ui.largeText ? -1 : -2, -2);
+        if (button.getTextColors().getDefaultColor() == ui.accent) {
+            button.setTextColor(ui.muted);
+            button.setBackground(ui.interactive(ui.surface, ui.outline, 12));
+        }
+        LayoutParams params = new LayoutParams(ui.largeText ? -1 : 0, -2, ui.largeText ? 0 : 1);
         if (actions.getChildCount() > 0) {
             if (ui.largeText) params.topMargin = ui.dp(8);
-            else params.setMarginStart(ui.dp(8));
+            else params.setMarginStart(ui.dp(12));
         }
         actions.addView(button, params);
     }

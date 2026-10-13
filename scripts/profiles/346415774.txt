@@ -8,6 +8,11 @@ hook ad_events LX/6N0;->A00(LX/6G1;Lcom/facebook/auth/usersession/FbUserSession;
 hook ads LX/2I2;->D5T(LX/1jp;Lcom/google/common/collect/ImmutableList;Ljava/lang/String;)Lcom/google/common/collect/ImmutableList;
 hook ai_commands LX/7Qs;->A06(LX/7Qs;Lcom/facebook/messaging/model/threadkey/ThreadKey;)Ljava/util/List;
 hook ai_fab LX/6sQ;->render(LX/2Cg;)LX/1GU;
+hook ai_mention_rows LX/1yJ;->A0Q()Z
+hook ai_mention_rows LX/1yJ;->A0w(Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;)Z
+hook ai_mention_rows LX/1yJ;->A0y(Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;ZZ)Z
+hook ai_mention_rows LX/1yJ;->A12(Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;)Z
+hook ai_mention_rows LX/1yJ;->A13(Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;)Z
 hook ai_mentions LX/7R3;->A73(LX/Tae;Lcom/google/common/collect/ImmutableList$Builder;)V
 hook ai_mentions LX/7R5;->A73(LX/Tae;Lcom/google/common/collect/ImmutableList$Builder;)V
 hook ai_mentions LX/7R6;->A73(LX/Tae;Lcom/google/common/collect/ImmutableList$Builder;)V
@@ -96,6 +101,7 @@ hook facebook LX/MJh;->A04()Z
 hook facebook LX/MJp;->A06()Z
 hook facebook LX/MK8;->A06()Z
 hook facebook LX/WRg;->A02()Z
+hook facebook LX/WRg;->A05()Z
 hook font_by_name LX/N6z;->A00(Landroid/content/Context;Ljava/lang/String;I)Landroid/graphics/Typeface;
 hook font_input LX/5Ri;->A0A(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/graphics/drawable/Drawable;Landroid/text/TextUtils$TruncateAt;Landroid/text/method/MovementMethod;Landroid/widget/EditText;LX/52J;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;[Ljava/lang/String;IIIIIIIIIIIZZZZ)V
 hook font_input LX/O4T;->A08(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/text/Layout$Alignment;Landroid/text/TextUtils$TruncateAt;Landroid/widget/EditText;Landroid/widget/TextView$OnEditorActionListener;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/util/List;FFFFIIIIIIIIIIIIIIZZ)V
@@ -113,6 +119,8 @@ hook hide_read_receipts LX/4nG;->A00(Lcom/facebook/auth/usersession/FbUserSessio
 hook inbox_promotions LX/265;->A0J()Z
 hook inbox_promotions LX/265;->A0K()Z
 hook keep_unsent LX/S5c;->A01(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;)V
+hook mark_read_action LX/KHu;->A0W()Z
+hook mark_read_action LX/MKS;->A0F()Z
 hook menu_settings LX/9wI;->A1h()V
 hook menu_settings LX/KEC;->Ay6(LX/0MI;)Ljava/util/ArrayList;
 hook menu_settings LX/KQo;->onClick(Landroid/view/View;)V
@@ -153,6 +161,7 @@ hook system_camera LX/5xn;->BxF(Landroid/os/Bundle;)Z
 hook system_camera LX/7Gk;->Daf(Lcom/facebook/messaging/montage/composer/model/MontageComposerFragmentParams;Lcom/facebook/messaging/send/trigger/NavigationTrigger;)V
 hook tab_notifications LX/1kA;->A09(LX/1kA;)Z
 hook tab_people LX/1kA;->A0E(LX/1kA;)Z
+hook text_style LX/A1k;->onFocusChanged(ZILandroid/graphics/Rect;)V
 hook typing LX/Aol;->run()V
 hook typing_mailbox LX/4hB;->A0K(Ljava/lang/String;Z)LX/33K;
 hook unsent_indicator LX/WMT;->BYe(I)Ljava/lang/String;

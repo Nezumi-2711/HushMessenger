@@ -63,6 +63,41 @@ public class RestartStateTest {
         assertFalse("Pause shows every tab after the restart", Settings.hideNotificationsTab());
     }
 
+    /**
+     * A first asker that's waiting on settings to start doesn't hold the tab map, so another thread can store its answer
+     * meanwhile, and that answer, stored first, is the one the waiting asker gets. computeIfAbsent held the map's lock
+     * through the wait, so the other thread's store waited on a start that was waiting on it.
+     */
+    @Test public void aFirstAskerWaitingOnStartLeavesTheTabMapFree() throws Exception {
+        android.app.Application app = RuntimeEnvironment.getApplication();
+        HostScreens.applicationCreated(app);
+        boolean[] hidden = new boolean[1];
+        Thread asker = new Thread(() -> hidden[0] = Settings.hidePeopleTab());
+        // The start the asker runs refreshes the text style entries. Doing that in place keeps it inside this test.
+        java.util.concurrent.Executor textStyleWork = TextStyleActivity.work;
+        TextStyleActivity.work = Runnable::run;
+        try {
+            synchronized (HostScreens.class) {
+                asker.start();
+                long until = System.currentTimeMillis() + 5_000;
+                while (asker.getState() != Thread.State.BLOCKED && System.currentTimeMillis() < until) Thread.sleep(1);
+                assertEquals("The asker waits for settings to start", Thread.State.BLOCKED, asker.getState());
+                Thread other = new Thread(() -> Settings.bottomTabs.put("tab_people", true));
+                other.start();
+                other.join(5_000);
+                assertFalse("Another thread can store an answer meanwhile", other.isAlive());
+            }
+            asker.join(5_000);
+            assertFalse(asker.isAlive());
+            assertTrue("The answer stored first, not the off switch", hidden[0]);
+            assertTrue("A hidden tab counts as a use", Settings.activeAt.containsKey("tab_people"));
+        } finally {
+            TextStyleActivity.work = textStyleWork;
+            HostScreens.applicationCreated(null);
+            Settings.initialize(app);
+        }
+    }
+
     @Test public void aHeldAnswerShowsUntilARestartThroughTheSwitchPauseAndSafeMode() {
         assertNull("Nothing is held before Messenger asks", Settings.heldUntilRestart("emoji_drawer"));
         Settings.preferences.edit().putBoolean("emoji_drawer", true).commit();
