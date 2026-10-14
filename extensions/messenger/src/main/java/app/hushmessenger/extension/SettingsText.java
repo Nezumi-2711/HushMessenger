@@ -99,14 +99,23 @@ final class SettingsText {
         ENGLISH.put("hide_drawer_icon", "Hide app drawer icon");
         ENGLISH.put("hide_drawer_icon_help", "Keep access through Messenger's Menu or its home screen icon shortcut.");
         ENGLISH.put("hide_menu_row", "Hide the Menu row");
-        ENGLISH.put("hide_menu_row_help", "Takes the HushMessenger row out of Messenger's Menu tab and side menu. Long-press Messenger's home screen icon and tap Patch controls to get back here. If that shortcut goes missing, the row comes back.");
+        ENGLISH.put("hide_menu_row_help", "Takes the HushMessenger row out of Messenger's Menu tab and side menu. Long-press the Messenger logo at the top of Chats to get back here, or long-press Messenger's home screen icon and tap Patch controls. If the Patch controls shortcut goes missing, the row comes back.");
         ENGLISH.put("menu_row_needs_shortcut", "Open these settings once from the long-press shortcut first (long-press Messenger's home screen icon, then Patch controls), so you have a way back without the row.");
         ENGLISH.put("shared_install_help", "Uninstalling this entry also removes Messenger and its local data. Use Hide app drawer icon instead.");
         ENGLISH.put("access_help_hosted", "Long-press Messenger's home screen icon for Patch controls or Restart Messenger. A Root Mount install has no separate settings icon in your app drawer.");
-        ENGLISH.put("access_help_hosted_menu", "Long-press Messenger's home screen icon for Patch controls or Restart Messenger, or open HushMessenger settings from its row in Messenger's Menu tab or side menu. A Root Mount install has no separate settings icon in your app drawer.");
-        ENGLISH.put("access_help_menu", "Open settings from Messenger's Menu, your app drawer, or a long-press on its home screen icon.");
+        ENGLISH.put("access_help_hosted_menu", "Open HushMessenger settings from its row in Messenger's Menu tab or side menu, or long-press the Messenger logo at the top of Chats. Long-press Messenger's home screen icon for Patch controls or Restart Messenger. A Root Mount install has no separate settings icon in your app drawer.");
+        ENGLISH.put("access_help_menu", "Open settings from Messenger's Menu or your app drawer, or long-press the Messenger logo at the top of Chats. A long-press on Messenger's home screen icon works too.");
         ENGLISH.put("access_help_missing", "Long-press Messenger's home screen icon for Patch controls or Restart Messenger. This bundle has no settings icon in the app drawer.");
-        ENGLISH.put("access_help_missing_menu", "Open HushMessenger from Messenger's Menu tab or side menu, or long-press Messenger's home screen icon for Patch controls or Restart Messenger. This bundle has no settings icon in the app drawer.");
+        ENGLISH.put("access_help_missing_menu", "Open HushMessenger from Messenger's Menu tab or side menu, or long-press the Messenger logo at the top of Chats. Long-press Messenger's home screen icon for Patch controls or Restart Messenger. This bundle has no settings icon in the app drawer.");
+        // The Menu row patch also brings the logo's long press, which still works while the row is hidden.
+        ENGLISH.put("access_help_logo", "Long-press the Messenger logo at the top of Chats, or long-press Messenger's home screen icon for Patch controls or Restart Messenger. You can also open HushMessenger settings from your app drawer.");
+        ENGLISH.put("access_help_hosted_logo", "Long-press the Messenger logo at the top of Chats, or long-press Messenger's home screen icon for Patch controls or Restart Messenger. A Root Mount install has no separate settings icon in your app drawer.");
+        ENGLISH.put("access_help_missing_logo", "Long-press the Messenger logo at the top of Chats, or long-press Messenger's home screen icon for Patch controls or Restart Messenger. This bundle has no settings icon in the app drawer.");
+        // A build where the logo's handler wasn't found gets the Menu row without the logo.
+        ENGLISH.put("access_help_menu_without_logo", "Open settings from Messenger's Menu or your app drawer. A long-press on Messenger's home screen icon works too.");
+        ENGLISH.put("access_help_hosted_menu_without_logo", "Open HushMessenger settings from its row in Messenger's Menu tab or side menu. Long-press Messenger's home screen icon for Patch controls or Restart Messenger. A Root Mount install has no separate settings icon in your app drawer.");
+        ENGLISH.put("access_help_missing_menu_without_logo", "Open HushMessenger from Messenger's Menu tab or side menu. Long-press Messenger's home screen icon for Patch controls or Restart Messenger. This bundle has no settings icon in the app drawer.");
+        ENGLISH.put("hide_menu_row_help_without_logo", "Takes the HushMessenger row out of Messenger's Menu tab and side menu. Long-press Messenger's home screen icon and tap Patch controls to get back here. If the Patch controls shortcut goes missing, the row comes back.");
         ENGLISH.put("drawer_search", "App drawer icon settings");
         ENGLISH.put("drawer_root", "Hide app drawer icon isn't needed on Root Mount. There is no separate settings icon to hide.");
         ENGLISH.put("drawer_missing", "Hide app drawer icon isn't available. This patch bundle has no settings icon to hide.");
@@ -129,6 +138,8 @@ final class SettingsText {
         ENGLISH.put("camera_unsupported", "This install has no screen for opening the phone's camera app, so the chat camera stays Messenger's own. Root Mount installs can't add one. Your choice is saved.");
         ENGLISH.put("text_style_unsupported", "This install has no Bold and Italic entries for the text menu. Root Mount installs can't add them. Your choice is saved.");
         ENGLISH.put("text_style_read_only", "Bold and Italic only work on text you're typing.");
+        ENGLISH.put("text_style_bold_none", "Bold only changes the letters A to Z (accents are fine) and digits. Letters from other alphabets stay as they are.");
+        ENGLISH.put("text_style_italic_none", "Italic only changes the letters A to Z (accents are fine). Digits and letters from other alphabets stay as they are.");
         ENGLISH.put("bubble_stock", "Stock");
         ENGLISH.put("bubble_chat_heads", "Chat heads");
         ENGLISH.put("bubble_native", "Native Bubbles");
@@ -155,15 +166,31 @@ final class SettingsText {
         ENGLISH.put("copy_help", "Copies app versions and control choices. No account or chat details. Nothing is sent.");
         ENGLISH.put("setup_activity_help", "Activity notes only show that a control ran. They don't prove it had a visible effect or protected your privacy.");
         ENGLISH.put("usage", "USING YOUR CONTROLS");
-        ENGLISH.put("save_help", "Changes save as you go. Use Restart Messenger after changing inbox controls. Your account stays signed in.");
+        ENGLISH.put("save_help", "Changes save as you go. Inbox options show up with the next chat list Messenger builds, and Restart Messenger applies everything at once. Your account stays signed in.");
         ENGLISH.put("pause_help", "Pause all changes turns every control off for now. Your choices are kept.");
         ENGLISH.put("account_help", "Your choices apply to every Messenger account in this installation.");
         ENGLISH.put("missing", "Missing a control?");
         ENGLISH.put("missing_help", "Pick it in Morphe Manager and patch Messenger again. Updating the patch source alone doesn't add new controls.");
         ENGLISH.put("source", "Source and licenses");
         ENGLISH.put("no_browser", "No web browser found on this phone");
+        ENGLISH.put("page_blocked", "Your phone didn't allow opening that page");
         ENGLISH.put("support", "Support HushMessenger");
-        ENGLISH.put("support_help", "Buy me a coffee on Ko-fi");
+        ENGLISH.put("report", "Report a problem");
+        ENGLISH.put("report_help", "Opens a public GitHub report with your versions and the switches you have on filled in. Look it over and add what happened.");
+        ENGLISH.put("restart_waiting_one", "%d change waits for a restart");
+        ENGLISH.put("restart_waiting_many", "%d changes wait for a restart");
+        ENGLISH.put("quick_setups", "QUICK SETUPS");
+        ENGLISH.put("quick_setups_help", "Switches a set of controls in one tap. You can still change each one afterward.");
+        ENGLISH.put("quick_quiet", "Quiet");
+        ENGLISH.put("quick_quiet_help", "Hides ads, promotions, suggested people and growth prompts.");
+        ENGLISH.put("quick_privacy", "Privacy");
+        ENGLISH.put("quick_privacy_help", "Stops the uploads that tell Meta how you use Messenger, your advertising ID included.");
+        ENGLISH.put("quick_defaults", "Back to defaults");
+        ENGLISH.put("quick_defaults_help", "Turns every control off. Pause and the theme stay as they are.");
+        ENGLISH.put("quick_changed_one", "Changed %d setting");
+        ENGLISH.put("quick_changed_many", "Changed %d settings");
+        ENGLISH.put("quick_unchanged", "Nothing to change. Those settings were already set.");
+        ENGLISH.put("quick_missing", "Those switches aren't in this bundle, so nothing changed.");
         ENGLISH.put("credits", "GPL-3.0. Includes work from De-Vanced, ReVanced, Doom and Messenger Cleaner.");
         ENGLISH.put("independent", "Independent of Meta and Morphe.");
         ENGLISH.put("clipboard", "HushMessenger setup");
@@ -317,6 +344,11 @@ final class SettingsText {
         ENGLISH.put("font_file_no_picker", "This phone has no file picker, so there's no way to choose a file here.");
         ENGLISH.put("font_file_picker_failed", "Couldn't open the file picker. Try again.");
         ENGLISH.put("font_file_busy", "Couldn't start that. Try again in a moment.");
+        ENGLISH.put("font_file_stop", "Stop copying");
+        ENGLISH.put("font_file_stopped", "Stopped copying. Your font didn't change.");
+        ENGLISH.put("font_file_timeout", "That file took too long to copy, so it was stopped. Your font didn't change.");
+        ENGLISH.put("font_file_finishing", "It's already saving the font, so it'll finish in a moment.");
+        ENGLISH.put("font_file_stuck", "Earlier copies are still waiting on their files. You can choose another one once they give up.");
         ENGLISH.put("font_phone_set", "Back to your phone's font. Restart Messenger to see it.");
         ENGLISH.put("font_phone_failed", "Couldn't go back to your phone's font. Try again.");
         ENGLISH.put("font_size", "Text size %1$d%%");
@@ -329,6 +361,7 @@ final class SettingsText {
         ENGLISH.put("font_shift_down_button", "Move down");
         ENGLISH.put("font_adjust_help", "If your font looks too small or sits too high or low in a message bubble, size it or move it here. Each move is 2%% of the text size. Restart Messenger to see a change.");
         ENGLISH.put("font_adjust_saved", "%1$s. Restart Messenger to see it.");
+        ENGLISH.put("font_adjust_failed", "Couldn't save that change, so your font stays as it was. Try again.");
     }
 
     static String english(String id) {

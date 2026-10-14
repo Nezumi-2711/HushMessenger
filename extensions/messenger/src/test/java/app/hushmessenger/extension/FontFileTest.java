@@ -134,7 +134,12 @@ public class FontFileTest {
     private void assertUntouched(File target) throws IOException {
         assertEquals("the copy picked before changed", "the font picked before",
                 new String(Files.readAllBytes(target.toPath()), StandardCharsets.UTF_8));
-        assertFalse("a partial copy was left behind", new File(folder.getRoot(), FontFile.PARTIAL).exists());
+        assertNoPartial();
+    }
+
+    private void assertNoPartial() {
+        String[] partials = folder.getRoot().list((dir, name) -> name.startsWith(FontFile.PARTIAL));
+        assertEquals("a partial copy was left behind", 0, partials == null ? 0 : partials.length);
     }
 
     @Test
@@ -173,7 +178,62 @@ public class FontFileTest {
         assertEquals("the check didn't see the whole file", 1, checked.size());
         assertArrayEquals(rubik, checked.get(0));
         assertTrue("the picker's stream was left open", input.closed);
-        assertFalse(new File(folder.getRoot(), FontFile.PARTIAL).exists());
+        assertNoPartial();
+    }
+
+    /**
+     * A stream that answers every read with nothing is broken, not slow, so it's turned down instead of read forever,
+     * before or after the font header. A stopped copy reads no further either.
+     */
+    @Test
+    public void aStreamThatReadsNothingOrAStoppedCopyIsTurnedDown() throws Exception {
+        File target = existingCopy();
+        for (int header : new int[] {0, 4}) {
+            AtomicInteger reads = new AtomicInteger();
+            InputStream nothing = new InputStream() {
+                private int served;
+
+                @Override
+                public int read() {
+                    throw new AssertionError("reads go through the buffer");
+                }
+
+                @Override
+                public int read(byte[] buffer, int offset, int length) {
+                    reads.incrementAndGet();
+                    if (served >= header) return 0;
+                    buffer[offset] = (byte) (served == 1 ? 1 : 0);
+                    served++;
+                    return 1;
+                }
+            };
+            assertEquals(FontFile.Refusal.UNREADABLE, refusal(nothing, target, file -> true));
+            assertTrue("read " + reads.get() + " times", reads.get() <= header + FontFile.MOST_EMPTY_READS + 1);
+            assertUntouched(target);
+        }
+        Thread.currentThread().interrupt();
+        try {
+            assertEquals(FontFile.Refusal.UNREADABLE, refusal(new ByteArrayInputStream(font(STATIC_FONT)), target, file -> true));
+        } finally {
+            Thread.interrupted();
+        }
+        assertUntouched(target);
+    }
+
+    /** A partial copy a crash or a stopped copy left behind goes once it's old, and one still being written stays. */
+    @Test
+    public void anOldPartialCopyIsRemoved() throws Exception {
+        File old = new File(folder.getRoot(), FontFile.PARTIAL + "-1.tmp");
+        File fresh = new File(folder.getRoot(), FontFile.PARTIAL + "-2.tmp");
+        File legacy = new File(folder.getRoot(), FontFile.PARTIAL);
+        for (File partial : new File[] {old, fresh, legacy}) Files.write(partial.toPath(), new byte[] {1});
+        long stale = System.currentTimeMillis() - FontFile.SIZING_STALE_MS - 60_000;
+        assertTrue(old.setLastModified(stale));
+        assertTrue(legacy.setLastModified(stale));
+        FontFile.dropAdjusted(folder.getRoot(), null);
+        assertFalse(old.exists());
+        assertFalse(legacy.exists());
+        assertTrue(fresh.exists());
     }
 
     @Test
@@ -287,7 +347,8 @@ public class FontFileTest {
         assertEquals(Arrays.asList("check", "save, the copy before still in place"), said);
         assertArrayEquals(rubik, Files.readAllBytes(target.toPath()));
 
-        // A name that won't save, or whose saving throws, leaves the copy before where it was.
+        // A name that won't save, or whose saving throws, leaves the copy before where it was. Android takes a commit into
+        // memory before the disk answers, so the old name is put back either way.
         File again = existingCopy();
         AtomicInteger undone = new AtomicInteger();
         for (boolean throwing : new boolean[]{false, true}) {
@@ -310,7 +371,7 @@ public class FontFileTest {
             }
             assertUntouched(again);
         }
-        assertEquals("a name that never saved was put back", 0, undone.get());
+        assertEquals("a name that didn't save was left in memory", 2, undone.get());
     }
 
     /**

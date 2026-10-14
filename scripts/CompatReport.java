@@ -85,10 +85,10 @@ public class CompatReport {
         + "PeopleTabPYMKHandler$fetchPymkSuggestions$$inlined$CoroutineExceptionHandler$1;";
     static final String PEOPLE_JEWEL_KEY = "pymk_jewel_section_hidden";
     static final String STORY_CARD_DATE_KEY = "last_date_creation_card_shown";
-    // The Notifications tab's server flag ID. Meta renumbers it with each release; this is 582's.
-    static final Set<Long> PEOPLE_SERVER_FLAGS = Set.of(72344188615734930L);
-    // The redesigned emoji drawer's server flag. Meta renumbers it with each release; this is 582's.
-    static final Set<Long> EMOJI_DRAWER_FLAGS = Set.of(36320652931710646L);
+    // The Notifications tab's server flag ID. Meta renumbers it with each release; these are 582's and 583's.
+    static final Set<Long> PEOPLE_SERVER_FLAGS = Set.of(72344188615734930L, 72344188615735036L);
+    // The redesigned emoji drawer's server flag. Meta renumbers it with each release; these are 582's and 583's.
+    static final Set<Long> EMOJI_DRAWER_FLAGS = Set.of(36320652931710646L, 36320635751841408L);
     // The drawer renderer throws this when the redesign can't draw, which ties the flag to the emoji drawer
     static final String EMOJI_DRAWER_ANCHOR = "Cannot render redesigned drawer with search icon ";
     // Controls whose hook count follows how Redex inlined one flag read, so it differs between releases
@@ -172,6 +172,7 @@ public class CompatReport {
         PATCHES.put("Hide stories and notes", List.of("stories"));
         PATCHES.put("Hide inbox tabs", List.of("subtabs"));
         PATCHES.put("Hide Mark as read", List.of("mark_read_action"));
+        PATCHES.put("Pin more chats", List.of("pinned_chats"));
         PATCHES.put("Hide Facebook shortcuts", List.of("facebook"));
         PATCHES.put("Hide Meta AI", List.of("ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_search", "ai_search_chip", "ai_mentions", "ai_commands", "ai_search_hint", "ai_mention_rows"));
         PATCHES.put("Hide Chat Moments", List.of("moments"));
@@ -200,6 +201,7 @@ public class CompatReport {
         PATCHES.put("Stop ad attribution uploads", List.of("attribution_uploads"));
         PATCHES.put("Stop inbox and ad link logging", List.of("ad_events"));
         PATCHES.put("Stop MQTT logging", List.of("mqtt_telemetry"));
+        PATCHES.put("Stop nearby scans", List.of("nearby_scans"));
         PATCHES.put("Keep a message log", List.of("message_log"));
         PATCHES.put("Auto reply", List.of("auto_reply"));
         PATCHES.put("Allow screenshots", List.of("allow_screenshot", "screenshot_viewers"));
@@ -341,7 +343,20 @@ public class CompatReport {
         return builds;
     }
 
-    /** "582.0.0.61.92 (version code 346415686 or 346415687)", joined with " or " across version names. */
+    /**
+     * How many times a method copies a list into an ImmutableList.Builder: 582's addAll on the builder, or 583's one
+     * static (ImmutableList.Builder, Iterable) -> ImmutableList call. Mirrors validateKeyboardTabsInline in ControlHooks.kt.
+     */
+    static long keyboardTabCopies(Collection<Object> refs) {
+        String builder = "Lcom/google/common/collect/ImmutableList$Builder;", iterable = "Ljava/lang/Iterable;";
+        return refs.stream().filter(r -> r instanceof MethodReference m && (
+            builder.equals(m.getDefiningClass()) && "addAll".equals(m.getName()) &&
+                m.getParameterTypes().stream().map(Object::toString).toList().equals(List.of(iterable)) ||
+            IMMUTABLE_LIST.equals(m.getReturnType()) &&
+                m.getParameterTypes().stream().map(Object::toString).toList().equals(List.of(builder, iterable)))).count();
+    }
+
+    /** "583.0.0.29.95 (version code 346611351 or 346611369)", joined with " or " across version names. */
     static String supported(Map<String, Profile> builds) {
         var codes = new TreeMap<String, List<String>>();
         for (var build : builds.values()) codes.computeIfAbsent(build.version, v -> new ArrayList<>()).add(build.code);
@@ -443,40 +458,66 @@ public class CompatReport {
 
     record PreferenceRead(int index, String key, String getter) {}
 
+    /** Register count to (false-default register, branch on the result), as in ControlHooks.kt's BROWSER_PREFERENCE_SHAPES. */
+    static final Map<Integer, Map.Entry<Integer, Opcode>> BROWSER_PREFERENCE_SHAPES =
+        Map.of(9, Map.entry(3, Opcode.IF_EQZ), 8, Map.entry(2, Opcode.IF_NEZ));
+
     /** The one boolean preference read the external-browser check branches on. */
     static PreferenceRead browserPreferenceRead(List<Method> browser) {
         if (browser.size() != 1) return null;
+        var shape = BROWSER_PREFERENCE_SHAPES.get(browser.get(0).getImplementation().getRegisterCount());
+        if (shape == null) return null;
         var code = instructions(browser.get(0));
         PreferenceRead read = null;
         for (int k = 0; k + 3 < code.size(); k++) {
             if (code.get(k).getOpcode() != Opcode.SGET_OBJECT || register(code.get(k)) != 0 ||
                 !(code.get(k + 1) instanceof FiveRegisterInstruction call) || call.getOpcode() != Opcode.INVOKE_INTERFACE ||
-                call.getRegisterCount() != 3 || call.getRegisterC() != 1 || call.getRegisterD() != 0 || call.getRegisterE() != 3 ||
+                call.getRegisterCount() != 3 || call.getRegisterC() != 1 || call.getRegisterD() != 0 ||
+                call.getRegisterE() != shape.getKey() ||
                 !(((ReferenceInstruction) call).getReference() instanceof MethodReference getter) ||
                 !PREFERENCES.equals(getter.getDefiningClass()) || !"Z".equals(getter.getReturnType()) ||
                 code.get(k + 2).getOpcode() != Opcode.MOVE_RESULT || register(code.get(k + 2)) != 0 ||
-                code.get(k + 3).getOpcode() != Opcode.IF_EQZ || register(code.get(k + 3)) != 0) continue;
+                code.get(k + 3).getOpcode() != shape.getValue() || register(code.get(k + 3)) != 0) continue;
             if (read != null) return null;
             read = new PreferenceRead(k, ref(code.get(k)), getter.toString());
         }
         return read;
     }
 
-    /** The Notifications tab's preference key and its server-override check. */
+    /** The section check's false-default register by its register count, as in ControlHooks.kt's PEOPLE_SECTION_DEFAULTS. */
+    static final Map<Integer, Integer> PEOPLE_SECTION_DEFAULTS = Map.of(10, 5, 8, 3);
+
+    /** The Notifications tab's preference key and its server-override check, checked as validatePeopleSection does. */
     static List<String> peopleSection(List<Method> jewel, String getter) {
-        if (jewel.size() != 1) return null;
+        if (jewel.size() != 1 || jewel.get(0).getImplementation() == null) return null;
         var code = instructions(jewel.get(0));
+        Integer no = PEOPLE_SECTION_DEFAULTS.get(jewel.get(0).getImplementation().getRegisterCount());
         // The server flag loads at 17.
         var flags = new ArrayList<Integer>();
         for (int i = 0; i < code.size(); i++) {
             if (code.get(i).getOpcode() == Opcode.CONST_WIDE && code.get(i) instanceof WideLiteralInstruction flag &&
                 PEOPLE_SERVER_FLAGS.contains(flag.getWideLiteral())) flags.add(i);
         }
-        if (flags.size() != 1 || flags.get(0) != 17) return null;
-        int at = flags.get(0);
-        if (code.size() < at + 4 || code.get(8).getOpcode() != Opcode.SGET_OBJECT || register(code.get(8)) != 0 ||
+        if (no == null || flags.size() != 1 || flags.get(0) != 17) return null;
+        int at = flags.get(0), last = code.size() - 1;
+        // Both branches land on the final return of the false default, after the "hidden" true return.
+        if (code.size() < at + 7 || register(code.get(at)) != 0 ||
+            code.get(at + 1).getOpcode() != Opcode.INVOKE_STATIC ||
+            code.get(at + 2).getOpcode() != Opcode.MOVE_RESULT || register(code.get(at + 2)) != 0 ||
+            code.get(at + 3).getOpcode() != Opcode.IF_NEZ || register(code.get(at + 3)) != 0 ||
+            !jumpsTo(code, 12, last) || !jumpsTo(code, at + 3, last) ||
+            code.get(last).getOpcode() != Opcode.RETURN || register(code.get(last)) != no ||
+            code.get(last - 1).getOpcode() != Opcode.RETURN || register(code.get(last - 1)) != 0 ||
+            code.get(last - 2).getOpcode() != Opcode.CONST_4 ||
+            !(code.get(last - 2) instanceof NarrowLiteralInstruction one) || one.getNarrowLiteral() != 1 ||
+            code.get(8).getOpcode() != Opcode.SGET_OBJECT || register(code.get(8)) != 0 ||
+            code.get(9).getOpcode() != Opcode.CONST_4 || register(code.get(9)) != no ||
+            !(code.get(9) instanceof NarrowLiteralInstruction zero) || zero.getNarrowLiteral() != 0 ||
             code.get(10).getOpcode() != Opcode.INVOKE_INTERFACE || !getter.equals(ref(code.get(10))) ||
-            code.get(at + 1).getOpcode() != Opcode.INVOKE_STATIC) return null;
+            !(code.get(10) instanceof FiveRegisterInstruction call) || call.getRegisterCount() != 3 ||
+            call.getRegisterC() != 1 || call.getRegisterD() != 0 || call.getRegisterE() != no ||
+            code.get(11).getOpcode() != Opcode.MOVE_RESULT || register(code.get(11)) != 0 ||
+            code.get(12).getOpcode() != Opcode.IF_EQZ || register(code.get(12)) != 0) return null;
         return List.of(ref(code.get(8)), ref(code.get(at + 1)));
     }
 
@@ -543,9 +584,9 @@ public class CompatReport {
     }
 
     static final String BUBBLE_SESSION = "Lcom/facebook/auth/usersession/FbUserSession;";
-    /** The specifier of the bubble rollout read. Each release renumbers it; only this one is accepted, as in NativeBubbles.kt. */
+    /** The specifier of the bubble rollout read. Each release renumbers it; only 582's and 583's are accepted, as in NativeBubbles.kt. */
     static final long BUBBLE_ROLLOUT = 36312020047499274L;
-    static final Set<Long> BUBBLE_ROLLOUTS = Set.of(BUBBLE_ROLLOUT);
+    static final Set<Long> BUBBLE_ROLLOUTS = Set.of(BUBBLE_ROLLOUT, 36312015752531975L);
     static final String BUBBLE_ACTIVITY = "com.facebook.messaging.msys.thread.bubbles.activity.StaxThreadViewBubblesActivity";
     static final String SHORTCUT_BUILDER = "Landroid/content/pm/ShortcutInfo$Builder;";
     static final String MESSAGING_STYLE = "Landroidx/core/app/NotificationCompat$MessagingStyle;";
@@ -1347,6 +1388,48 @@ public class CompatReport {
 
     static final String CLONE = "Clone install under another package name";
 
+    /** Redex string pools' keys that give Messenger's name, as "pool#key". Mirrors ownNamePoolKeys in CloneInstallPatch.kt. */
+    static Set<String> ownNamePoolKeys(List<ClassDef> classes) {
+        var keys = new HashSet<String>();
+        for (var cls : classes) for (var m : cls.getMethods()) {
+            if (!AccessFlags.STATIC.isSet(m.getAccessFlags()) || !"Ljava/lang/String;".equals(m.getReturnType()) ||
+                m.getParameterTypes().size() != 1 || !"I".equals(m.getParameterTypes().get(0).toString()) || m.getImplementation() == null) continue;
+            var code = instructions(m);
+            if (code.isEmpty() || !(code.get(0) instanceof OffsetInstruction table) ||
+                (code.get(0).getOpcode() != Opcode.PACKED_SWITCH && code.get(0).getOpcode() != Opcode.SPARSE_SWITCH)) continue;
+            var indexAt = new HashMap<Integer, Integer>();
+            for (int i = 0, address = 0; i < code.size(); address += code.get(i).getCodeUnits(), i++) indexAt.put(address, i);
+            var payloadAt = indexAt.get(table.getCodeOffset());
+            if (payloadAt == null || !(code.get(payloadAt) instanceof SwitchPayload payload)) continue;
+            for (var element : payload.getSwitchElements()) {
+                var at = indexAt.get(element.getOffset());
+                if (at == null || at + 1 >= code.size()) continue;
+                var load = code.get(at);
+                if ((load.getOpcode() == Opcode.CONST_STRING || load.getOpcode() == Opcode.CONST_STRING_JUMBO) &&
+                    "com.facebook.orca".equals(((StringReference) ((ReferenceInstruction) load).getReference()).getString()) &&
+                    code.get(at + 1).getOpcode() == Opcode.RETURN_OBJECT && register(code.get(at + 1)) == register(load))
+                    keys.add(hookId(m) + "#" + element.getKey());
+            }
+        }
+        return keys;
+    }
+
+    /** Whether some move-result takes Messenger's name from a string pool lookup by a constant key. */
+    static boolean pooledOwnName(List<Instruction> code, Set<String> pools) {
+        for (int load = 1; load < code.size(); load++) {
+            if (code.get(load).getOpcode() != Opcode.MOVE_RESULT_OBJECT || code.get(load - 1).getOpcode() != Opcode.INVOKE_STATIC ||
+                !(code.get(load - 1) instanceof FiveRegisterInstruction lookup) || lookup.getRegisterCount() != 1) continue;
+            int key = lookup.getRegisterC();
+            for (int j = load - 2; j >= 0; j--) {
+                if (!code.get(j).getOpcode().setsRegister() || register(code.get(j)) != key) continue;
+                if (Set.of(Opcode.CONST_4, Opcode.CONST_16, Opcode.CONST, Opcode.CONST_HIGH16).contains(code.get(j).getOpcode()) &&
+                    pools.contains(ref(lookup) + "#" + ((NarrowLiteralInstruction) code.get(j)).getNarrowLiteral())) return true;
+                break;
+            }
+        }
+        return false;
+    }
+
     /**
      * The two methods the clone patch edits (CloneInstallPatch.kt): the encrypted-backup preference lookup, a public
      * no-argument constructor that reads getPackageName once, and the static attachment authority check.
@@ -1354,6 +1437,7 @@ public class CompatReport {
     static List<String> cloneSites(List<ClassDef> classes, List<String> failures) {
         var lookups = new ArrayList<String>();
         var checks = new ArrayList<String>();
+        var pools = ownNamePoolKeys(classes);
         for (var cls : classes) {
             for (var method : cls.getMethods()) {
                 var impl = method.getImplementation();
@@ -1366,7 +1450,9 @@ public class CompatReport {
                     if (ref.getReference() instanceof MethodReference m && "Landroid/content/Context;".equals(m.getDefiningClass()) &&
                         "getPackageName".equals(m.getName())) packageReads++;
                 }
-                if (strings.contains("autobackupprefs") && strings.contains("fbautobackupprefs") && strings.contains("com.facebook.orca") &&
+                // 583 takes Messenger's name from a string pool instead of a constant.
+                if (strings.contains("autobackupprefs") && strings.contains("fbautobackupprefs") &&
+                    (strings.contains("com.facebook.orca") || pooledOwnName(instructions(method), pools)) &&
                     "<init>".equals(method.getName()) && method.getParameterTypes().isEmpty() && AccessFlags.PUBLIC.isSet(method.getAccessFlags())) {
                     if (packageReads != 1) failures.add(hookId(method) + " reads its package name " + packageReads + " times");
                     lookups.add(hookId(method));
@@ -1459,6 +1545,7 @@ public class CompatReport {
     static final String WINDOW = "Landroid/view/Window;";
     static final String SET_FLAGS = WINDOW + "->setFlags(II)V", ADD_FLAGS = WINDOW + "->addFlags(I)V";
     static final int GENERATE_AI_LABEL = 0x7f14051c;
+    static final int GENERATE_AI_LABEL_583 = 0x7f140560;
     static final Set<String> EPHEMERAL_DIALOGS = Set.of("A1D", "A1F");
 
     static int mediaTarget(List<Instruction> code, int at) {
@@ -1532,7 +1619,7 @@ public class CompatReport {
         } else if (method.getDefiningClass().equals(QUICKSNAP_VIEWER) && method.getName().equals("onCreateView") &&
                 p.equals(List.of("Landroid/view/LayoutInflater;", "Landroid/view/ViewGroup;", "Landroid/os/Bundle;")) && method.getReturnType().equals("Landroid/view/View;")) {
             sites = List.of(32);
-            valid = impl.getRegisterCount() == 23 && Set.of(438, 441).contains(c.size()) && mediaResult(c, 26, "Landroid/app/Dialog;", 0) &&
+            valid = impl.getRegisterCount() == 23 && Set.of(438, 441, 449, 450).contains(c.size()) && mediaResult(c, 26, "Landroid/app/Dialog;", 0) &&
                 mediaNull(c, 27, 0, 33) && mediaWindow(c, 28, "Landroid/app/Dialog;", 0, 1, 33) && mediaLiteral(c, 31, 0) && mediaCall(c, 32, ADD_FLAGS, 1, 0);
         } else return List.of();
         var setters = new ArrayList<Integer>();
@@ -1544,12 +1631,18 @@ public class CompatReport {
         return sites;
     }
 
-    /** Mirrors NativeMediaControls.kt: the render has 105 instructions and 24 registers, and five renders offer the label. */
-    record AiCell(String type, String superclass, String scope, String component) {
+    /**
+     * Mirrors NativeMediaControls.kt: each build's cell, its label, how many renders offer that label and its render's
+     * size (24 registers in every build). 582 offers the label from five renders of 105; 583 from four, of 104 or 105.
+     */
+    record AiCell(String type, String superclass, String scope, String component, int label, int sources, int size) {
         String render() { return type + "->render(" + scope + ")" + component; }
     }
     static List<Method> findAiStickerCells(List<ClassDef> classes) {
-        var shapes = List.of(new AiCell("LX/CoQ;", "LX/1N9;", "LX/2Cg;", "LX/1GU;"), new AiCell("LX/EyW;", "LX/1N8;", "LX/2Cf;", "LX/1GT;"));
+        var shapes = List.of(new AiCell("LX/CoQ;", "LX/1N9;", "LX/2Cg;", "LX/1GU;", GENERATE_AI_LABEL, 5, 105),
+            new AiCell("LX/EyW;", "LX/1N8;", "LX/2Cf;", "LX/1GT;", GENERATE_AI_LABEL, 5, 105),
+            new AiCell("LX/F0Y;", "LX/1NT;", "LX/2Cf;", "LX/1Gu;", GENERATE_AI_LABEL_583, 4, 104),
+            new AiCell("LX/F3k;", "LX/1NT;", "LX/2Cf;", "LX/1Gu;", GENERATE_AI_LABEL_583, 4, 105));
         var result = new ArrayList<Method>();
         for (var shape : shapes) {
             var matching = classes.stream().filter(c -> c.getType().equals(shape.type())).toList();
@@ -1577,15 +1670,15 @@ public class CompatReport {
                     if (!Set.of(Opcode.INVOKE_DIRECT, Opcode.INVOKE_DIRECT_RANGE).contains(c.get(at).getOpcode()) || !Objects.equals(ref(c.get(at)), hookId(ctor))) continue;
                     var args = bubbleArgs(c.get(at)); if (args.isEmpty()) continue; int arg = args.getLast(), literal = -1;
                     for (int j = at - 1; j >= Math.max(0, at - 24); j--) if (mediaWrites(c.get(j), arg)) { literal = j; break; }
-                    if (literal < 0 || !(c.get(literal) instanceof NarrowLiteralInstruction n) || n.getNarrowLiteral() != GENERATE_AI_LABEL) continue;
+                    if (literal < 0 || !(c.get(literal) instanceof NarrowLiteralInstruction n) || n.getNarrowLiteral() != shape.label()) continue;
                     boolean straight = true; for (int j = literal + 1; j < at; j++) if (c.get(j) instanceof OffsetInstruction) straight = false;
                     for (int t : mediaTargets(source)) if (t > literal && t <= at) straight = false;
                     if (straight) sources++;
                 }
             }
-            if (sources != 5) continue;
+            if (sources != shape.sources()) continue;
             for (var m : cls.getMethods()) if (hookId(m).equals(shape.render()) && !AccessFlags.STATIC.isSet(m.getAccessFlags()) && m.getImplementation() != null &&
-                    m.getImplementation().getRegisterCount() == 24 && instructions(m).size() == 105 && m.getImplementation().getTryBlocks().size() == 4) result.add(m);
+                    m.getImplementation().getRegisterCount() == 24 && instructions(m).size() == shape.size() && m.getImplementation().getTryBlocks().size() == 4) result.add(m);
         }
         return result;
     }
@@ -1852,7 +1945,8 @@ public class CompatReport {
         Method invoke=single(methods(closure).stream().filter(m->m.getName().equals("invoke") && m.getParameterTypes().equals(List.of("Ljava/lang/Object;"))).toList(),"section closure invoke");
         var code=instructions(invoke);
         var listReads=new ArrayList<Integer>(); for(int at=0;at<code.size();at++) if(reads(code.get(at),captured.toString())) listReads.add(at);
-        require(listReads.size()==2 && listReads.get(0)==5 && listReads.get(1)==64,"presentation read shape changed: "+listReads);
+        // 582's second read is at 64, 583's one earlier.
+        require(listReads.size()==2 && listReads.get(0)==5 && Set.of(63,64).contains(listReads.get(1)),"presentation read shape changed: "+listReads);
         int secondRead=listReads.get(1);
         require(hasString(invoke,"searchBarSection") && code.get(secondRead) instanceof TwoRegisterInstruction read && read.getRegisterA()==1 && read.getRegisterB()==4,"header or local presentation read changed");
         // The list goes into v1, and the sink takes an $onThreadInViewport after the list, moved into place after the alias.
@@ -1888,23 +1982,39 @@ public class CompatReport {
         var subscribed=(FieldReference)ref(joinedCode.get(5)); require(classes.values().stream().anyMatch(c->methods(c).stream().anyMatch(m->hasString(m,"thread.isSubscribed") && instructions(m).stream().anyMatch(i->Objects.toString(ref(i)).equals(subscribed.toString())))),"subscribed native label absent");
         var keyPredicate=definition((MethodReference)ref(joinedCode.get(1)));
         var keyAny=definition(single(calls(keyPredicate).stream().filter(m->m.getDefiningClass().equals(KEY) && m.getParameterTypes().isEmpty() && m.getReturnType().equals("Z")).toList(),"nullable key-to-community predicate"));
-        var keyChannel=definition(single(calls(keyAny).stream().filter(m->m.getDefiningClass().equals(KEY) && m.getParameterTypes().isEmpty() && m.getReturnType().equals("Z")).toList(),"community channel predicate"));
         require(instructions(keyPredicate).size()==8 && calls(keyPredicate).stream().anyMatch(m->id(m).equals(id(keyAny))),"null-safe community wrapper changed");
-        require(instructions(keyAny).size()==10 && calls(keyAny).stream().anyMatch(m->id(m).equals(id(keyChannel))) && instructions(keyChannel).size()==7,"community OR predicate changed");
-        var n=instructions(keyPredicate); var a=instructions(keyAny); var h=instructions(keyChannel);
+        var n=instructions(keyPredicate); var a=instructions(keyAny);
         require(n.stream().map(Instruction::getOpcode).toList().equals(List.of(Opcode.IF_EQZ,Opcode.INVOKE_VIRTUAL,Opcode.MOVE_RESULT,Opcode.IF_EQZ,Opcode.CONST_4,Opcode.RETURN,Opcode.CONST_4,Opcode.RETURN)) &&
             keyPredicate.getImplementation().getRegisterCount()==1 && branch(keyPredicate,0)==6 && branch(keyPredicate,3)==6 && args(n.get(1)).equals(List.of(0)) && literal(n.get(4),0,1) && literal(n.get(6),0,0),"null/unknown key behavior changed");
-        require(a.stream().map(Instruction::getOpcode).toList().equals(List.of(Opcode.INVOKE_VIRTUAL,Opcode.MOVE_RESULT,Opcode.IF_NEZ,Opcode.IGET_OBJECT,Opcode.SGET_OBJECT,Opcode.IF_EQ,Opcode.CONST_4,Opcode.RETURN,Opcode.CONST_4,Opcode.RETURN)) &&
-            branch(keyAny,2)==8 && branch(keyAny,5)==8 && args(a.get(0)).equals(List.of(2)) && literal(a.get(6),0,0) && literal(a.get(8),0,1),"community OR value flow changed");
-        require(h.stream().map(Instruction::getOpcode).toList().equals(List.of(Opcode.IGET_OBJECT,Opcode.SGET_OBJECT,Opcode.IF_NE,Opcode.CONST_4,Opcode.RETURN,Opcode.CONST_4,Opcode.RETURN)) &&
-            branch(keyChannel,2)==5 && literal(h.get(3),0,1) && literal(h.get(5),0,0) && Objects.toString(ref(h.get(0))).equals(Objects.toString(ref(a.get(3)))),"ordinary key behavior changed");
-        var keyType=single(fieldsOf(KEY, ((FieldReference)ref(instructions(keyChannel).get(0))).getType()),"typed key enum"); var enums=enumMembers(keyType.getType());
-        require(Objects.toString(ref(instructions(keyChannel).get(1))).equals(enums.get("COMMUNITY_CHANNEL").toString()) && Objects.toString(ref(instructions(keyAny).get(4))).equals(enums.get("COMMUNITY_ANNOUNCEMENT_CHANNEL").toString()),"joined predicate accepts other types");
+        // 582 asks a separate channel check first; 583 compares the key type with both channel types inline.
+        Method keyChannel=null; String channelType, announcementType, keyField;
+        if (a.size()==10) {
+            var channel=definition(single(calls(keyAny).stream().filter(m->m.getDefiningClass().equals(KEY) && m.getParameterTypes().isEmpty() && m.getReturnType().equals("Z")).toList(),"community channel predicate"));
+            require(calls(keyAny).stream().anyMatch(m->id(m).equals(id(channel))) && instructions(channel).size()==7,"community OR predicate changed");
+            keyChannel=channel;
+            var h=instructions(keyChannel);
+            require(a.stream().map(Instruction::getOpcode).toList().equals(List.of(Opcode.INVOKE_VIRTUAL,Opcode.MOVE_RESULT,Opcode.IF_NEZ,Opcode.IGET_OBJECT,Opcode.SGET_OBJECT,Opcode.IF_EQ,Opcode.CONST_4,Opcode.RETURN,Opcode.CONST_4,Opcode.RETURN)) &&
+                branch(keyAny,2)==8 && branch(keyAny,5)==8 && args(a.get(0)).equals(List.of(2)) && literal(a.get(6),0,0) && literal(a.get(8),0,1),"community OR value flow changed");
+            require(h.stream().map(Instruction::getOpcode).toList().equals(List.of(Opcode.IGET_OBJECT,Opcode.SGET_OBJECT,Opcode.IF_NE,Opcode.CONST_4,Opcode.RETURN,Opcode.CONST_4,Opcode.RETURN)) &&
+                branch(keyChannel,2)==5 && literal(h.get(3),0,1) && literal(h.get(5),0,0) && Objects.toString(ref(h.get(0))).equals(Objects.toString(ref(a.get(3)))),"ordinary key behavior changed");
+            keyField=Objects.toString(ref(h.get(0))); channelType=Objects.toString(ref(h.get(1))); announcementType=Objects.toString(ref(a.get(4)));
+        } else {
+            require(a.stream().map(Instruction::getOpcode).toList().equals(List.of(Opcode.IGET_OBJECT,Opcode.SGET_OBJECT,Opcode.IF_EQ,Opcode.SGET_OBJECT,Opcode.IF_EQ,Opcode.CONST_4,Opcode.RETURN,Opcode.CONST_4,Opcode.RETURN)) &&
+                keyAny.getImplementation().getRegisterCount()==3 && branch(keyAny,2)==7 && branch(keyAny,4)==7 && literal(a.get(5),0,0) && literal(a.get(7),0,1) &&
+                ((TwoRegisterInstruction)a.get(0)).getRegisterA()==1 && ((TwoRegisterInstruction)a.get(0)).getRegisterB()==2 && register(a.get(1))==0 && register(a.get(3))==0 &&
+                ((TwoRegisterInstruction)a.get(2)).getRegisterA()==1 && ((TwoRegisterInstruction)a.get(2)).getRegisterB()==0 &&
+                ((TwoRegisterInstruction)a.get(4)).getRegisterA()==1 && ((TwoRegisterInstruction)a.get(4)).getRegisterB()==0,"inline community OR predicate changed");
+            keyField=Objects.toString(ref(a.get(0))); channelType=Objects.toString(ref(a.get(1))); announcementType=Objects.toString(ref(a.get(3)));
+        }
+        var keyType=single(fieldsOf(KEY, keyField.substring(keyField.lastIndexOf(':')+1)),"typed key enum"); var enums=enumMembers(keyType.getType());
+        require(keyField.equals(keyType.toString()) && channelType.equals(enums.get("COMMUNITY_CHANNEL").toString()) && announcementType.equals(enums.get("COMMUNITY_ANNOUNCEMENT_CHANNEL").toString()),"joined predicate accepts other types");
         String rowType=single(renderCode.stream().filter(i->i.getOpcode()==Opcode.INSTANCE_OF).map(i->((TypeReference)ref(i)).getType()).distinct().filter(t->fieldsOf(t,SUMMARY).size()==1).toList(),"native row type");
         var rowSummary=single(fieldsOf(rowType,SUMMARY),"native row summary");
         require(AccessFlags.PUBLIC.isSet(classes.get(rowType).getAccessFlags()) && AccessFlags.PUBLIC.isSet(rowSummary.getAccessFlags()) && AccessFlags.FINAL.isSet(rowSummary.getAccessFlags()) &&
             AccessFlags.PUBLIC.isSet(classes.get(predicate.getDefiningClass()).getAccessFlags()) && AccessFlags.PUBLIC.isSet(predicate.getAccessFlags()) && AccessFlags.STATIC.isSet(predicate.getAccessFlags()),"typed native contract inaccessible");
-        var identityParts=new ArrayList<>(List.of(id(render),id(ctor),id(scopeGetter),id(folderOverride),rowSummary.toString(),id(predicate),id(keyPredicate),id(keyAny),id(keyChannel),requests.toString(),prefix.toString()));
+        var identityParts=new ArrayList<>(List.of(id(render),id(ctor),id(scopeGetter),id(folderOverride),rowSummary.toString(),id(predicate),id(keyPredicate),id(keyAny)));
+        if (keyChannel!=null) identityParts.add(id(keyChannel));
+        identityParts.add(requests.toString()); identityParts.add(prefix.toString());
         currentPath.forEach(f->identityParts.add(f.toString())); identityParts.add(id(folderGetter)); identityParts.add(folders.get("INBOX").toString());
         String identity=String.join("|",identityParts);
         return new CommunityInbox(invoke, identity);
@@ -2031,6 +2141,51 @@ public class CompatReport {
         return hookId(init);
     }
 
+    static final String SNIPPET_MAKER = "Lcom/facebook/messaging/threadlist/plugins/core/threadsnippet/lastmessage/LastMessageSnippetImpl;";
+
+    /**
+     * The chat list snippet's constructor that Use system emoji passes a Like through (#34 follow-up), or null. Mirrors
+     * likeSnippetInit in EmojiFont.kt: the one class LastMessageSnippetImpl builds from a CharSequence that names itself
+     * LastMessageThreadSnippet, final, with that one field and one constructor.
+     */
+    static String likeSnippetInit(Map<String, ClassDef> byType) {
+        var maker = byType.get(SNIPPET_MAKER);
+        if (maker == null) return null;
+        var built = new LinkedHashSet<String>();
+        for (var m : maker.getMethods()) for (var i : instructions(m)) {
+            if (i.getOpcode() == Opcode.INVOKE_DIRECT && i instanceof ReferenceInstruction ri && ri.getReference() instanceof MethodReference mr &&
+                "<init>".equals(mr.getName()) && mr.getParameterTypes().size() == 1 &&
+                "Ljava/lang/CharSequence;".equals(mr.getParameterTypes().get(0).toString())) built.add(mr.getDefiningClass());
+        }
+        var named = new ArrayList<ClassDef>();
+        for (var type : built) {
+            var cls = byType.get(type);
+            if (cls == null) continue;
+            boolean names = false;
+            for (var m : cls.getMethods()) if ("toString".equals(m.getName())) for (var i : instructions(m))
+                if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference s &&
+                    s.getString().startsWith("LastMessageThreadSnippet(text=")) names = true;
+            if (names) named.add(cls);
+        }
+        if (named.size() != 1) return null;
+        var snippet = named.get(0);
+        var fields = new ArrayList<String>();
+        for (var f : snippet.getFields()) if (!AccessFlags.STATIC.isSet(f.getAccessFlags())) fields.add(f.getType());
+        Method init = null;
+        for (var m : snippet.getMethods()) {
+            if (!"<init>".equals(m.getName())) continue;
+            if (init != null) return null;
+            init = m;
+        }
+        if (!AccessFlags.FINAL.isSet(snippet.getAccessFlags()) || !fields.equals(List.of("Ljava/lang/CharSequence;")) || init == null ||
+            !hookId(init).equals(snippet.getType() + "-><init>(Ljava/lang/CharSequence;)V")) return null;
+        var body = instructions(init);
+        if (body.isEmpty() || body.get(0).getOpcode() != Opcode.INVOKE_DIRECT || !(body.get(0) instanceof ReferenceInstruction call) ||
+            !(call.getReference() instanceof MethodReference mr) || !"Ljava/lang/Object;".equals(mr.getDefiningClass()) ||
+            !"<init>".equals(mr.getName()) || mediaTargets(init).contains(1) || init.getImplementation().getRegisterCount() - 2 + 1 > 15) return null;
+        return hookId(init);
+    }
+
     /**
      * Every method that loads the emoji drawer flag, but only when the one renderer that throws the anchor loads it
      * too. Mirrors EmojiDrawer.kt.
@@ -2077,6 +2232,8 @@ public class CompatReport {
     static final String THREAD_SUMMARY_TYPE = "Lcom/facebook/messaging/model/threads/ThreadSummary;";
 
     static final String MESSENGER_BROWSER_LAUNCHER = "Lcom/facebook/messaging/browser/util/MessengerBrowserLauncher;";
+    static final List<String> REVOKE_HANDLER = List.of("Landroid/content/Intent;", BUBBLE_SESSION, "Ljava/lang/String;");
+    static final List<String> STATIC_REVOKE_HANDLER = List.of("Landroid/content/Intent;", BUBBLE_SESSION, "Ljava/lang/String;", "Ljava/util/Map;");
     static final String JSON_PUT = "Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;";
 
     /**
@@ -2593,21 +2750,26 @@ public class CompatReport {
         return builders.size() == 1 ? builders : List.of();
     }
 
-    static final Set<Long> META_AI_ROW_FLAGS = Set.of(0x81063b011b2d8aL, 0x81063b01042d83L);
-    static final Set<Long> META_AI_CHAT_FLAGS = Set.of(0x81063b011b2d8aL, 0x81063b00042d40L);
+    /** One build's numbering of the @ list row flags. Meta renumbers them with each release. Mirrors AiMentionRows.kt. */
+    record AiRowFlags(Set<Long> row, Set<Long> chat, long encrypted, long imagine, long imagineYourself) {}
+    static final List<AiRowFlags> AI_ROW_BUILDS = List.of(
+        new AiRowFlags(Set.of(0x81063b011b2d8aL, 0x81063b01042d83L), Set.of(0x81063b011b2d8aL, 0x81063b00042d40L),
+            0x81063b00052d41L, 0x81063b00402d51L, 0x81063b00f92d7fL),
+        new AiRowFlags(Set.of(0x810637011b2d49L, 0x81063701042d42L), Set.of(0x810637011b2d49L, 0x81063700042cffL),
+            0x81063700052d00L, 0x81063700402d10L, 0x81063700f92d3eL));
     static final String CAPABILITIES = "Lcom/facebook/xapp/messaging/capability/vector/Capabilities;";
     static final String FB_SESSION_TYPE = "Lcom/facebook/auth/usersession/FbUserSession;";
 
     /**
      * ai_mention_rows: the instance checks behind the Meta AI, imagine and imagine yourself rows of the newer @ list, told
-     * apart by parameters and the server flag each reads: ()Z reading both META_AI_ROW_FLAGS (community channels),
-     * (FbUserSession, Capabilities)Z reading both META_AI_CHAT_FLAGS (regular chats), (FbUserSession, Capabilities)Z with
-     * no flag that checks a capability and defers to a same-class (FbUserSession)Z reading 0x81063b00052d41 (encrypted
-     * chats), (FbUserSession, ThreadKey, Capabilities, Z, Z)Z reading 0x81063b00402d51 and (FbUserSession, ThreadKey,
-     * Capabilities)Z reading 0x81063b00f92d7f. Counted only when there is exactly one of each and all five share a class.
-     * Mirrors AiMentionRows.kt.
+     * apart by parameters and the server flag each reads: ()Z reading both row flags (community channels),
+     * (FbUserSession, Capabilities)Z reading both chat flags (regular chats), (FbUserSession, Capabilities)Z with no flag
+     * that checks a capability and defers to a same-class (FbUserSession)Z reading the encrypted flag (encrypted chats),
+     * (FbUserSession, ThreadKey, Capabilities, Z, Z)Z reading the imagine flag and (FbUserSession, ThreadKey,
+     * Capabilities)Z reading the imagine yourself flag. Counted only when there is exactly one of each, all five share a
+     * class and all read one build's flags. Mirrors AiMentionRows.kt.
      */
-    static boolean defersToEncryptedCheck(ClassDef cls, Method method) {
+    static boolean defersToEncryptedCheck(ClassDef cls, Method method, long encrypted) {
         var calls = new ArrayList<MethodReference>();
         for (var i : method.getImplementation().getInstructions())
             if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof MethodReference mr) calls.add(mr);
@@ -2620,12 +2782,20 @@ public class CompatReport {
                 !"Z".equals(other.getReturnType()) || other.getParameterTypes().size() != 1 ||
                 !FB_SESSION_TYPE.equals(other.getParameterTypes().get(0).toString())) continue;
             for (var i : other.getImplementation().getInstructions())
-                if (i.getOpcode() == Opcode.CONST_WIDE && i instanceof WideLiteralInstruction flag && flag.getWideLiteral() == 0x81063b00052d41L) return true;
+                if (i.getOpcode() == Opcode.CONST_WIDE && i instanceof WideLiteralInstruction flag && flag.getWideLiteral() == encrypted) return true;
         }
         return false;
     }
 
     static List<Method> aiMentionRowChecks(List<ClassDef> classes) {
+        for (var build : AI_ROW_BUILDS) {
+            var checks = aiMentionRowChecks(classes, build);
+            if (!checks.isEmpty()) return checks;
+        }
+        return List.of();
+    }
+
+    static List<Method> aiMentionRowChecks(List<ClassDef> classes, AiRowFlags build) {
         var rows = new TreeMap<String, List<Method>>();
         for (var cls : classes) for (var method : cls.getMethods()) {
             if (method.getImplementation() == null || AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"Z".equals(method.getReturnType())) continue;
@@ -2635,11 +2805,11 @@ public class CompatReport {
             for (var i : method.getImplementation().getInstructions())
                 if (i.getOpcode() == Opcode.CONST_WIDE && i instanceof WideLiteralInstruction flag) flags.add(flag.getWideLiteral());
             String row = null;
-            if (params.isEmpty() && flags.containsAll(META_AI_ROW_FLAGS)) row = "meta_ai";
-            else if (params.equals(List.of(FB_SESSION_TYPE, CAPABILITIES)) && flags.containsAll(META_AI_CHAT_FLAGS)) row = "meta_ai_chats";
-            else if (params.equals(List.of(FB_SESSION_TYPE, CAPABILITIES)) && flags.isEmpty() && defersToEncryptedCheck(cls, method)) row = "meta_ai_encrypted";
-            else if (params.equals(List.of(FB_SESSION_TYPE, THREAD_KEY, CAPABILITIES, "Z", "Z")) && flags.contains(0x81063b00402d51L)) row = "imagine";
-            else if (params.equals(List.of(FB_SESSION_TYPE, THREAD_KEY, CAPABILITIES)) && flags.contains(0x81063b00f92d7fL)) row = "imagine_yourself";
+            if (params.isEmpty() && flags.containsAll(build.row())) row = "meta_ai";
+            else if (params.equals(List.of(FB_SESSION_TYPE, CAPABILITIES)) && flags.containsAll(build.chat())) row = "meta_ai_chats";
+            else if (params.equals(List.of(FB_SESSION_TYPE, CAPABILITIES)) && flags.isEmpty() && defersToEncryptedCheck(cls, method, build.encrypted())) row = "meta_ai_encrypted";
+            else if (params.equals(List.of(FB_SESSION_TYPE, THREAD_KEY, CAPABILITIES, "Z", "Z")) && flags.contains(build.imagine())) row = "imagine";
+            else if (params.equals(List.of(FB_SESSION_TYPE, THREAD_KEY, CAPABILITIES)) && flags.contains(build.imagineYourself())) row = "imagine_yourself";
             if (row != null) rows.computeIfAbsent(row, k -> new ArrayList<>()).add(method);
         }
         if (rows.size() != 5 || rows.values().stream().anyMatch(m -> m.size() != 1)) return List.of();
@@ -2793,46 +2963,55 @@ public class CompatReport {
     }
 
     /**
+     * Where ReadReceipts.kt's REPLY_READ_SHAPES puts the pieces: size, composer copy, account copy, the thread's null
+     * default, the null path's copy and the dispatch. 583 drops one parameter check, four instructions shorter.
+     */
+    static final int[][] REPLY_READ_SHAPES = {{402, 13, 25, 31, 73, 239}, {398, 10, 21, 27, 69, 235}};
+
+    /**
      * reply_read injects at fixed indices, so ReadReceipts.kt's validateReplyRead pins the method's shape. The same
      * outline is checked here, so a changed body shows up as unresolved instead of passing until patch time: 36
-     * registers, 402 instructions, the typed ThreadKey getter on p7's type at 33 with its result in v12, v12 taking
-     * v10 at 237, and at 239 the five-argument dispatch on p4's type that starts with the FbUserSession and ends with
-     * two Strings. The dataflow proof stays in the patch.
+     * registers, one of the known sizes, the typed ThreadKey getter on p7's type two after the null default with its
+     * result in v12, v12 taking v10 two before the dispatch, and the five-argument dispatch on p4's type that starts
+     * with the FbUserSession and ends with two Strings. The dataflow proof stays in the patch.
      */
     static boolean replyReadShape(Method method) {
         var impl = method.getImplementation();
         if (impl == null || impl.getRegisterCount() != 36) return false;
         var code = new ArrayList<Instruction>();
         impl.getInstructions().forEach(code::add);
-        if (code.size() != 402) return false;
+        int[] shape = null;
+        for (var known : REPLY_READ_SHAPES) if (known[0] == code.size()) shape = known;
+        if (shape == null) return false;
+        int composer = shape[1], session = shape[2], n = shape[3], absent = shape[4], d = shape[5];
         var params = method.getParameterTypes();
-        if (code.get(33).getOpcode() != Opcode.INVOKE_INTERFACE_RANGE || !(code.get(33) instanceof ReferenceInstruction g) ||
+        if (code.get(n + 2).getOpcode() != Opcode.INVOKE_INTERFACE_RANGE || !(code.get(n + 2) instanceof ReferenceInstruction g) ||
                 !(g.getReference() instanceof MethodReference getter) || !params.get(7).toString().equals(getter.getDefiningClass()) ||
                 !getter.getParameterTypes().isEmpty() || !"Lcom/facebook/messaging/model/threadkey/ThreadKey;".equals(getter.getReturnType()))
             return false;
-        if (code.get(34).getOpcode() != Opcode.MOVE_RESULT_OBJECT || ((OneRegisterInstruction) code.get(34)).getRegisterA() != 12) return false;
-        if (code.get(237).getOpcode() != Opcode.MOVE_OBJECT || ((TwoRegisterInstruction) code.get(237)).getRegisterA() != 12 ||
-                ((TwoRegisterInstruction) code.get(237)).getRegisterB() != 10) return false;
-        if (code.get(239).getOpcode() != Opcode.INVOKE_INTERFACE_RANGE || !(code.get(239) instanceof ReferenceInstruction d) ||
-                !(d.getReference() instanceof MethodReference dispatch) || !params.get(4).toString().equals(dispatch.getDefiningClass()) ||
+        if (code.get(n + 3).getOpcode() != Opcode.MOVE_RESULT_OBJECT || ((OneRegisterInstruction) code.get(n + 3)).getRegisterA() != 12) return false;
+        if (code.get(d - 2).getOpcode() != Opcode.MOVE_OBJECT || ((TwoRegisterInstruction) code.get(d - 2)).getRegisterA() != 12 ||
+                ((TwoRegisterInstruction) code.get(d - 2)).getRegisterB() != 10) return false;
+        if (code.get(d).getOpcode() != Opcode.INVOKE_INTERFACE_RANGE || !(code.get(d) instanceof ReferenceInstruction di) ||
+                !(di.getReference() instanceof MethodReference dispatch) || !params.get(4).toString().equals(dispatch.getDefiningClass()) ||
                 !"V".equals(dispatch.getReturnType())) return false;
         var types = dispatch.getParameterTypes();
         if (types.size() != 5 || !"Lcom/facebook/auth/usersession/FbUserSession;".contentEquals(types.get(0)) ||
             !"Ljava/lang/String;".contentEquals(types.get(3)) || !"Ljava/lang/String;".contentEquals(types.get(4)) ||
-            ((RegisterRangeInstruction) code.get(239)).getStartRegister() != 11 || ((RegisterRangeInstruction) code.get(239)).getRegisterCount() != 6)
+            ((RegisterRangeInstruction) code.get(d)).getStartRegister() != 11 || ((RegisterRangeInstruction) code.get(d)).getRegisterCount() != 6)
             return false;
         // The registers and branches validateReplyRead proves its dataflow on.
         int[] p = new int[params.size()];
         int next = impl.getRegisterCount() - params.stream().mapToInt(t -> t.charAt(0) == 'J' || t.charAt(0) == 'D' ? 2 : 1).sum();
         for (int at = 0; at < p.length; at++) { p[at] = next; next += params.get(at).charAt(0) == 'J' || params.get(at).charAt(0) == 'D' ? 2 : 1; }
-        var getterArgs = (RegisterRangeInstruction) code.get(33);
+        var getterArgs = (RegisterRangeInstruction) code.get(n + 2);
         if (getterArgs.getStartRegister() != p[7] || getterArgs.getRegisterCount() != 1) return false;
-        if (!moves(code.get(4), Opcode.MOVE_OBJECT_FROM16, 7, p[11]) || !moves(code.get(13), Opcode.MOVE_OBJECT_FROM16, 20, p[4]) ||
-            !moves(code.get(25), Opcode.MOVE_OBJECT_FROM16, 10, p[0]) || !moves(code.get(236), Opcode.MOVE_OBJECT_FROM16, 11, 20) ||
-            !moves(code.get(238), Opcode.MOVE_OBJECT, 15, 0) || !moves(code.get(73), Opcode.MOVE_OBJECT, 12, 5)) return false;
-        if (code.get(31).getOpcode() != Opcode.CONST_4 || ((OneRegisterInstruction) code.get(31)).getRegisterA() != 5 ||
-            ((NarrowLiteralInstruction) code.get(31)).getNarrowLiteral() != 0 || code.get(32).getOpcode() != Opcode.IF_EQZ ||
-            ((OneRegisterInstruction) code.get(32)).getRegisterA() != p[7] || !jumpsTo(code, 32, 73)) return false;
+        if (!moves(code.get(4), Opcode.MOVE_OBJECT_FROM16, 7, p[11]) || !moves(code.get(composer), Opcode.MOVE_OBJECT_FROM16, 20, p[4]) ||
+            !moves(code.get(session), Opcode.MOVE_OBJECT_FROM16, 10, p[0]) || !moves(code.get(d - 3), Opcode.MOVE_OBJECT_FROM16, 11, 20) ||
+            !moves(code.get(d - 1), Opcode.MOVE_OBJECT, 15, 0) || !moves(code.get(absent), Opcode.MOVE_OBJECT, 12, 5)) return false;
+        if (code.get(n).getOpcode() != Opcode.CONST_4 || ((OneRegisterInstruction) code.get(n)).getRegisterA() != 5 ||
+            ((NarrowLiteralInstruction) code.get(n)).getNarrowLiteral() != 0 || code.get(n + 1).getOpcode() != Opcode.IF_EQZ ||
+            ((OneRegisterInstruction) code.get(n + 1)).getRegisterA() != p[7] || !jumpsTo(code, n + 1, absent)) return false;
         int[] address = new int[code.size() + 1];
         var index = new HashMap<Integer, Integer>();
         for (int at = 0; at < code.size(); at++) { index.put(address[at], at); address[at + 1] = address[at] + code.get(at).getCodeUnits(); }
@@ -2847,11 +3026,11 @@ public class CompatReport {
         }
         for (var block : impl.getTryBlocks()) {
             for (var handler : block.getExceptionHandlers()) targets.add(index.get(handler.getHandlerCodeAddress()));
-            // Code inserted at 239 would land inside a try that covers the seam.
-            for (int at = 234; at <= 240; at++)
+            // Code inserted at the dispatch would land inside a try that covers the seam.
+            for (int at = d - 5; at <= d + 1; at++)
                 if (address[at] >= block.getStartCodeAddress() && address[at] < block.getStartCodeAddress() + block.getCodeUnitCount()) return false;
         }
-        for (int at : new int[] {31, 32, 33, 34, 237, 238, 239, 240}) if (targets.contains(at)) return false;
+        for (int at : new int[] {n, n + 1, n + 2, n + 3, d - 2, d - 1, d, d + 1}) if (targets.contains(at)) return false;
         return true;
     }
 
@@ -3036,6 +3215,108 @@ public class CompatReport {
         return focus.size() == 1 ? focus : List.of();
     }
 
+    /**
+     * pinned_chats: the one static (FbUserSession)I getter that loads the pinned chat limit's config id once, has no
+     * branch or handler, and ends by returning the int its last call answered. Mirrors PinnedChats.kt.
+     */
+    static List<Method> pinnedChatLimit(List<ClassDef> classes) {
+        var found = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (method.getImplementation() == null || !AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+                !"I".equals(method.getReturnType()) || method.getParameterTypes().size() != 1 ||
+                !"Lcom/facebook/auth/usersession/FbUserSession;".equals(method.getParameterTypes().get(0).toString())) continue;
+            var code = instructions(method);
+            int loads = 0, returns = 0;
+            boolean jumps = method.getImplementation().getTryBlocks().iterator().hasNext();
+            for (var i : code) {
+                if (i.getOpcode() == Opcode.CONST_WIDE && ((WideLiteralInstruction) i).getWideLiteral() == 0x8205c10002107bL) loads++;
+                if (i.getOpcode() == Opcode.RETURN || i.getOpcode() == Opcode.RETURN_VOID || i.getOpcode() == Opcode.RETURN_OBJECT ||
+                    i.getOpcode() == Opcode.RETURN_WIDE) returns++;
+                if (i instanceof OffsetInstruction) jumps = true;
+            }
+            int last = code.size() - 1;
+            if (loads != 1 || returns != 1 || jumps || last < 2 || code.get(last).getOpcode() != Opcode.RETURN ||
+                code.get(last - 1).getOpcode() != Opcode.MOVE_RESULT || register(code.get(last)) != register(code.get(last - 1))) continue;
+            if (code.get(last - 2) instanceof ReferenceInstruction ri && ri.getReference() instanceof MethodReference read &&
+                "I".equals(read.getReturnType())) found.add(method);
+        }
+        return found.size() == 1 ? found : List.of();
+    }
+
+    static boolean calls(Method method, String owner) {
+        for (var i : instructions(method))
+            if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof MethodReference call &&
+                owner.equals(call.getDefiningClass())) return true;
+        return false;
+    }
+
+    /**
+     * nearby_scans: the foreground location controller's one static (Context, FbUserSession, controller, J)V that names
+     * the task it queues, and the app's one reader of WifiManager.getScanResults. Both are taken only while the app's
+     * single WifiManager.startScan sits in the class that scheduler instantiates, its single BluetoothLeScanner.startScan
+     * sits in a class holding the BleScanOperation that queued class drives, and the reader has the shape
+     * scanResultReader checks. Mirrors NearbyScans.kt.
+     */
+    static List<Method> nearbyScans(List<ClassDef> classes) {
+        final String controller = "Lcom/facebook/location/foreground/ForegroundLocationFrameworkController;";
+        final String operation = "Lcom/facebook/blescan/BleScanOperation;";
+        var schedulers = new ArrayList<Method>();
+        var wifi = new ArrayList<ClassDef>();
+        var bluetooth = new ArrayList<ClassDef>();
+        var readers = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (method.getImplementation() == null) continue;
+            if (controller.equals(cls.getType()) && AccessFlags.STATIC.isSet(method.getAccessFlags()) && "V".equals(method.getReturnType())) {
+                var params = new ArrayList<String>();
+                for (var t : method.getParameterTypes()) params.add(t.toString());
+                if (params.equals(List.of("Landroid/content/Context;", "Lcom/facebook/auth/usersession/FbUserSession;", controller, "J")) &&
+                    literals(method).contains("ForegroundLocationFrameworkController_scheduleRequestLocationWithDelay")) schedulers.add(method);
+            }
+            for (var i : instructions(method)) {
+                if (!(i instanceof ReferenceInstruction ri && ri.getReference() instanceof MethodReference call)) continue;
+                if (readsScanResults(call)) readers.add(method);
+                if (!"startScan".equals(call.getName())) continue;
+                if ("Landroid/net/wifi/WifiManager;".equals(call.getDefiningClass())) wifi.add(cls);
+                if ("Landroid/bluetooth/le/BluetoothLeScanner;".equals(call.getDefiningClass())) bluetooth.add(cls);
+            }
+        }
+        if (schedulers.size() != 1 || wifi.size() != 1 || bluetooth.size() != 1 || readers.size() != 1 || !scanResultReader(readers.get(0))) return List.of();
+        boolean queued = false;
+        for (var i : instructions(schedulers.get(0)))
+            if (i.getOpcode() == Opcode.NEW_INSTANCE && ((ReferenceInstruction) i).getReference() instanceof TypeReference type &&
+                type.getType().equals(wifi.get(0).getType())) queued = true;
+        boolean holdsOperation = false;
+        for (var field : bluetooth.get(0).getFields()) if (operation.equals(field.getType())) holdsOperation = true;
+        boolean drives = false;
+        for (var method : wifi.get(0).getMethods()) if (calls(method, operation)) drives = true;
+        return queued && holdsOperation && drives ? List.of(schedulers.get(0), readers.get(0)) : List.of();
+    }
+
+    static boolean readsScanResults(MethodReference call) {
+        return "Landroid/net/wifi/WifiManager;".equals(call.getDefiningClass()) && "getScanResults".equals(call.getName());
+    }
+
+    /**
+     * The scan-result reader's shape: an instance (Z)ArrayList with one getScanResults call that also returns a register
+     * it loads with null, the answer it gives when Messenger may not read the list.
+     */
+    static boolean scanResultReader(Method method) {
+        if (AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"Ljava/util/ArrayList;".equals(method.getReturnType())) return false;
+        var params = new ArrayList<String>();
+        for (var t : method.getParameterTypes()) params.add(t.toString());
+        if (!params.equals(List.of("Z"))) return false;
+        var nulls = new HashSet<Integer>();
+        var reads = 0;
+        for (var i : instructions(method)) {
+            if (i.getOpcode() == Opcode.CONST_4 && ((NarrowLiteralInstruction) i).getNarrowLiteral() == 0) nulls.add(((OneRegisterInstruction) i).getRegisterA());
+            if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof MethodReference call && readsScanResults(call)) reads++;
+        }
+        if (reads != 1) return false;
+        for (var i : instructions(method))
+            if (i.getOpcode() == Opcode.RETURN_OBJECT && nulls.contains(((OneRegisterInstruction) i).getRegisterA())) return true;
+        return false;
+    }
+
     static Map<String, List<Method>> findControls(List<ClassDef> classes) {
         var found = new LinkedHashMap<String, List<Method>>();
         for (var key : CONTROL_KEYS) found.put(key, new ArrayList<>());
@@ -3060,6 +3341,8 @@ public class CompatReport {
         found.get("attribution_uploads").addAll(attributionUploads(classes));
         found.get("ad_events").addAll(adEvents(classes));
         found.get("mqtt_telemetry").addAll(mqttTelemetry(classes));
+        found.get("pinned_chats").addAll(pinnedChatLimit(classes));
+        found.get("nearby_scans").addAll(nearbyScans(classes));
         found.get("text_style").addAll(textStyleField(classes));
         found.get("message_log").addAll(messageLogHooks(classes));
         found.get("auto_reply").addAll(messageLogHooks(classes));
@@ -3068,6 +3351,7 @@ public class CompatReport {
         for (var cls : classes) for (var method : cls.getMethods())
             if (!screenshotViewerSites(method).isEmpty()) found.get("screenshot_viewers").add(method);
         var jewelCandidates = new ArrayList<Map.Entry<Method, Set<String>>>();
+        var browserChecks = new ArrayList<Method>();
 
         boolean hasAdItem = false, hasImmutableCopy = false;
         for (var cls : classes) {
@@ -3318,9 +3602,12 @@ public class CompatReport {
                         BUBBLE_ROLLOUTS.contains(flag.getWideLiteral()))) found.get("bubble_mode").add(method);
 
                 // browser
-                if ("Z".equals(method.getReturnType()) &&
-                    strings.contains("iab_skipped_reason") && strings.contains("user_prefers_external")) {
+                if ("Z".equals(method.getReturnType()) && strings.contains("iab_skipped_reason") && strings.contains("user_prefers_external")) {
                     found.get("browser").add(method);
+                }
+                if ("Z".equals(method.getReturnType()) && MESSENGER_BROWSER_LAUNCHER.equals(cls.getType()) && !isStatic &&
+                    paramTypes.equals(List.of("Landroid/net/Uri;", BUBBLE_SESSION))) {
+                    browserChecks.add(method);
                 }
 
                 // people_jewel, kept once discovery knows the preference getter. It takes the suggestions logger, then its owner.
@@ -3352,9 +3639,8 @@ public class CompatReport {
                     if (secureFlag && addFlags) found.get("allow_screenshot").add(method);
                 }
 
-                // keep_unsent
-                if ("V".equals(method.getReturnType()) && paramTypes.size() == 3 &&
-                    "Landroid/content/Intent;".equals(paramTypes.get(0)) &&
+                // keep_unsent: 582's instance (Intent, session, String) handler, or 583's static one that adds the extras Map
+                if ("V".equals(method.getReturnType()) && paramTypes.equals(isStatic ? STATIC_REVOKE_HANDLER : REVOKE_HANDLER) &&
                     strings.stream().anyMatch(s -> s.contains("ACTION_REVOKE_MESSAGE"))) {
                     found.get("keep_unsent").add(method);
                 }
@@ -3511,8 +3797,9 @@ public class CompatReport {
                     found.get("people_inbox_refresh").add(method);
                 }
 
-                // avatar_tabs: the sticker keyboard's tab list, filled inline in a void composer factory method.
-                if ("V".equals(method.getReturnType()) &&
+                // avatar_tabs: the sticker keyboard's tab list, filled inline in a void composer factory method
+                // that copies it into a builder once.
+                if ("V".equals(method.getReturnType()) && keyboardTabCopies(refs) == 1 &&
                     "Lcom/facebook/messaging/msys/thread/composer/configuration/xapp/BaseXappComposerConfigurationFactory;".equals(cls.getType()) &&
                     refs.stream().anyMatch(r -> r.toString().startsWith(
                         "Lcom/facebook/xapp/messaging/composer/avatar/composertab/event/ActivateAvatarSticker;->")) &&
@@ -3605,6 +3892,8 @@ public class CompatReport {
                 }
             }
         }
+        // 583 dropped the skip-reason logging, so only a build without it falls back to the launcher's (Uri, session) check.
+        if (found.get("browser").isEmpty()) found.get("browser").addAll(browserChecks);
         // The Notifications tab reads its preference through the getter the external-browser check uses.
         var read = browserPreferenceRead(found.get("browser"));
         for (var candidate : jewelCandidates) {
@@ -4194,6 +4483,15 @@ public class CompatReport {
                 blockers.add("Material You theme");
                 anyFail = true;
             }
+        }
+
+        // Use system emoji's chat list Like is optional: the switch applies without it, so a miss only warns
+        {
+            var byType = new HashMap<String, ClassDef>();
+            classes.forEach(c -> byType.put(c.getType(), c));
+            var snippet = likeSnippetInit(byType);
+            if (snippet != null) System.out.println("[PASS] Use system emoji: chat list Like\n       " + snippet);
+            else System.out.println("[WARN] Use system emoji: the chat list snippet changed, so a Like there can still show as a box until Messenger's emoji font loads");
         }
 
         // Check each control patch: against the recorded build, or for a new build, that it resolves

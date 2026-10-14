@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.security.KeyStore;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -192,7 +194,7 @@ public final class MessageLog {
     static boolean repeated(String thread, String id, String text, long now) {
         boolean hasId = id != null && !id.isEmpty();
         // Only a digest of the words is held, and only for the window.
-        String words = text == null ? "" : Integer.toHexString(text.hashCode()) + ':' + text.length();
+        String words = text == null ? "" : digest(text);
         String loose = thread + '\u0001' + words;
         String unpaired = thread + '\u0002' + words + '\u0003';
         synchronized (PENDING) {
@@ -218,6 +220,29 @@ public final class MessageLog {
             }
             remember(loose, now);
             return false;
+        }
+    }
+
+    /**
+     * SHA-256 of the words. A 32-bit hash let two different messages ("Aa" and "BB" share one) pass for the same message
+     * and lose the second. It reads the UTF-16 code units as they are, since encoding to UTF-8 would turn a lone
+     * surrogate into "?" and make two different texts one.
+     */
+    private static String digest(String text) {
+        try {
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            for (int i = 0; i < text.length(); i++) {
+                char unit = text.charAt(i);
+                sha.update((byte) (unit >> 8));
+                sha.update((byte) unit);
+            }
+            byte[] hash = sha.digest();
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) hex.append(Character.forDigit((b >> 4) & 0xf, 16)).append(Character.forDigit(b & 0xf, 16));
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // Every Java and Android runtime must provide SHA-256.
+            throw new IllegalStateException(e);
         }
     }
 

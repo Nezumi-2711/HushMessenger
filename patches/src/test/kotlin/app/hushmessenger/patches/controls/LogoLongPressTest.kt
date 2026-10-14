@@ -31,13 +31,19 @@ import kotlin.test.assertTrue
 private const val CHATS_TITLE = "LX/2R7;"
 private const val MORE_TITLE = "LX/3E4;"
 private const val TITLE_HANDLER = "LX/49Y;"
-private const val MORE_TAB = "Lcom/facebook/messaging/moretab/plugins/core/tabcontent/MoreTabContentImplementation;"
+private const val MORE_TAB = MORE_TAB_CONTENT
 internal const val SYNTHETIC_LOGO_LONG_PRESS = "$CHATS_TITLE->CY1(Landroid/content/Context;)V"
+internal const val SYNTHETIC_MENU_TITLE_LONG_PRESS = "$MORE_TITLE->CY1(Landroid/content/Context;)V"
 private val FINAL_PUBLIC = AccessFlags.PUBLIC.value or AccessFlags.FINAL.value
 
-/** Where the Chats title's long press handler lives in the real builds: 2R7.CY1 in twelve, 2R6.CXu in 706 and 707. */
-private const val NATIVE_LOGO_LONG_PRESS = "LX/2R7;->CY1(Landroid/content/Context;)V"
-private const val NATIVE_LOGO_LONG_PRESS_706 = "LX/2R6;->CXu(Landroid/content/Context;)V"
+/**
+ * Where the Chats and Menu titles' long press handlers live in the real builds: 2R3.Ccw and 3Df.Ccw in five, 2R3.Ccn
+ * and 3DZ.Ccn in 346611351.
+ */
+private const val NATIVE_LOGO_LONG_PRESS = "LX/2R3;->Ccw(Landroid/content/Context;)V"
+private const val NATIVE_LOGO_LONG_PRESS_351 = "LX/2R3;->Ccn(Landroid/content/Context;)V"
+private const val NATIVE_MENU_TITLE_LONG_PRESS = "LX/3Df;->Ccw(Landroid/content/Context;)V"
+private const val NATIVE_MENU_TITLE_LONG_PRESS_351 = "LX/3DZ;->Ccn(Landroid/content/Context;)V"
 
 /**
  * The Chats title's long press handler as 582 writes it: a null check, then the TitleShortcut plugin lookup with the
@@ -78,7 +84,7 @@ private fun titleClass(handler: MutableMethod, field: String = FB_USER_SESSION, 
         extraFields = listOf(ImmutableField(handler.definingClass, "A00", field, AccessFlags.FINAL.value, null, null, null)))
 
 /**
- * The Chats and Menu tabs' title long press handlers as every 582 build has them, and a class that holds the session and
+ * The Chats and Menu tabs' title long press handlers as every supported build has them, and a class that holds the session and
  * takes a Context but never asks the title shortcut plugin.
  */
 internal fun chatsTitleClasses(chats: MutableMethod = titleHandler()): List<MutableClass> = listOf(
@@ -106,12 +112,27 @@ private fun warnings(action: () -> Unit): List<String> {
 }
 
 class LogoLongPressTest {
-    @Test fun onlyTheChatsTitleHandlerIsFound() {
+    @Test fun eachTitleFindsOnlyItsOwnHandler() {
         val classes = chatsTitleClasses()
         assertEquals(listOf(SYNTHETIC_LOGO_LONG_PRESS), findLogoLongPress(classes).map { it.hookId() })
+        assertEquals(listOf(SYNTHETIC_MENU_TITLE_LONG_PRESS), findLogoLongPress(classes, MENU_TAB_TITLE).map { it.hookId() })
         // A second handler of the same shape is counted, so the patch can refuse to pick between them.
         assertEquals(2, findLogoLongPress(classes + titleClass(titleHandler("LX/2R6;"))).size)
+        assertEquals(2, findLogoLongPress(classes + titleClass(titleHandler("LX/3E5;", MORE_TITLE_BODY), MORE_TAB), MENU_TAB_TITLE).size)
         assertEquals(emptyList(), findLogoLongPress(listOf(titleClass(titleHandler(), interfaces = emptyList()))))
+        assertEquals(emptyList(), findLogoLongPress(listOf(titleClass(titleHandler(MORE_TITLE, MORE_TITLE_BODY), MORE_TAB, emptyList())), MENU_TAB_TITLE))
+    }
+
+    @Test fun theMenuTitleGetsTheSameCallBeforeItsReturn() {
+        val handler = titleHandler(MORE_TITLE, MORE_TITLE_BODY)
+        val stock = handler.code()
+        handler.injectLogoLongPress()
+        val code = handler.code()
+        val call = code[stock.lastIndex]
+        assertEquals(LOGO_LONG_PRESSED, (call as ReferenceInstruction).reference.toString())
+        assertEquals(4, (call as RegisterRangeInstruction).startRegister)
+        assertEquals(stock.dropLast(1).shape(), code.take(stock.size - 1).shape())
+        assertEquals(Opcode.RETURN_VOID, code.last().opcode)
     }
 
     @Test fun theCallGoesInAfterMessengersOwnHandlingOfThePress() {
@@ -171,6 +192,10 @@ class LogoLongPressTest {
         var picked: Method? = null
         assertEquals(emptyList(), warnings { picked = logoLongPressSite(listOf(one)) })
         assertSame(one, picked)
+        // The Menu title's warning names the Menu title, not the logo.
+        val logged = warnings { picked = logoLongPressSite(emptyList(), MENU_TAB_TITLE) }
+        assertNull(picked)
+        assertTrue("found 0 Menu tab title long press handlers instead of one, so a long press on the Menu tab's title won't open" in logged.single())
     }
 
     @Test fun theBuiltExtensionHasTheCallThePatchAdds() {
@@ -189,25 +214,31 @@ class LogoLongPressTest {
         }
     }
 
-    @Test fun everySupportedBuildHasOneChatsTitleHandlerToHook() {
+    @Test fun everySupportedBuildHasOneHandlerForEachTitleToHook() {
         val root = System.getenv("HUSH_NATIVE_FIXTURES")
         assumeTrue(root != null, "Set HUSH_NATIVE_FIXTURES to the exact stock fixture directory")
         val apks = Files.list(Path.of(root!!)).use { it.filter { p -> p.toString().endsWith(".apk") }.sorted().toList() }
         assertEquals(controlProfiles.size, apks.size)
         for (apk in apks) {
             val code = apk.fileName.toString().substringBeforeLast(".apk").substringAfterLast('-')
-            val expected = if (controlProfileFor(code) === PROFILE_346415706) NATIVE_LOGO_LONG_PRESS_706 else NATIVE_LOGO_LONG_PRESS
+            val in351 = controlProfileFor(code) === PROFILE_346611351
             val dex = DexFileFactory.loadDexContainer(apk.toFile(), Opcodes.forApi(35))
-            val sites = findLogoLongPress(dex.dexEntryNames.flatMap { dex.getEntry(it)!!.dexFile.classes })
-            assertEquals(listOf(expected), sites.map { it.hookId() }, code)
-            val method = MutableMethod(assertNotNull(logoLongPressSite(sites), code))
-            val stock = method.code().map { it.opcode }
-            method.injectLogoLongPress()
-            val after = method.code()
-            val call = after[stock.lastIndex]
-            assertEquals(LOGO_LONG_PRESSED, (call as ReferenceInstruction).reference.toString(), code)
-            assertEquals(method.parameterRegister(1), (call as RegisterRangeInstruction).startRegister, code)
-            assertEquals(stock, after.filterIndexed { index, _ -> index != stock.lastIndex }.map { it.opcode }, code)
+            val classes = dex.dexEntryNames.flatMap { dex.getEntry(it)!!.dexFile.classes }
+            for ((title, expected) in listOf(
+                CHATS_TAB_TITLE to if (in351) NATIVE_LOGO_LONG_PRESS_351 else NATIVE_LOGO_LONG_PRESS,
+                MENU_TAB_TITLE to if (in351) NATIVE_MENU_TITLE_LONG_PRESS_351 else NATIVE_MENU_TITLE_LONG_PRESS,
+            )) {
+                val sites = findLogoLongPress(classes, title)
+                assertEquals(listOf(expected), sites.map { it.hookId() }, "$code ${title.handler}")
+                val method = MutableMethod(assertNotNull(logoLongPressSite(sites, title), code))
+                val stock = method.code().map { it.opcode }
+                method.injectLogoLongPress()
+                val after = method.code()
+                val call = after[stock.lastIndex]
+                assertEquals(LOGO_LONG_PRESSED, (call as ReferenceInstruction).reference.toString(), code)
+                assertEquals(method.parameterRegister(1), (call as RegisterRangeInstruction).startRegister, code)
+                assertEquals(stock, after.filterIndexed { index, _ -> index != stock.lastIndex }.map { it.opcode }, code)
+            }
         }
     }
 }

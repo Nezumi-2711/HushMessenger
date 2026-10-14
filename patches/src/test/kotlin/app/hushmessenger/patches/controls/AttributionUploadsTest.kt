@@ -60,7 +60,7 @@ class AttributionUploadsTest {
     }
 
     @Test fun everyProfileHooksTheSameNamedWorker() {
-        for (profile in listOf(SYNTHETIC_PROFILE, BASE_PROFILE, PROFILE_346415706)) {
+        for (profile in listOf(SYNTHETIC_PROFILE, BASE_PROFILE, PROFILE_346611351)) {
             assertEquals(setOf(ATTRIBUTION_WORKER), profile.hooks.getValue(ATTRIBUTION_UPLOADS))
             activeProfile = profile
             validateControls(findControls(attributionUploadFixture()), setOf(ATTRIBUTION_UPLOADS))

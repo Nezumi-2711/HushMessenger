@@ -40,7 +40,7 @@ public class SettingsNavigationTest {
             assertEquals(View.GONE, root.findViewWithTag("empty_state").getVisibility());
             assertTrue(root.findViewWithTag("category_all").isSelected());
             root.findViewWithTag("category_more").performClick();
-            assertEquals(ExpectedTotals.shown(22), count.getText().toString());
+            assertEquals(ExpectedTotals.shown(23), count.getText().toString());
             assertEquals(View.VISIBLE, ((View) root.findViewWithTag("facebook").getParent()).getVisibility());
         }
     }
@@ -97,7 +97,8 @@ public class SettingsNavigationTest {
             View root = screen.get().getWindow().getDecorView();
             ((Switch) root.findViewWithTag("people")).performClick();
             root.findViewWithTag("category_inbox").performClick();
-            ((EditText) root.findViewWithTag("find_control")).setText("People You");
+            // Each word on its own: "People You" alone also finds Hide growth prompts ("people", "your").
+            ((EditText) root.findViewWithTag("find_control")).setText("People You May");
             root.findViewWithTag("tab_app").performClick();
             assertEquals(View.GONE, root.findViewWithTag("controls_page").getVisibility());
             assertEquals(View.VISIBLE, root.findViewWithTag("app_page").getVisibility());
@@ -111,7 +112,7 @@ public class SettingsNavigationTest {
             View root = screen.get().getWindow().getDecorView();
             assertEquals(View.VISIBLE, root.findViewWithTag("app_page").getVisibility());
             root.findViewWithTag("tab_controls").performClick();
-            assertEquals("People You", ((EditText) root.findViewWithTag("find_control")).getText().toString());
+            assertEquals("People You May", ((EditText) root.findViewWithTag("find_control")).getText().toString());
             assertTrue(root.findViewWithTag("category_inbox").isSelected());
             assertEquals(ExpectedTotals.shown(1), ((TextView) root.findViewWithTag("search_status")).getText().toString());
             assertTrue(((Switch) root.findViewWithTag("people")).isChecked());
@@ -148,7 +149,9 @@ public class SettingsNavigationTest {
                 assertTrue(control.getMinimumWidth() >= 48 * density);
                 assertTrue(((View) control.getParent()).getPaddingTop() > 0);
             }
-            assertTrue(root.findViewWithTag("ads").getContentDescription().toString().contains("Experimental"));
+            for (String key : SettingsActivity.EXPERIMENTAL) {
+                assertTrue(key, root.findViewWithTag(key).getContentDescription().toString().contains("Experimental"));
+            }
         }
     }
 

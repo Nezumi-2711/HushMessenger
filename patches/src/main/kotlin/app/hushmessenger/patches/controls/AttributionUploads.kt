@@ -54,5 +54,5 @@ internal fun MutableMethod.validateAttributionUpload() {
  */
 internal fun MutableMethod.injectAttributionUpload() {
     validateAttributionUpload()
-    injectSwitch("stopAttributionUploads", "0x0")
+    injectSwitch("$SETTINGS->stopAttributionUploads()Z", "0x0")
 }

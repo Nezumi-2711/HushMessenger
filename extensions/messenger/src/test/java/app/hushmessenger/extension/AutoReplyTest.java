@@ -67,12 +67,12 @@ public class AutoReplyTest {
         AutoReply.save(Settings.preferences, rules, groups);
     }
 
-    /** A chat notification the way Messenger posts one: tagged with the chat's key, with a Reply action. */
-    private void notification(String thread) {
-        notification(thread, null);
+    /** A chat notification the way Messenger posts one: tagged with the chat's key, with a Reply action. Returns that action's token. */
+    private PendingIntent notification(String thread) {
+        return notification(thread, null);
     }
 
-    private void notification(String thread, Notification.Style style) {
+    private PendingIntent notification(String thread, Notification.Style style) {
         RemoteInput input = new RemoteInput.Builder("reply_text").setLabel("Reply").build();
         PendingIntent intent = PendingIntent.getBroadcast(context, 0, new Intent(REPLY_ACTION),
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
@@ -81,6 +81,7 @@ public class AutoReplyTest {
             PendingIntent.getBroadcast(context, 1, new Intent("app.hushmessenger.test.READ"), PendingIntent.FLAG_IMMUTABLE)).build();
         manager.notify(thread, thread.hashCode(), new Notification.Builder(context, "chats")
             .setSmallIcon(android.R.drawable.sym_def_app_icon).setContentTitle("Ana").setStyle(style).addAction(read).addAction(reply).build());
+        return intent;
     }
 
     /** What the Reply action received, or null when nothing was sent. */
@@ -225,6 +226,56 @@ public class AutoReplyTest {
         assertFalse(AutoReply.lastReply.containsKey(CHAT));
         notification(CHAT);
         assertTrue(AutoReply.answer("hello", CHAT, null));
+    }
+
+    /** A Reply token Messenger canceled sends nothing and holds no cooldown, so the next message in the chat is answered. */
+    @Test public void aCanceledReplyTokenLeavesNoCooldown() {
+        replies(false, "", "Away");
+        notification(CHAT).cancel();
+        assertFalse(AutoReply.answer("hello", CHAT, "mid.1"));
+        assertNull(sent());
+        assertFalse(AutoReply.lastReply.containsKey(CHAT));
+        now[0] += 1_000;
+        notification(CHAT);
+        assertTrue(AutoReply.answer("hello again", CHAT, "mid.2"));
+        assertEquals("Away", sent());
+        // A reply that went out keeps its cooldown.
+        now[0] += 1_000;
+        assertFalse(AutoReply.answer("third", CHAT, "mid.3"));
+        assertTrue(AutoReply.lastReply.containsKey(CHAT));
+    }
+
+    /** A canceled token is usually Messenger replacing the notification, so the one retry answers through the new one. */
+    @Test public void aCanceledReplyTokenIsRetriedOnceThroughTheReplacement() {
+        replies(false, "", "Away");
+        notification(CHAT).cancel();
+        AutoReply.received("hello", CHAT, "mid.1");
+        runQueued();
+        assertNull(sent());
+        assertEquals(1, queued.size());
+        assertEquals(1, AutoReply.pending());
+        // The sync copy of the same message is dropped as seen, and the retry answers it.
+        notification(CHAT);
+        AutoReply.received("hello", CHAT, "mid.1");
+        assertEquals(1, queued.size());
+        runQueued();
+        assertEquals("Away", sent());
+        assertTrue(queued.isEmpty());
+        assertEquals(0, AutoReply.pending());
+    }
+
+    /** Canceled on the retry too: nothing is sent, nothing waits, and no cooldown is left behind. */
+    @Test public void aRetryThatIsCanceledAgainGivesUpCleanly() {
+        replies(false, "", "Away");
+        notification(CHAT).cancel();
+        AutoReply.received("hello", CHAT, "mid.1");
+        runQueued();
+        notification(CHAT).cancel();
+        runQueued();
+        assertNull(sent());
+        assertTrue(queued.isEmpty());
+        assertEquals(0, AutoReply.pending());
+        assertFalse(AutoReply.lastReply.containsKey(CHAT));
     }
 
     @Test public void pauseAndOffSendNothing() {

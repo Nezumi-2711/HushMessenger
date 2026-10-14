@@ -41,6 +41,8 @@
         <meta-data android:name="hush.feature.attribution_uploads" android:value="true" />
         <meta-data android:name="hush.feature.ad_events" android:value="true" />
         <meta-data android:name="hush.feature.mqtt_telemetry" android:value="true" />
+        <meta-data android:name="hush.feature.pinned_chats" android:value="true" />
+        <meta-data android:name="hush.feature.nearby_scans" android:value="true" />
         <meta-data android:name="hush.feature.message_log" android:value="true" />
         <meta-data android:name="hush.feature.auto_reply" android:value="true" />
         <meta-data android:name="hush.feature.hide_read_receipts" android:value="true" />

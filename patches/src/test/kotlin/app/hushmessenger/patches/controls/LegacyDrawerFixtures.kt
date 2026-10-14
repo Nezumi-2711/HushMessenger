@@ -11,17 +11,17 @@ import com.android.tools.smali.dexlib2.immutable.ImmutableMethodImplementation
 internal data class DrawerFixtureMapping(
     val provider: String, val getter: String, val row: String, val section: String,
     val dispatcher: String, val iconBase: String, val icon: String, val glyph: String, val enums: String,
-    /** 582's main family builds the Settings icon in place instead of calling the icon's static factory. */
+    /** The Settings icon is built in place instead of coming from the icon's static factory, as one 582 family did. */
     val inlineIcon: Boolean = false,
-    /** 582 builds its QR code row after Settings, from the same row class and its own folder key. */
+    /** 583 builds its QR code row after Settings, from the same row class and its own folder key. */
     val qrRow: Boolean = false,
 )
 
 private fun drawerMapping(refreshOwner: String) = when (refreshOwner) {
     "LX/9rv;" -> DrawerFixtureMapping("LX/CTJ;", "Ax4", "LX/HRf;", "LX/HRe;", "LX/Cfq;", "LX/Imx;", "LX/HNS;", "LX/1hJ;", "LX/0R2;")
-    "LX/9wI;" -> DrawerFixtureMapping("LX/Cdx;", "AyA", "LX/KGS;", "LX/KGU;", "LX/Eqy;", "LX/3YW;", "LX/KGb;", "LX/1hx;", "LX/0Qs;",
-        inlineIcon = true, qrRow = true)
-    "LX/9uz;" -> DrawerFixtureMapping("LX/CdA;", "Ay9", "LX/HGy;", "LX/HH7;", "LX/HJ3;", "LX/IMc;", "LX/HHG;", "LX/1hw;", "LX/0Qs;",
+    "LX/9vp;" -> DrawerFixtureMapping("LX/Cgk;", "B08", "LX/HVv;", "LX/HVy;", "LX/CqN;", "LX/Izq;", "LX/HVn;", "LX/1hx;", "LX/0Qp;",
+        qrRow = true)
+    "LX/9sA;" -> DrawerFixtureMapping("LX/CcU;", "B08", "LX/HSN;", "LX/HSQ;", "LX/CmI;", "LX/IwW;", "LX/HSE;", "LX/1hx;", "LX/0Qp;",
         qrRow = true)
     else -> error("Unrecorded drawer mapping: $refreshOwner")
 }
@@ -59,7 +59,7 @@ private fun drawerConstructor(owner: String, params: List<String>, names: List<S
         append("return-void")
     }, registers = params.size + 2, flags = PUBLIC_CONSTRUCTOR)
 
-/** The Settings icon: built in place for 582's main family, from the icon's static factory otherwise. */
+/** The Settings icon: built in place the way one 582 family did, from the icon's static factory otherwise. */
 private fun settingsIcon(model: DrawerFixtureMapping, broken: String): String {
     val glyph = "${model.glyph}->${if (broken == "glyph") "A64" else "A65"}:${model.glyph}"
     return (if (model.inlineIcon) listOf(
@@ -87,12 +87,12 @@ private fun qrCodeRow(row: String, rowParams: List<String>) = listOf(
     "invoke-direct/range {v0 .. v8}, $row-><init>(${rowParams.joinToString("")})V",
 ).joinToString("\n                ")
 
-/** All five menu targets plus only the native contracts the new factory needs. */
-internal fun legacyDrawerFixture(profile: ControlProfile, broken: String = "none"): LegacyDrawerFixture {
+/** All five menu targets plus only the native contracts the new factory needs. [inlineIcon] overrides the mapping's icon shape. */
+internal fun legacyDrawerFixture(profile: ControlProfile, broken: String = "none", inlineIcon: Boolean? = null): LegacyDrawerFixture {
     val ids = profile.hooks.getValue("menu_settings")
     val refresh = ids.single { it.endsWith("()V") }
     val owner = refresh.substringBefore("->")
-    val model = drawerMapping(owner)
+    val model = drawerMapping(owner).let { if (inlineIcon == null) it else it.copy(inlineIcon = inlineIcon) }
     val binder = ids.single { it.contains(";I)V") }.substringBefore("->")
     val rowParams = listOf(FIXTURE_CONTEXT, model.dispatcher, model.iconBase, DRAWER_KEY, DRAWER_METADATA,
         FIXTURE_INTEGER, FIXTURE_STRING, FIXTURE_LIST)

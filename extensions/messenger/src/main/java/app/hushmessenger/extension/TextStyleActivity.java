@@ -37,20 +37,17 @@ public final class TextStyleActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        String styled = null;
+        String styled = null, why = null;
         try {
             styled = styledFor(getIntent());
+            if (styled == null) why = whyUnchanged(getIntent());
         } catch (RuntimeException error) {
             Settings.hookFailedPrivately(KEY, "Can't style the selected text", error);
         }
         if (styled != null) setResult(RESULT_OK, new Intent().putExtra(Intent.EXTRA_PROCESS_TEXT, styled));
         else {
             setResult(RESULT_CANCELED);
-            // Android offers the entries over text you can't edit too, like a received message, so say why nothing changed.
-            // wouldUse, since nothing was styled and this mustn't count as a use.
-            if (readOnly(getIntent()) && Settings.wouldUse(KEY)) {
-                Toast.makeText(getApplicationContext(), new SettingsText(this).get("text_style_read_only"), Toast.LENGTH_SHORT).show();
-            }
+            if (why != null) Toast.makeText(getApplicationContext(), new SettingsText(this).get(why), Toast.LENGTH_SHORT).show();
         }
         finish();
     }
@@ -59,16 +56,36 @@ public final class TextStyleActivity extends Activity {
         return intent != null && intent.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, false);
     }
 
+    /** The style of the menu entry this intent came through, or 0 for any other entry. */
+    private static int style(Intent intent) {
+        ComponentName entry = intent == null ? null : intent.getComponent();
+        return entry == null ? 0 : BOLD.equals(entry.getClassName()) ? BOLD_STYLE
+            : ITALIC.equals(entry.getClassName()) ? ITALIC_STYLE : 0;
+    }
+
     /** What the menu entry this intent came through makes of its selection, or null to leave the text as it is. */
     static String styledFor(Intent intent) {
-        ComponentName entry = intent == null ? null : intent.getComponent();
-        int style = entry == null ? 0 : BOLD.equals(entry.getClassName()) ? BOLD_STYLE
-            : ITALIC.equals(entry.getClassName()) ? ITALIC_STYLE : 0;
+        int style = style(intent);
         CharSequence selected = style == 0 ? null : intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
         // A read-only selection has nowhere to put the result.
         if (selected == null || readOnly(intent)) return null;
         String styled = restyle(selected, style);
         return styled != null && Settings.enabled(KEY) ? styled : null;
+    }
+
+    /**
+     * The tip that says why an entry left the selection as it was, or null to stay quiet: off, Pause, another entry and
+     * an empty selection say nothing. wouldUse, since nothing was styled and this mustn't count as a use.
+     */
+    static String whyUnchanged(Intent intent) {
+        if (intent == null || !Settings.wouldUse(KEY)) return null;
+        // Android offers the entries over text you can't edit too, like a received message.
+        if (readOnly(intent)) return "text_style_read_only";
+        int style = style(intent);
+        CharSequence selected = style == 0 ? null : intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
+        // Only letters A to Z, accented or not, and digits for Bold have styled forms, so other scripts stay as they are.
+        if (selected == null || selected.length() == 0 || restyle(selected, style) != null) return null;
+        return style == BOLD_STYLE ? "text_style_bold_none" : "text_style_italic_none";
     }
 
     /** One letter or digit with the combining marks after it, or anything else on its own. */

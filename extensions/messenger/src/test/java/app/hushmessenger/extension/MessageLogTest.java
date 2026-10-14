@@ -240,6 +240,58 @@ public class MessageLogTest {
         assertEquals(2, entries.stream().filter(entry -> entry.text.equals("yes")).count());
     }
 
+    /** "Aa" and "BB" share String.hashCode() and length, and they're still two messages, with or without ids. */
+    @Test public void wordsThatShareAHashAreStillDifferentMessages() throws Exception {
+        assertEquals("Aa".hashCode(), "BB".hashCode());
+        // Times only move forward here: a capture from the future would be dropped as a clock set back.
+        assertFalse(MessageLog.repeated("t", "", "Aa", 1_000));
+        assertFalse(MessageLog.repeated("t", "", "BB", 1_001));
+        assertFalse(MessageLog.repeated("u", "mid.1", "Aa", 1_002));
+        assertFalse(MessageLog.repeated("u", null, "BB", 1_003));
+        // The real second copies still pair, once each.
+        assertTrue(MessageLog.repeated("t", null, "Aa", 1_004));
+        assertTrue(MessageLog.repeated("t", null, "BB", 1_005));
+        assertTrue(MessageLog.repeated("u", null, "Aa", 1_006));
+        assertFalse(MessageLog.repeated("u", null, "Aa", 1_007));
+        // A lone surrogate isn't folded into "?" on the way to the digest.
+        assertFalse(MessageLog.repeated("v", null, "x\uD800", 1_008));
+        assertFalse(MessageLog.repeated("v", null, "x?", 1_009));
+
+        MessageLog.forgetCaptures();
+        MessageLog.storeNow("Aa", "GROUP:7");
+        MessageLog.storeNow("BB", "GROUP:7");
+        MessageLog.storeNow("Aa", "GROUP:8", "mid.2");
+        MessageLog.storeNow("BB", "GROUP:8");
+        assertEquals(4, MessageLog.entries().size());
+    }
+
+    /** The recent record keeps at most 2 * MAX_ENTRIES keys and drops the oldest first. */
+    @Test public void theRecentRecordDropsItsOldestCapturesPastItsBound() {
+        int bound = 2 * MessageLog.MAX_ENTRIES;
+        // A capture with an id holds two keys. With the rest of the record full, its second copy still pairs...
+        assertFalse(MessageLog.repeated("t", "mid.old", "x", 1_000));
+        for (int i = 0; i < bound - 2; i++) assertFalse(MessageLog.repeated("t", null, "filler " + i, 1_000));
+        assertTrue(MessageLog.repeated("t", "mid.old", "x", 1_000));
+        // ...and one capture more pushes it out, so it reads as new.
+        MessageLog.forgetCaptures();
+        assertFalse(MessageLog.repeated("t", "mid.old", "x", 1_000));
+        for (int i = 0; i < bound - 1; i++) assertFalse(MessageLog.repeated("t", null, "filler " + i, 1_000));
+        assertFalse(MessageLog.repeated("t", "mid.old", "x", 1_000));
+    }
+
+    /** Clear keeps the recent record, so the second copy of a message from before a Clear isn't logged after it. */
+    @Test public void theSecondCopyOfAMessageFromBeforeAClearStaysOut() throws Exception {
+        MessageLog.storeNow("on my way", "ONE_TO_ONE:1:2", "mid.1");
+        MessageLog.storeNow("see you", "ONE_TO_ONE:1:2");
+        assertTrue(MessageLog.clear());
+        MessageLog.storeNow("on my way", "ONE_TO_ONE:1:2", "mid.1");
+        MessageLog.storeNow("see you", "ONE_TO_ONE:1:2", "mid.2");
+        MessageLog.storeNow("new after the clear", "ONE_TO_ONE:1:2", "mid.3");
+        List<MessageLog.Entry> entries = MessageLog.entries();
+        assertEquals(1, entries.size());
+        assertEquals("new after the clear", entries.get(0).text);
+    }
+
     @Test public void theSameIdAfterTheWindowIsANewCapture() {
         long start = 1_000;
         assertFalse(MessageLog.repeated("t", "mid.1", "a", start));

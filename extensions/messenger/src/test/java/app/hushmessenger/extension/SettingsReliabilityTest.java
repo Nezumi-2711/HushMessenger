@@ -422,6 +422,8 @@ public class SettingsReliabilityTest {
         var app = RuntimeEnvironment.getApplication();
         var info = app.getPackageManager().getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_META_DATA);
         info.applicationInfo.metaData.putBoolean("hush.feature.menu_row", true);
+        // The longest card text: the Menu row and the logo both.
+        info.applicationInfo.metaData.putBoolean("hush.feature." + Settings.LOGO_LONG_PRESS, true);
         Shadows.shadowOf(app.getPackageManager()).installPackage(info);
         RuntimeEnvironment.setFontScale(2f);
         // A short window only has to keep every line; a phone-sized one shows the whole card text.

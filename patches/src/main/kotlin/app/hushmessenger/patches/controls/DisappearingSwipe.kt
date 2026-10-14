@@ -48,5 +48,5 @@ internal fun MutableMethod.validateDisappearingSwipe() {
  */
 internal fun MutableMethod.injectDisappearingSwipe() {
     validateDisappearingSwipe()
-    injectSwitch("blockDisappearingSwipe", "0x0")
+    injectSwitch("$SETTINGS->blockDisappearingSwipe()Z", "0x0")
 }

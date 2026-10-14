@@ -33,22 +33,27 @@ private val FINAL = AccessFlags.PUBLIC.value or AccessFlags.FINAL.value
 private val SEEN_BODY = "const-string v0, \"$CHAT_SEEN_JOB\"\nconst-string v1, \"$CHAT_SEEN_TRACE\"\nreturn-void"
 private const val DISPATCH = "LX/Dispatch;->send(${FB_USER_SESSION}LX/Enum;LX/Message;Ljava/lang/String;Ljava/lang/String;)V"
 
-/** Keep the native instruction positions while omitting unrelated composer logic. */
-private fun sendBody(changes: Map<Int, String> = emptyMap()): String {
-    val c = MutableList(402) { "nop" }
+/** Keep the native instruction positions while omitting unrelated composer logic. The default is 582's body. */
+private fun sendBody(changes: Map<Int, String> = emptyMap(), shape: ReplyReadShape = REPLY_READ_SHAPES[0]): String {
+    val c = MutableList(shape.size) { "nop" }
+    val n = shape.nullThread
+    val d = shape.dispatch
     mapOf(
         1 to "const-string v0, \"AdapterSender\"", 2 to "const-string v0, \"meta_ai_invocation\"",
-        4 to "move-object/from16 v7, p11", 13 to "move-object/from16 v20, p4", 25 to "move-object/from16 v10, p0",
-        31 to "const/4 v5, 0x0", 32 to "if-eqz p7, :null_thread",
-        33 to "invoke-interface/range {p7 .. p7}, LX/ThreadProvider;->thread()$THREAD_KEY_TYPE", 34 to "move-result-object v12",
-        35 to ":thread_ready\nnop", 36 to "goto/16 :send_stage", 72 to "goto :thread_ready", 73 to ":null_thread\nmove-object v12, v5", 74 to "goto :thread_ready",
-        234 to ":send_stage\nnop", 236 to "move-object/from16 v11, v20", 237 to "move-object v12, v10", 238 to "move-object v15, v0",
-        239 to "invoke-interface/range {v11 .. v16}, $DISPATCH", 240 to "const/4 v0, 0x0", 241 to "const/4 v1, 0x0", 272 to "return-void", 401 to "return-void",
+        4 to "move-object/from16 v7, p11", shape.composer to "move-object/from16 v20, p4", shape.session to "move-object/from16 v10, p0",
+        n to "const/4 v5, 0x0", n + 1 to "if-eqz p7, :null_thread",
+        n + 2 to "invoke-interface/range {p7 .. p7}, LX/ThreadProvider;->thread()$THREAD_KEY_TYPE", n + 3 to "move-result-object v12",
+        n + 4 to ":thread_ready\nnop", n + 5 to "goto/16 :send_stage", shape.absent - 1 to "goto :thread_ready",
+        shape.absent to ":null_thread\nmove-object v12, v5", shape.absent + 1 to "goto :thread_ready",
+        d - 5 to ":send_stage\nnop", d - 3 to "move-object/from16 v11, v20", d - 2 to "move-object v12, v10", d - 1 to "move-object v15, v0",
+        d to "invoke-interface/range {v11 .. v16}, $DISPATCH", d + 1 to "const/4 v0, 0x0", d + 2 to "const/4 v1, 0x0", d + 33 to "return-void",
+        shape.size - 1 to "return-void",
     ).plus(changes).forEach { (i, value) -> c[i] = value }
     return c.joinToString("\n")
 }
 private fun seen(body: String = SEEN_BODY, registers: Int = 9) = fixtureMethod(SYNTHETIC_CHAT_SEEN, body, registers, STATIC)
-private fun send(changes: Map<Int, String> = emptyMap()) = fixtureMethod(SYNTHETIC_SEND_EVENT, sendBody(changes), 36, STATIC)
+private fun send(changes: Map<Int, String> = emptyMap(), shape: ReplyReadShape = REPLY_READ_SHAPES[0]) =
+    fixtureMethod(SYNTHETIC_SEND_EVENT, sendBody(changes, shape), 36, STATIC)
 private fun Method.code() = implementation!!.instructions.map { ImmutableInstruction.of(it) }
 private fun assertStockCode(before: List<Instruction>, after: List<Instruction>, inserted: Set<Int>, label: String) {
     val positions = after.indices.filter { it !in inserted }
@@ -120,6 +125,28 @@ class ReadReceiptsTest {
         assertEquals("$DISPATCH", (c[240] as ReferenceInstruction).reference.toString())
         assertEquals("$SETTINGS->noteMessageSent(Ljava/lang/Object;Ljava/lang/Object;)V", (c[243] as ReferenceInstruction).reference.toString())
         assertStockCode(before, c, setOf(237, 241, 242, 243), "send dispatcher")
+    }
+
+    /** Messenger 583 drops one parameter check near the top, so the same seam sits four instructions earlier. */
+    @Test fun the583DispatcherGetsTheSameSeamFourInstructionsEarlier() {
+        val shape = REPLY_READ_SHAPES[1]
+        val d = shape.dispatch
+        val method = send(shape = shape)
+        val before = method.code()
+        assertEquals(d, method.validateReplyRead())
+        method.injectReplyRead()
+        val c = method.code()
+        assertEquals(Opcode.MOVE_OBJECT_16, c[d - 2].opcode)
+        assertEquals(DISPATCH, (c[d + 1] as ReferenceInstruction).reference.toString())
+        assertEquals("$SETTINGS->noteMessageSent(Ljava/lang/Object;Ljava/lang/Object;)V", (c[d + 4] as ReferenceInstruction).reference.toString())
+        assertStockCode(before, c, setOf(d - 2, d + 2, d + 3, d + 4), "583 send dispatcher")
+        // A 583 body with the account copied from the wrong parameter is still refused.
+        val wrong = send(mapOf(shape.session to "move-object/from16 v10, p1"), shape)
+        val wrongBefore = wrong.code()
+        assertFailsWith<PatchException> { wrong.injectReplyRead() }
+        assertStockCode(wrongBefore, wrong.code(), emptySet(), "583 wrong account")
+        // So is a body of neither known size.
+        assertFailsWith<PatchException> { fixtureMethod(SYNTHETIC_SEND_EVENT, sendBody() + "\nnop", 36, STATIC).validateReplyRead() }
     }
 
     @Test fun changedIdentityFlowOrLiveScratchRefusesBothHooksBeforeAnyEdit() {
@@ -196,8 +223,9 @@ class ReadReceiptsTest {
             assertEquals(seenBefore, seen.code().drop(5).map { it.opcode }, code)
             val send = MutableMethod(sends.single())
             val sendBefore = send.code()
+            val d = send.validateReplyRead()
             send.injectReplyRead()
-            assertStockCode(sendBefore, send.code(), setOf(237, 241, 242, 243), code)
+            assertStockCode(sendBefore, send.code(), setOf(d - 2, d + 2, d + 3, d + 4), code)
             assertTrue(lifecycleDex(listOf(fixtureClass(seen.definingClass, listOf(seen)), fixtureClass(send.definingClass, listOf(send)))).isNotEmpty(), code)
         }
     }

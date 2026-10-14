@@ -1,5 +1,6 @@
 package app.hushmessenger.extension;
 
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
@@ -252,7 +253,17 @@ public final class AutoReply {
             lastReply.put(thread, now);
             // The reply takes the notification down, so the message log gets its names now.
             MessageLog.noteNames(thread, id, text, shown.getNotification());
-            if (!ChatNotifications.reply(context, shown.getNotification(), rule.reply)) {
+            boolean sent;
+            try {
+                sent = ChatNotifications.reply(context, shown.getNotification(), rule.reply);
+            } catch (PendingIntent.CanceledException replaced) {
+                // Nothing went out: Messenger canceled the token, usually by replacing the notification. Only this
+                // attempt's own reservation is released, and the one retry can answer through the new notification.
+                lastReply.remove(thread, now);
+                android.util.Log.w("HushMessenger", "auto_reply: the chat's Reply action was canceled before it was sent");
+                return Outcome.NO_NOTIFICATION;
+            }
+            if (!sent) {
                 lastReply.remove(thread, now);
                 android.util.Log.w("HushMessenger", "auto_reply: the chat's notification has no Reply action");
                 return Outcome.SKIPPED;

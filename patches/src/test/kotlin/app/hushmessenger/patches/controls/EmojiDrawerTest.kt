@@ -20,8 +20,10 @@ private const val CONFIG = "Lcom/facebook/mobileconfig/factory/MobileConfigUnsaf
 private const val DRAWER_HELPER = "$CONFIG->A02()Z"
 internal const val DRAWER_EFFECT = "LX/H1n;->invoke(Ljava/lang/Object;)Ljava/lang/Object;"
 internal const val DRAWER_RENDERER = "LX/4wu;->render(LX/5Sd;)V"
-/** The drawer's flag in every supported build. */
+/** The drawer's flag in 582. */
 private const val FLAG = 36320652931710646L
+/** 583's number for it. */
+private const val FLAG_583 = 36320635751841408L
 /** An older release's number for the same flag. */
 private const val OLD_FLAG = 36320704471318256L
 private val STATIC = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value
@@ -140,6 +142,12 @@ class EmojiDrawerTest {
             assertTrue(found(classes).isEmpty(), case)
             assertFailsWith<PatchException>(case) { validateControls(findControls(classes), setOf(EMOJI_DRAWER)) }
         }
+    }
+
+    @Test fun the583FlagIsTheDrawerToo() {
+        val classes = listOf(fixtureClass("LX/H1n;", listOf(drawerEffect(flag = FLAG_583))), fixtureClass("LX/4wu;", listOf(drawerRenderer(flag = FLAG_583))))
+        assertEquals(setOf(DRAWER_RENDERER, DRAWER_EFFECT), found(classes))
+        assertEquals(2, assertEmojiDrawerInjected(drawerRenderer(flag = FLAG_583), "583 renderer"))
     }
 
     @Test fun anOlderReleasesFlagIsNotTheDrawer() {

@@ -27,8 +27,9 @@ import static org.junit.Assert.*;
 @Config(sdk = {28, 36})
 public class RestartActivityTest {
     public static class Probe extends RestartActivity {
-        boolean exited, denied;
+        boolean exited, denied, changing;
         @Override void exitProcess() { exited = true; }
+        @Override public boolean isChangingConfigurations() { return changing || super.isChangingConfigurations(); }
         @Override public void startActivity(Intent intent) {
             if (denied) throw new SecurityException("Launcher disabled during restart");
             super.startActivity(intent);

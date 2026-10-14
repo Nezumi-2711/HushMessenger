@@ -62,7 +62,7 @@ class DisappearingSwipeTest {
     }
 
     @Test fun everyProfileHooksTheSameNamedMethod() {
-        val profiles = listOf(SYNTHETIC_PROFILE, BASE_PROFILE, PROFILE_346415706)
+        val profiles = listOf(SYNTHETIC_PROFILE, BASE_PROFILE, PROFILE_346611351)
         for (profile in profiles) {
             assertEquals(setOf(OVERSCROLL_START), profile.hooks.getValue(DISAPPEARING_SWIPE))
             activeProfile = profile

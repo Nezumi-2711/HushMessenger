@@ -180,40 +180,57 @@ private class ReadFlow(method: Method) {
     }
 }
 
-/** Exact 582 staging seam. The thread survives in v12 until the account is staged there for dispatch. */
+/**
+ * Where the dispatcher's pieces sit in each supported body: the composer and account copies, the thread's null default
+ * (its if-eqz, getter and result follow it), the null path's copy and the dispatch. Messenger 583's body is four
+ * instructions shorter with the same seam: the composer copy sits three earlier and everything after it four.
+ */
+internal class ReplyReadShape(val size: Int, val composer: Int, val session: Int, val nullThread: Int, val absent: Int, val dispatch: Int)
+
+internal val REPLY_READ_SHAPES = listOf(
+    ReplyReadShape(size = 402, composer = 13, session = 25, nullThread = 31, absent = 73, dispatch = 239),
+    ReplyReadShape(size = 398, composer = 10, session = 21, nullThread = 27, absent = 69, dispatch = 235),
+)
+
+/** Exact 582 and 583 staging seams. The thread survives in v12 until the account is staged there for dispatch. */
 internal fun MutableMethod.validateReplyRead(): Int {
     readRequire(isReplyReadDispatch() && implementation!!.registerCount == 36)
     val flow = ReadFlow(this)
     val c = flow.code
-    readRequire(c.size == 402)
+    val shape = REPLY_READ_SHAPES.singleOrNull { it.size == c.size }
+    readRequire(shape != null)
+    val d = shape!!.dispatch
+    val n = shape.nullThread
+    val absent = shape.absent
     // Insertion can extend a try ending at the old next instruction over the new throwing callback.
-    readRequire((234..240).none { flow.protected(it) }, "unprotected send seam")
+    readRequire((d - 5..d + 1).none { flow.protected(it) }, "unprotected send seam")
     fun move(i: Int, a: Int, b: Int, op: Opcode) = c[i].opcode == op && (c[i] as? TwoRegisterInstruction)?.let { it.registerA == a && it.registerB == b } == true
-    readRequire(move(4, 7, parameterRegister(11), Opcode.MOVE_OBJECT_FROM16) && move(13, 20, parameterRegister(4), Opcode.MOVE_OBJECT_FROM16))
-    readRequire(move(25, 10, parameterRegister(0), Opcode.MOVE_OBJECT_FROM16))
-    val getter = c[33].readRef() as? MethodReference
-    readRequire(c[33].opcode == Opcode.INVOKE_INTERFACE_RANGE && c[33].readArgs() == listOf(parameterRegister(7)), "thread provider argument")
+    readRequire(move(4, 7, parameterRegister(11), Opcode.MOVE_OBJECT_FROM16) && move(shape.composer, 20, parameterRegister(4), Opcode.MOVE_OBJECT_FROM16))
+    readRequire(move(shape.session, 10, parameterRegister(0), Opcode.MOVE_OBJECT_FROM16))
+    val getter = c[n + 2].readRef() as? MethodReference
+    readRequire(c[n + 2].opcode == Opcode.INVOKE_INTERFACE_RANGE && c[n + 2].readArgs() == listOf(parameterRegister(7)), "thread provider argument")
     readRequire(getter?.definingClass == parameterTypes[7].toString() && getter.parameterTypes.isEmpty() && getter.returnType == THREAD_KEY_TYPE, "typed thread getter")
-    readRequire(c[34].opcode == Opcode.MOVE_RESULT_OBJECT && (c[34] as OneRegisterInstruction).registerA == 12, "thread result")
-    readRequire(flow.definitionsAt(25, parameterRegister(0)) == setOf(-1) && flow.definitionsAt(4, parameterRegister(11)) == setOf(-1) &&
-        flow.definitionsAt(13, parameterRegister(4)) == setOf(-1) && flow.definitionsAt(33, parameterRegister(7)) == setOf(-1) &&
-        flow.definitionsAt(239, 10) == setOf(25) && flow.definitionsAt(239, 20) == setOf(13) && flow.definitionsAt(239, 7) == setOf(4))
-    readRequire(flow.definitionsAt(237, 12) == setOf(34, 73) && flow.definitionsAt(73, 5) == setOf(31) && move(73, 12, 5, Opcode.MOVE_OBJECT) &&
-        c[31].opcode == Opcode.CONST_4 && (c[31] as OneRegisterInstruction).registerA == 5 && (c[31] as NarrowLiteralInstruction).narrowLiteral == 0 &&
-        c[32].opcode == Opcode.IF_EQZ && (c[32] as OneRegisterInstruction).registerA == parameterRegister(7) && c.branchTarget(32) == 73)
-    readRequire(c.indices.none { i -> i != 32 && flow.successors(i).contains(73) } && jumpTargets().none { it in 31..34 } && !flow.reaches(0, 73, setOf(31)))
-    readRequire(move(236, 11, 20, Opcode.MOVE_OBJECT_FROM16))
-    readRequire(move(237, 12, 10, Opcode.MOVE_OBJECT) && move(238, 15, 0, Opcode.MOVE_OBJECT))
-    val dispatch = c[239].readRef() as? MethodReference
-    readRequire(c[239].opcode == Opcode.INVOKE_INTERFACE_RANGE && c[239].readArgs() == (11..16).toList() &&
+    readRequire(c[n + 3].opcode == Opcode.MOVE_RESULT_OBJECT && (c[n + 3] as OneRegisterInstruction).registerA == 12, "thread result")
+    readRequire(flow.definitionsAt(shape.session, parameterRegister(0)) == setOf(-1) && flow.definitionsAt(4, parameterRegister(11)) == setOf(-1) &&
+        flow.definitionsAt(shape.composer, parameterRegister(4)) == setOf(-1) && flow.definitionsAt(n + 2, parameterRegister(7)) == setOf(-1) &&
+        flow.definitionsAt(d, 10) == setOf(shape.session) && flow.definitionsAt(d, 20) == setOf(shape.composer) && flow.definitionsAt(d, 7) == setOf(4))
+    readRequire(flow.definitionsAt(d - 2, 12) == setOf(n + 3, absent) && flow.definitionsAt(absent, 5) == setOf(n) && move(absent, 12, 5, Opcode.MOVE_OBJECT) &&
+        c[n].opcode == Opcode.CONST_4 && (c[n] as OneRegisterInstruction).registerA == 5 && (c[n] as NarrowLiteralInstruction).narrowLiteral == 0 &&
+        c[n + 1].opcode == Opcode.IF_EQZ && (c[n + 1] as OneRegisterInstruction).registerA == parameterRegister(7) && c.branchTarget(n + 1) == absent)
+    readRequire(c.indices.none { i -> i != n + 1 && flow.successors(i).contains(absent) } && jumpTargets().none { it in n..n + 3 } &&
+        !flow.reaches(0, absent, setOf(n)))
+    readRequire(move(d - 3, 11, 20, Opcode.MOVE_OBJECT_FROM16))
+    readRequire(move(d - 2, 12, 10, Opcode.MOVE_OBJECT) && move(d - 1, 15, 0, Opcode.MOVE_OBJECT))
+    val dispatch = c[d].readRef() as? MethodReference
+    readRequire(c[d].opcode == Opcode.INVOKE_INTERFACE_RANGE && c[d].readArgs() == (11..16).toList() &&
         dispatch?.definingClass == parameterTypes[4].toString() && dispatch.returnType == "V" && dispatch.parameterTypes.size == 5 &&
         dispatch.parameterTypes[0] == FB_USER_SESSION && dispatch.parameterTypes.takeLast(2) == listOf("Ljava/lang/String;", "Ljava/lang/String;"))
-    readRequire(jumpTargets().none { it in 237..240 } && listOf(4, 13, 25).none { flow.reaches(0, 239, setOf(it)) } &&
-        !flow.reaches(0, 237, setOf(34, 73)))
-    flow.deadFrom(237, parameterRegister(13))
-    flow.deadFrom(240, 0)
-    flow.deadFrom(240, 1)
-    return 239
+    readRequire(jumpTargets().none { it in d - 2..d + 1 } && listOf(4, shape.composer, shape.session).none { flow.reaches(0, d, setOf(it)) } &&
+        !flow.reaches(0, d - 2, setOf(n + 3, absent)))
+    flow.deadFrom(d - 2, parameterRegister(13))
+    flow.deadFrom(d + 1, 0)
+    flow.deadFrom(d + 1, 1)
+    return d
 }
 
 internal fun MutableMethod.injectReplyRead() {

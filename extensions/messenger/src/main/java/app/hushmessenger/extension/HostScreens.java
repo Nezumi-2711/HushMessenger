@@ -49,6 +49,16 @@ public final class HostScreens {
         } catch (RuntimeException error) {
             Log.e("HushMessenger", "Can't watch for chats opening", error);
         }
+        try {
+            if (app != null) SettingsReopen.watch(app);
+        } catch (RuntimeException error) {
+            Log.e("HushMessenger", "Can't watch for the first screen after a restart", error);
+        }
+    }
+
+    /** Restart, remembering [page] so settings come back on it once Messenger is up again. */
+    static void restartInto(Context context, String page) {
+        context.startActivity(intentFor(context, RESTART).putExtra(SettingsReopen.EXTRA, SettingsReopen.page(page)));
     }
 
     /** The patched factory asks this first; a result replaces the stock activity it was about to create. */

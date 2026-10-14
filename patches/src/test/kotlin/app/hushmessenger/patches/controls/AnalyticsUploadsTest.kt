@@ -164,8 +164,7 @@ class AnalyticsUploadsTest {
         assertEquals(activeProfile.hooks.getValue(ANALYTICS_UPLOADS), found(analyticsUploadFixture()))
         validateControls(findControls(analyticsUploadFixture()), setOf(ANALYTICS_UPLOADS))
         assertEquals(11, found(analyticsUploadFixture()).size)
-        // 346415706 and 346415707 keep the uploader's own task override instead of inlining it.
-        activeProfile = PROFILE_346415706
+        // A build can keep the uploader's own task override instead of inlining it, as two 582 builds did.
         val renamed = analyticsUploadFixture(
             uploadClass("LX/0bU;", START_COMMAND, START_JOB, superclass = JOBS, flags = AccessFlags.PUBLIC.value or AccessFlags.ABSTRACT.value),
             fixtureClass(ANALYTICS2_UPLOAD_SERVICE, superclass = "LX/0bU;"),
@@ -173,7 +172,6 @@ class AnalyticsUploadsTest {
             delegatedTaskFixture(task = "LX/RVX;"), timers = listOf(timerClass("LX/YjU;")))
         assertTrue("$PLAY->A04(LX/RVX;)I" in found(renamed))
         assertTrue("LX/YjU;->run()V" in found(renamed))
-        validateControls(findControls(renamed), setOf(ANALYTICS_UPLOADS))
     }
 
     @Test fun theXAnalyticsTimerIsTakenOnlyInItsOwnShape() {

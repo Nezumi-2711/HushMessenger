@@ -43,10 +43,10 @@ class LegacyDrawerPatchTest {
     }
 
     @Test fun factoryUsesFreshNativeModelsAndItsOwnCachedKeyAcrossAllMappings() {
-        // One 582 family builds the Settings icon in place and the other calls its factory; both must be covered.
-        assertEquals(setOf(true, false), controlProfiles.values.distinct().map { legacyDrawerFixture(it).mapping.inlineIcon }.toSet())
-        for (profile in controlProfiles.values.distinct()) {
-            val fixture = legacyDrawerFixture(profile)
+        // Every 583 build calls the icon's factory. The patch still takes an icon built in place, so both are covered.
+        assertEquals(setOf(false), controlProfiles.values.distinct().map { legacyDrawerFixture(it).mapping.inlineIcon }.toSet())
+        for (profile in controlProfiles.values.distinct()) for (inline in listOf(false, true)) {
+            val fixture = legacyDrawerFixture(profile, inlineIcon = inline)
             val before = fixture.methods.map { it.implementation?.instructions?.toList() }
             val prepared = plan(fixture, profile)
             assertEquals(before, fixture.methods.map { it.implementation?.instructions?.toList() }, "Preflight edited a source")

@@ -20,7 +20,15 @@ final class FontFile {
     static final int MAX_MEGABYTES = 20;
     static final long MAX_BYTES = MAX_MEGABYTES * 1024L * 1024L;
     static final String NAME = "hushmessenger-font";
+    /** The start of each copy's own partial file. A stopped copy can still be writing one when the next starts. */
     static final String PARTIAL = NAME + ".part";
+    /** Read calls in a row that return nothing before a stream counts as broken. A working one waits for a byte instead. */
+    static final int MOST_EMPTY_READS = 16;
+    /**
+     * Held while the saved name and the file it names change together, so one writer's name never ends up with another's
+     * file. Never taken on the main thread, since a writer holds it through a disk write.
+     */
+    static final Object LOCK = new Object();
 
     static final int TRUETYPE = 0x00010000;
     /** 'true', Apple's TrueType tag. */
@@ -65,7 +73,8 @@ final class FontFile {
 
     /**
      * The saved name that goes with the copy. save runs after the checks and before the rename, and undo puts the old name
-     * back when the rename then fails. A throw from save counts as a name that didn't save.
+     * back when save fails or the rename then does. A throw from save counts as a name that didn't save. Android takes a
+     * commit into memory before the disk answers, so a failed save can still have changed the name in use.
      */
     interface Choice {
         boolean save();
@@ -100,19 +109,23 @@ final class FontFile {
     }
 
     /**
-     * Copies [input] to [target] through a partial file beside it, and closes [input]. The first four bytes are read before
-     * anything is written, so a photo picked by mistake is never copied, and reading stops one chunk past the limit.
+     * Copies [input] to [target] through a partial file of its own beside it, and closes [input]. The first four bytes are
+     * read before anything is written, so a photo picked by mistake is never copied, and reading stops one chunk past the
+     * limit. An interrupt stops the reading, and the name and file change under {@link #LOCK}.
      */
     static void copy(InputStream input, File target, Check check, Choice choice) throws Refused {
         if (input == null) throw new Refused(Refusal.UNREADABLE, "No stream to read");
-        File partial = new File(target.getParentFile(), PARTIAL);
+        File partial = null;
         boolean kept = false;
         try {
             byte[] head = new byte[4];
             int got = readFully(input, head);
             if (got < head.length || !isFontTag(tagOf(head)))
                 throw new Refused(Refusal.NOT_A_FONT, got < head.length ? "Shorter than a font header" : "No font tag");
+            partial = newPartial(target.getParentFile());
             write(input, head, partial);
+            // Closed before anything saves, so a provider that stalls in close holds up a copy that can still be stopped.
+            close(input);
             boolean loads;
             try {
                 loads = check.loads(partial);
@@ -120,31 +133,53 @@ final class FontFile {
                 loads = false;
             }
             if (!loads) throw new Refused(Refusal.WONT_LOAD, "Android built no typeface from it");
-            boolean saved;
-            try {
-                saved = choice.save();
-            } catch (RuntimeException failure) {
-                saved = false;
-            }
-            if (!saved) throw new Refused(Refusal.NOT_SAVED, "The font file's name couldn't be saved");
-            try {
-                moveIn(partial, target);
-            } catch (Refused refused) {
+            synchronized (LOCK) {
+                boolean saved;
                 try {
-                    choice.undo();
-                } catch (RuntimeException ignored) {
-                    // Picking again mends a name that points at the old copy.
+                    saved = choice.save();
+                } catch (RuntimeException failure) {
+                    saved = false;
                 }
-                throw refused;
+                if (!saved) {
+                    undo(choice);
+                    throw new Refused(Refusal.NOT_SAVED, "The font file's name couldn't be saved");
+                }
+                try {
+                    moveIn(partial, target);
+                } catch (Refused refused) {
+                    undo(choice);
+                    throw refused;
+                }
             }
             kept = true;
         } finally {
-            try {
-                input.close();
-            } catch (IOException | RuntimeException ignored) {
-                // Every byte wanted was read, or the copy was already turned down.
-            }
-            if (!kept) partial.delete();
+            close(input);
+            if (!kept && partial != null) partial.delete();
+        }
+    }
+
+    private static void close(InputStream input) {
+        try {
+            input.close();
+        } catch (IOException | RuntimeException ignored) {
+            // Every byte wanted was read, or the copy was already turned down.
+        }
+    }
+
+    private static File newPartial(File folder) throws Refused {
+        try {
+            if (folder == null) throw new IOException("No folder");
+            return File.createTempFile(PARTIAL + "-", null, folder);
+        } catch (IOException | RuntimeException failure) {
+            throw new Refused(Refusal.NOT_SAVED, failure.getClass().getSimpleName());
+        }
+    }
+
+    private static void undo(Choice choice) {
+        try {
+            choice.undo();
+        } catch (RuntimeException ignored) {
+            // Picking again mends a name that points at the old copy.
         }
     }
 
@@ -165,8 +200,10 @@ final class FontFile {
             output.write(head);
             long total = head.length;
             byte[] buffer = new byte[64 * 1024];
-            int count;
-            while ((count = read(input, buffer)) != -1) {
+            int count, empty = 0;
+            while ((count = read(input, buffer, 0, buffer.length)) != -1) {
+                if (count == 0 && ++empty > MOST_EMPTY_READS) throw new Refused(Refusal.UNREADABLE, "Reads return nothing");
+                if (count > 0) empty = 0;
                 total += count;
                 if (total > MAX_BYTES) throw new Refused(Refusal.TOO_LARGE, "Larger than " + MAX_BYTES + " bytes");
                 output.write(buffer, 0, count);
@@ -186,24 +223,22 @@ final class FontFile {
         }
     }
 
-    private static int read(InputStream input, byte[] buffer) throws Refused {
+    /** One read, after a check that nobody has stopped the copy. */
+    private static int read(InputStream input, byte[] buffer, int offset, int length) throws Refused {
+        if (Thread.currentThread().isInterrupted()) throw new Refused(Refusal.UNREADABLE, "Stopped");
         try {
-            return input.read(buffer);
+            return input.read(buffer, offset, length);
         } catch (IOException | RuntimeException error) {
             throw new Refused(Refusal.UNREADABLE, error.getClass().getSimpleName());
         }
     }
 
     private static int readFully(InputStream input, byte[] buffer) throws Refused {
-        int filled = 0;
+        int filled = 0, empty = 0;
         while (filled < buffer.length) {
-            int count;
-            try {
-                count = input.read(buffer, filled, buffer.length - filled);
-            } catch (IOException | RuntimeException error) {
-                throw new Refused(Refusal.UNREADABLE, error.getClass().getSimpleName());
-            }
+            int count = read(input, buffer, filled, buffer.length - filled);
             if (count < 0) break;
+            if (count == 0 && ++empty > MOST_EMPTY_READS) throw new Refused(Refusal.UNREADABLE, "Reads return nothing");
             filled += count;
         }
         return filled;
@@ -281,12 +316,15 @@ final class FontFile {
         }
     }
 
-    /** Removes the sized copies other than [keep], or all of them when it's null, and partial files left behind by a crash. */
+    /**
+     * Removes the sized copies other than [keep], or all of them when it's null, and sized or picked partial files left
+     * behind by a crash or a copy that never finished.
+     */
     static void dropAdjusted(File folder, String keep) {
         String prefix = ADJUSTED + "-", sizing = SIZING + "-";
         long abandoned = System.currentTimeMillis() - SIZING_STALE_MS;
         File[] found = folder == null ? null : folder.listFiles((dir, file) -> file.startsWith(prefix) && !file.equals(keep)
-                || file.startsWith(sizing) && new File(dir, file).lastModified() < abandoned);
+                || (file.startsWith(sizing) || file.startsWith(PARTIAL)) && new File(dir, file).lastModified() < abandoned);
         if (found != null) for (File stale : found) stale.delete();
     }
 

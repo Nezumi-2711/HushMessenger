@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Set;
 
 /** A launcher entry keeps settings discoverable without replacing a Messenger menu action. */
 public final class SettingsActivity extends Activity {
@@ -76,16 +77,34 @@ public final class SettingsActivity extends Activity {
     private volatile long updateGeneration;
     private java.net.HttpURLConnection updateConnection;
     private LinearLayout emptyState;
+    /** Shown above both pages while a change waits for Messenger to restart. */
+    private LinearLayout restartRow;
+    private TextView restartWaiting;
     static final int SAVE_CHOICES = 7101, READ_CHOICES = 7102, PICK_FONT = 7103;
     /** The names providers give fonts, and plain bytes for one that doesn't know a font. The copy checks what it really is. */
     static final String[] FONT_TYPES = {"font/ttf", "font/otf", "font/collection", "font/sfnt", "application/x-font-ttf",
         "application/x-font-otf", "application/font-sfnt", "application/vnd.ms-opentype", "application/octet-stream"};
     static final int MAX_FONT_NAME = 80;
-    /** A font copy is running. Process-wide, like the page that shows it, which the theme switch can recreate. */
-    private static final java.util.concurrent.atomic.AtomicBoolean fontBusy = new java.util.concurrent.atomic.AtomicBoolean();
+    /** The font copy running now, if any. Process-wide, like the page that shows it, which the theme switch can recreate. */
+    private static volatile FontJob fontJob;
+    /** A provider that never answers leaves its copy's thread waiting, so at most two ever wait at once. */
+    private static final java.util.concurrent.Semaphore fontSlots = new java.util.concurrent.Semaphore(2);
+    static int fontTimeoutMillis = 60_000;
+    /** Size, move and phone font saves, off the main thread and one at a time, so each tap starts from the one before. */
+    static final java.util.concurrent.ExecutorService FONT_WRITES = java.util.concurrent.Executors.newSingleThreadExecutor(work -> {
+        Thread thread = new Thread(work, "HushMessengerFontSave");
+        thread.setDaemon(true);
+        return thread;
+    });
+    /**
+     * Saves tapped and not yet back on the main thread, how many of them put the phone's font back, and what the latest
+     * finished one had to say. Main thread only.
+     */
+    private static int fontWrites, phoneFontWrites;
+    private static String fontWriteMessage;
     private static java.lang.ref.WeakReference<SettingsActivity> fontPage = new java.lang.ref.WeakReference<>(null);
     private TextView fontStatus, fontSize, fontShift;
-    private Button fontChoose, fontPhone, fontSmaller, fontLarger, fontUp, fontDown;
+    private Button fontChoose, fontStop, fontPhone, fontSmaller, fontLarger, fontUp, fontDown;
     private LinearLayout fontAdjust;
     /** #22's control and whether it could be turned on when it was built. */
     private LinearLayout menuRowControl;
@@ -106,6 +125,8 @@ public final class SettingsActivity extends Activity {
     // Process-wide so a page recreated by the theme switch can still replace the last toast.
     private static Toast toast;
     static final String SUPPORT_PAGE = "https://ko-fi.com/X8K126YVER";
+    /** Switches whose effect hasn't been confirmed on a phone. Each shows the Experimental badge. */
+    static final Set<String> EXPERIMENTAL = Set.of("ads", "pinned_chats", "nearby_scans");
     static final String[][] CONTROLS = {
         {"ads", "Hide inbox ads", "Hides ad cards in your chat list. Meta stopped selling these ads in November 2025, so this only matters if they come back.", "inbox"},
         {"people", "Hide People You May Know", "Hides suggested people in chats, search and stories, and on the People and Notifications tabs. Good if you only want people you know.", "inbox"},
@@ -116,6 +137,7 @@ public final class SettingsActivity extends Activity {
         {"stories", "Hide stories and notes", "Hides the row of stories and notes above your chats.", "inbox"},
         {"subtabs", "Hide inbox tabs", "Hides the Home and Channels tabs inside your inbox.", "inbox"},
         {"mark_read_action", "Hide Mark as read", "Hides Mark as read in the menu you get when you press and hold a chat in your chat list, so you can't mark a chat read by accident. Mark as unread stays.", "inbox"},
+        {"pinned_chats", "Pin more chats", "Raises Messenger's limit of three pinned chats to 20, so you can keep more chats at the top of your chat list.", "inbox"},
         {"facebook", "Hide Facebook shortcuts", "Hides Facebook buttons, profile and sharing shortcuts, and the Also from Meta and Subscriptions sections in the Menu tab. Handy if you only use Messenger.", "navigation"},
         {"meta_ai", "Hide Meta AI", "Hides the Meta AI floating button, toolbar button, tab and menu entries, plus AI in search and in @ suggestions. Restart Messenger to see the tab go.", "navigation"},
         {"moments", "Hide Chat Moments", "Hides Chat Moments in the menu.", "navigation"},
@@ -140,13 +162,14 @@ public final class SettingsActivity extends Activity {
         {"disappearing_swipe", "Turn off the swipe up for disappearing messages", "Swiping up at the bottom of a chat no longer turns on disappearing messages. Scrolling works as usual, and you can still set them in the chat's settings.", "conversations"},
         {"auto_reply", "Auto reply", "Answers a message with a reply you write below when it has words you pick, or any message if you leave the words empty. Replies go out through Messenger's own notification reply, encrypted chats too, at most once every five minutes per chat. One-to-one chats only unless you allow groups. A chat with disappearing messages on gets no notification reply from Messenger, so it isn't answered.", "conversations"},
         {"system_camera", "Use the phone's camera app", "The camera button in a chat opens your phone's camera app. The photo opens in Messenger's editor, ready to send. Photos only.", "conversations"},
-        {"text_style", "Bold and italic text", "Select words you typed and pick Bold or Italic in the menu that pops up (it can be behind the three dots). Pick it again to undo. They're special Unicode letters, so they show on any phone, but screen readers may read them oddly.", "conversations"},
+        {"text_style", "Bold and italic text", "Select words you typed and pick Bold or Italic in the menu that pops up (it can be behind the three dots). Pick it again to undo. Bold changes the letters A to Z (accents are fine) and digits. Italic changes only the letters, and other alphabets stay as they are. They're special Unicode letters, so they show on any phone, but screen readers may read them oddly.", "conversations"},
         {"external_browser", "Open web links externally", "Opens web links (http and https) in your default browser. Other link types work as before.", "links_bubbles"},
         {"bubbles", "Allow chat bubbles", "Choose Stock, Chat heads or Native Bubbles below. Native Bubbles needs Android 11 or newer, a supported account and notification permission. Restart Messenger after changing.", "links_bubbles"},
         {"analytics_uploads", "Stop analytics uploads", "Stops Messenger's background services from uploading usage statistics. It still records them on your phone, and they can upload after you turn this off.", "privacy"},
         {"attribution_uploads", "Stop ad attribution uploads", "Stops the job that reads your phone's advertising ID and sends it to Meta with your ad tracking setting. The ID itself doesn't change.", "privacy"},
         {"ad_events", "Stop inbox and ad link logging", "Stops two reports Messenger logs. One says which part of your chat list was on screen, which Messenger files under inbox ads. The other says which ad brought you in when a link from an ad opens a chat.", "privacy"},
-        {"mqtt_telemetry", "Stop MQTT logging", "Drops the health reports and push logging Messenger's MQTT client sends. Messenger 582 sends most of its traffic another way, so there's often little for it to drop. Messages, calls and active status keep working.", "privacy"},
+        {"mqtt_telemetry", "Stop MQTT logging", "Drops the health reports and push logging Messenger's MQTT client sends. Messenger sends most of its traffic another way, so there's often little for it to drop. Messages, calls and active status keep working.", "privacy"},
+        {"nearby_scans", "Stop nearby scans", "Stops Messenger from reading the list of Wi-Fi networks around you. Also stops the timer it can run while it's open to check your location and scan for Wi-Fi networks and Bluetooth devices.", "privacy"},
         {"message_log", "Keep a message log", "Saves each message when its notification arrives, so you can read it after it's unsent. Works in encrypted chats. Stays on your phone. In a chat with disappearing messages on, Messenger leaves the words out of its notification, so those messages aren't logged.", "privacy"},
         {"allow_screenshot", "Allow screenshots", "Lets you screenshot protected chat media, such as view-once photos and Quicksnap, and stops screenshot notices. It doesn't add replay or saving.", "privacy"},
         {"hide_read_receipts", "Hide read receipts", "Opening a chat no longer tells people you read their message, and the chat stays unread here. Marking it read yourself or replying marks it read and shows Seen, like Messenger does. Group chats aren't tested. Messenger's own Read receipts setting under Privacy & safety marks chats read without Seen.", "privacy"},
@@ -206,7 +229,12 @@ public final class SettingsActivity extends Activity {
             if (!java.util.Arrays.asList("all", "inbox", "chats", "more").contains(category)) category = "all";
             restoreControlsScroll = state.getInt("controls_scroll");
             restoreAppScroll = state.getInt("app_scroll");
+        } else {
+            // Reopened after a restart asked for here: back on the page it was asked from.
+            page = SettingsReopen.page(getIntent().getStringExtra(SettingsReopen.EXTRA));
         }
+        // What Messenger read as it started, as near as settings can tell, so the restart row knows what changed since.
+        RestartWaiting.baseline(Settings.preferences, readAtStart());
         LinearLayout root = new LinearLayout(this) {
             private int availableHeight = -1;
             private boolean revealSearch;
@@ -334,7 +362,8 @@ public final class SettingsActivity extends Activity {
     }
 
     private LinearLayout menuRowControl() {
-        return controlRow("hide_menu_row", text.format("hide_menu_row"), text.format("hide_menu_row_help"), false);
+        return controlRow("hide_menu_row", text.format("hide_menu_row"),
+            text.format(Settings.logoOpensSettings() ? "hide_menu_row_help" : "hide_menu_row_help_without_logo"), false);
     }
 
     /** Swaps the Hide the Menu row control for one built with its current availability and reason. */
@@ -351,7 +380,12 @@ public final class SettingsActivity extends Activity {
     }
 
     private String accessHelpText() {
-        return text.get(accessHelpId + (accessHelpMenuRow && !Settings.menuRowHidden() ? "_menu" : ""));
+        // The Menu row patch also makes the Messenger logo open settings where it finds the logo's handler, and that keeps
+        // working while the row is hidden.
+        boolean logo = Settings.logoOpensSettings();
+        if (!accessHelpMenuRow) return text.get(accessHelpId);
+        if (Settings.menuRowHidden()) return text.get(accessHelpId + (logo ? "_logo" : ""));
+        return text.get(accessHelpId + (logo ? "_menu" : "_menu_without_logo"));
     }
 
     private void refreshChoices() {
@@ -457,6 +491,57 @@ public final class SettingsActivity extends Activity {
             navigation.addView(button, new LinearLayout.LayoutParams(0, -2, 1));
         }
         ui.add(header, navigation, 16);
+        // In the header, so it shows on both pages the moment a restart-gated change is made, with the button right there.
+        restartRow = ui.row();
+        restartRow.setTag("restart_row");
+        restartRow.setGravity(Gravity.CENTER_VERTICAL);
+        if (ui.largeText) restartRow.setOrientation(LinearLayout.VERTICAL);
+        restartRow.setPadding(ui.dp(14), ui.dp(10), ui.dp(10), ui.dp(10));
+        restartRow.setBackground(ui.shape(ui.warningSurface, 0, 12));
+        restartWaiting = ui.text("", 14, ui.warning, true);
+        restartWaiting.setTag("restart_waiting");
+        restartWaiting.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        restartRow.addView(restartWaiting, new LinearLayout.LayoutParams(ui.largeText ? -1 : 0, -2, ui.largeText ? 0 : 1));
+        Button restartNow = ui.primaryButton(text.get("restart"));
+        restartNow.setTag("restart_now");
+        restartNow.setOnClickListener(view -> HostScreens.restartInto(this, page));
+        LinearLayout.LayoutParams restartParams = new LinearLayout.LayoutParams(-2, -2);
+        restartParams.setMarginStart(ui.dp(ui.largeText ? 0 : 12));
+        restartParams.topMargin = ui.dp(ui.largeText ? 8 : 0);
+        restartRow.addView(restartNow, restartParams);
+        restartRow.setVisibility(View.GONE);
+        ui.add(header, restartRow, 12);
+    }
+
+    /**
+     * Choices Messenger reads only as it starts, as they'd apply now: Pause, safe mode and a phone that can't run bubbles
+     * count as Stock. Font choices count only while the font is in use.
+     */
+    private java.util.Map<String, Object> readAtStart() {
+        java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
+        SharedPreferences prefs = Settings.preferences;
+        if (Settings.installed.contains("bubbles")) values.put("bubbles",
+            Settings.available("bubbles") && Settings.wouldUse("bubbles") ? Settings.selectedBubbleMode() : "stock");
+        if (Settings.installed.contains(OwnFont.KEY) && Settings.wouldUse(OwnFont.KEY)) {
+            // The copy's size and time too, so a new file under the same name still counts.
+            java.io.File copy = FontFile.file(this);
+            values.put(OwnFont.NAME_KEY, prefs.getString(OwnFont.NAME_KEY, "") + "\n" + copy.length() + "\n" + copy.lastModified());
+            values.put(OwnFont.SCALE_KEY, OwnFont.scale(prefs));
+            values.put(OwnFont.SHIFT_KEY, OwnFont.shift(prefs));
+        }
+        return values;
+    }
+
+    private void updateRestartRow() {
+        if (restartRow == null) return;
+        List<String> keys = new ArrayList<>();
+        for (String[] spec : installedControls) keys.add(spec[0]);
+        int waiting = RestartWaiting.count(Settings.preferences, keys, readAtStart());
+        restartRow.setVisibility(waiting > 0 ? View.VISIBLE : View.GONE);
+        if (waiting > 0) {
+            String line = text.count("restart_waiting", waiting);
+            if (!line.contentEquals(restartWaiting.getText())) restartWaiting.setText(line);
+        }
     }
 
     private ScrollView scrollPage(LinearLayout parent) {
@@ -672,6 +757,13 @@ public final class SettingsActivity extends Activity {
         fontChoose.setTag("font_file");
         fontChoose.setOnClickListener(view -> pickFontFile());
         ui.add(content, fontChoose, 8);
+        fontStop = ui.button(text.get("font_file_stop"));
+        fontStop.setTag("font_file_stop");
+        fontStop.setOnClickListener(view -> {
+            FontJob job = fontJob;
+            if (job != null) job.stop("font_file_stopped");
+        });
+        ui.add(content, fontStop, 8);
         fontPhone = ui.button(text.get("font_phone"));
         fontPhone.setTag("font_phone");
         fontPhone.setOnClickListener(view -> usePhoneFont());
@@ -719,55 +811,112 @@ public final class SettingsActivity extends Activity {
         ui.add(fontAdjust, row, 8);
     }
 
-    /** Moves the size or the text one step, held inside what the font file can take. */
+    /**
+     * Moves the size or the text one step, held inside what the font file can take. The save waits its turn off the main
+     * thread and starts from what the tap before it saved, so quick taps add up.
+     */
     private void stepFont(String key, int step) {
+        if (fontJob != null) return;
         SharedPreferences prefs = Settings.preferences;
-        boolean size = OwnFont.SCALE_KEY.equals(key);
-        int now = size ? OwnFont.scale(prefs) : OwnFont.shift(prefs);
-        int next = size ? Math.max(FontFile.SCALE_LEAST, Math.min(FontFile.SCALE_MOST, now + step))
-            : Math.max(-FontFile.SHIFT_MOST, Math.min(FontFile.SHIFT_MOST, now + step));
-        if (next == now || !prefs.edit().putInt(key, next).commit()) return;
+        SettingsText words = text;
+        writeFont(getApplicationContext(), () -> {
+            boolean size = OwnFont.SCALE_KEY.equals(key);
+            synchronized (FontFile.LOCK) {
+                // The phone's font went back in first, so there's no picked file left to size.
+                if (prefs.getString(OwnFont.NAME_KEY, "").isEmpty()) return null;
+                int now = size ? OwnFont.scale(prefs) : OwnFont.shift(prefs);
+                int next = size ? Math.max(FontFile.SCALE_LEAST, Math.min(FontFile.SCALE_MOST, now + step))
+                    : Math.max(-FontFile.SHIFT_MOST, Math.min(FontFile.SHIFT_MOST, now + step));
+                if (next == now) return null;
+                if (!OwnFont.save(prefs, key, next)) throw new IllegalStateException("Not saved");
+                return words.get("font_adjust_saved", size ? fontSizeText(words, next) : fontShiftText(words, next));
+            }
+        }, words.get("font_adjust_failed"), Toast.LENGTH_SHORT, false);
+    }
+
+    /**
+     * Runs [save] on the font save thread and comes back to whichever page shows the rows then. [save] answers what to say,
+     * or null for nothing, and a throw says [failed] at once. Otherwise only the last of a run of taps says its result.
+     * [phone] marks the save that puts the phone's font back, which holds the size and move buttons until it's done.
+     */
+    private void writeFont(Context app, java.util.concurrent.Callable<String> save, String failed, int length, boolean phone) {
+        fontWrites++;
+        if (phone) phoneFontWrites++;
         refreshFontFile();
-        feedback(text.get("font_adjust_saved", size ? fontSizeText(next) : fontShiftText(next)), Toast.LENGTH_SHORT);
+        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+        FONT_WRITES.execute(() -> {
+            String message;
+            boolean ok;
+            try {
+                message = save.call();
+                ok = true;
+            } catch (Exception | LinkageError error) {
+                android.util.Log.w("HushMessenger", "Can't save the font choice: " + error.getClass().getSimpleName());
+                message = failed;
+                ok = false;
+            }
+            String said = message;
+            boolean saved = ok;
+            main.post(() -> {
+                fontWrites--;
+                if (phone) phoneFontWrites--;
+                if (said != null) fontWriteMessage = said;
+                SettingsActivity page = shownFontPage();
+                if (page != null) page.refreshFontFile();
+                if ((!saved || fontWrites == 0) && fontWriteMessage != null) {
+                    sayFont(app, page, fontWriteMessage, length);
+                    fontWriteMessage = null;
+                }
+            });
+        });
     }
 
-    private String fontSizeText(int scale) {
-        return text.get("font_size", scale);
+    private static String fontSizeText(SettingsText words, int scale) {
+        return words.get("font_size", scale);
     }
 
-    private String fontShiftText(int shift) {
-        return shift == 0 ? text.get("font_shift_none") : text.get(shift > 0 ? "font_shift_down" : "font_shift_up", Math.abs(shift));
+    private static String fontShiftText(SettingsText words, int shift) {
+        return shift == 0 ? words.get("font_shift_none") : words.get(shift > 0 ? "font_shift_down" : "font_shift_up", Math.abs(shift));
     }
 
     private void refreshFontFile() {
+        // A new file under the old name saves nothing new, so no settings change calls refreshChoices.
+        updateRestartRow();
         if (fontStatus == null) return;
         String name = Settings.preferences.getString(OwnFont.NAME_KEY, "");
-        boolean copy = FontFile.file(this).isFile(), busy = fontBusy.get(), on = Settings.preferences.getBoolean(OwnFont.KEY, false);
+        boolean copy = FontFile.file(this).isFile(), busy = fontJob != null, on = Settings.preferences.getBoolean(OwnFont.KEY, false);
+        // A file swap waits for queued saves, and a queued phone font save would remove what it picked.
+        boolean saving = fontWrites > 0, reverting = phoneFontWrites > 0;
+        // Two stopped copies still waiting on their files hold both slots, so a third can't start until one gives up.
+        boolean stuck = !busy && fontSlots.availablePermits() == 0;
         // With the switch off nothing here is in use yet, so the line says what turning it on would do.
         String status = busy ? text.get("font_file_copying")
             : name.isEmpty() ? text.get(on ? "font_file_none" : "font_file_none_off", FontFile.MAX_MEGABYTES)
             : !copy ? text.get("font_file_missing", name)
             : text.get(on ? "font_file_using" : "font_file_picked_off", name);
+        // Stuck copies don't change which font is in use, so the line still says that first.
+        if (stuck) status = status + " " + text.get("font_file_stuck");
         if (!status.contentEquals(fontStatus.getText())) fontStatus.setText(status);
-        fontChoose.setEnabled(!busy);
-        fontPhone.setEnabled(!busy);
+        fontChoose.setEnabled(!busy && !saving && !stuck);
+        fontStop.setVisibility(busy ? View.VISIBLE : View.GONE);
+        fontPhone.setEnabled(!busy && !saving);
         // A copy no name points at still gets a way out.
         fontPhone.setVisibility(!name.isEmpty() || copy ? View.VISIBLE : View.GONE);
         // Sizing works on the picked file, so it shows only while there is one.
         fontAdjust.setVisibility(!name.isEmpty() && copy ? View.VISIBLE : View.GONE);
         SharedPreferences prefs = Settings.preferences;
         int scale = OwnFont.scale(prefs), shift = OwnFont.shift(prefs);
-        String size = fontSizeText(scale), place = fontShiftText(shift);
+        String size = fontSizeText(text, scale), place = fontShiftText(text, shift);
         if (!size.contentEquals(fontSize.getText())) fontSize.setText(size);
         if (!place.contentEquals(fontShift.getText())) fontShift.setText(place);
-        fontSmaller.setEnabled(!busy && scale > FontFile.SCALE_LEAST);
-        fontLarger.setEnabled(!busy && scale < FontFile.SCALE_MOST);
-        fontUp.setEnabled(!busy && shift > -FontFile.SHIFT_MOST);
-        fontDown.setEnabled(!busy && shift < FontFile.SHIFT_MOST);
+        fontSmaller.setEnabled(!busy && !reverting && scale > FontFile.SCALE_LEAST);
+        fontLarger.setEnabled(!busy && !reverting && scale < FontFile.SCALE_MOST);
+        fontUp.setEnabled(!busy && !reverting && shift > -FontFile.SHIFT_MOST);
+        fontDown.setEnabled(!busy && !reverting && shift < FontFile.SHIFT_MOST);
     }
 
     private void pickFontFile() {
-        if (fontBusy.get()) return;
+        if (fontJob != null || fontWrites > 0) return;
         Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
             .putExtra(Intent.EXTRA_MIME_TYPES, FONT_TYPES);
         try { startActivityForResult(picker, PICK_FONT); }
@@ -777,45 +926,162 @@ public final class SettingsActivity extends Activity {
 
     /** Copies the picked file in on a worker. The saved name changes only once the copy has passed its checks. */
     private void copyFontFile(android.net.Uri uri) {
-        if (!fontBusy.compareAndSet(false, true)) {
+        // A stuck copy can't be ended from here, only left behind, so a third waits until one of two gives up.
+        if (fontJob != null || fontWrites > 0 || !fontSlots.tryAcquire()) {
             feedback(text.get("font_file_busy"), Toast.LENGTH_LONG);
             return;
         }
+        FontJob job = new FontJob(getApplicationContext(), Settings.preferences, uri, text);
+        fontJob = job;
         refreshFontFile();
-        Context app = getApplicationContext();
-        SettingsText words = text;
-        SharedPreferences prefs = Settings.preferences;
-        Thread worker = new Thread(() -> {
-            String message;
-            try {
-                message = copyFont(app, prefs, uri, words);
-            } catch (RuntimeException | LinkageError error) {
-                android.util.Log.e("HushMessenger", "Can't copy the font file: " + error.getClass().getSimpleName());
-                message = words.get("font_file_not_saved");
-            } finally {
-                fontBusy.set(false);
-            }
-            String said = message;
-            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> fontDone(app, said));
-        }, "HushMessengerFontCopy");
-        worker.setDaemon(true);
-        worker.start();
+        job.handler.postDelayed(job.deadline, Math.max(1, fontTimeoutMillis));
+        try {
+            job.worker.start();
+        } catch (RuntimeException | OutOfMemoryError error) {
+            // No thread, so nothing will hand the slot back but this.
+            android.util.Log.w("HushMessenger", "Can't start the font copy: " + error.getClass().getSimpleName());
+            job.handler.removeCallbacks(job.deadline);
+            fontJob = null;
+            fontSlots.release();
+            refreshFontFile();
+            feedback(text.get("font_file_busy"), Toast.LENGTH_LONG);
+        }
     }
 
-    static String copyFont(Context app, SharedPreferences prefs, android.net.Uri uri, SettingsText words) {
-        String name = fontName(app, uri);
-        String before = prefs.getString(OwnFont.NAME_KEY, "");
-        try {
-            java.io.InputStream input;
+    /**
+     * A picked file's copy on a thread of its own. Its provider can stall in any call, so the copy has a deadline and a
+     * Stop button, and a stopped copy never saves: the name and file change only from RUNNING, and a stop ends RUNNING.
+     */
+    private static final class FontJob implements Runnable {
+        static final int RUNNING = 0, SAVING = 1, STOPPED = 2, FINISHED = 3;
+        final java.util.concurrent.atomic.AtomicInteger state = new java.util.concurrent.atomic.AtomicInteger(RUNNING);
+        final android.os.CancellationSignal cancellation = new android.os.CancellationSignal();
+        final android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
+        final Runnable deadline = () -> stop("font_file_timeout", false);
+        final Context app;
+        final SharedPreferences prefs;
+        final android.net.Uri uri;
+        final SettingsText words;
+        final Thread worker;
+        volatile java.io.Closeable input;
+
+        FontJob(Context app, SharedPreferences prefs, android.net.Uri uri, SettingsText words) {
+            this.app = app;
+            this.prefs = prefs;
+            this.uri = uri;
+            this.words = words;
+            worker = new Thread(this, "HushMessengerFontCopy");
+            worker.setDaemon(true);
+        }
+
+        @Override public void run() {
+            String message = null;
             try {
-                input = app.getContentResolver().openInputStream(uri);
+                message = copyFont(this);
+            } catch (RuntimeException | LinkageError error) {
+                android.util.Log.e("HushMessenger", "Can't copy the font file: " + error.getClass().getSimpleName());
+            } finally {
+                // In finally, so even an error this can't catch frees the slot and the page.
+                input = null;
+                // Done: a deadline or Stop from here on can't stand in for the copy's own answer.
+                if (!state.compareAndSet(RUNNING, FINISHED)) state.compareAndSet(SAVING, FINISHED);
+                fontSlots.release();
+                String said = message != null ? message : words.get("font_file_not_saved");
+                handler.post(() -> {
+                    handler.removeCallbacks(deadline);
+                    if (fontJob == this) fontJob = null;
+                    // A stopped copy said so when it stopped, and saved nothing after. Its slot is free again, though.
+                    if (state.get() != STOPPED) fontDone(app, said);
+                    else {
+                        SettingsActivity page = shownFontPage();
+                        if (page != null) page.refreshFontFile();
+                    }
+                });
+            }
+        }
+
+        /** Whether the copy may save its name and file now. Once it may, a stop no longer takes it back. */
+        boolean startSaving() {
+            return state.compareAndSet(RUNNING, SAVING);
+        }
+
+        boolean stopped() {
+            return state.get() == STOPPED;
+        }
+
+        /** The Stop button. */
+        void stop(String status) {
+            stop(status, true);
+        }
+
+        /** On the main thread, from the Stop button or the deadline. A copy already saving finishes and says how it went. */
+        void stop(String status, boolean tapped) {
+            if (!state.compareAndSet(RUNNING, STOPPED)) {
+                // Saving can't be taken back. A tap hears it's finishing; the deadline lets it finish without a word.
+                if (tapped && state.get() == SAVING) sayFont(app, shownFontPage(), words.get("font_file_finishing"), Toast.LENGTH_SHORT);
+                return;
+            }
+            handler.removeCallbacks(deadline);
+            if (fontJob == this) fontJob = null;
+            worker.interrupt();
+            // A provider's cancellation and close can both block, so neither runs on the main thread.
+            Thread closer = new Thread(() -> {
+                try {
+                    cancellation.cancel();
+                } catch (RuntimeException ignored) {
+                    // Closing the stream is the other way out.
+                } finally {
+                    java.io.Closeable open = input;
+                    try {
+                        if (open != null) open.close();
+                    } catch (java.io.IOException | RuntimeException ignored) {
+                        // The copy is stopped either way and saves nothing.
+                    }
+                }
+            }, "HushMessengerFontStop");
+            closer.setDaemon(true);
+            closer.start();
+            fontDone(app, words.get(status));
+        }
+    }
+
+    private static String copyFont(FontJob job) {
+        Context app = job.app;
+        SharedPreferences prefs = job.prefs;
+        SettingsText words = job.words;
+        String name = fontName(app, job.uri, job.cancellation);
+        try {
+            if (job.stopped()) throw new FontFile.Refused(FontFile.Refusal.UNREADABLE, "Stopped");
+            java.io.InputStream opened;
+            try {
+                opened = app.getContentResolver().openInputStream(job.uri);
             } catch (java.io.IOException | RuntimeException error) {
                 // The class only: a provider's message can carry the document's name or address.
                 throw new FontFile.Refused(FontFile.Refusal.UNREADABLE, error.getClass().getSimpleName());
             }
+            job.input = opened;
+            // A provider can swallow the interrupt, so every read also asks whether the copy was stopped.
+            java.io.InputStream input = opened == null ? null : new java.io.FilterInputStream(opened) {
+                @Override public int read(byte[] buffer, int offset, int length) throws java.io.IOException {
+                    if (job.stopped()) throw new java.io.InterruptedIOException("Stopped");
+                    return super.read(buffer, offset, length);
+                }
+            };
             FontFile.copy(input, FontFile.file(app), OwnFont.fileCheck, new FontFile.Choice() {
-                @Override public boolean save() { return prefs.edit().putString(OwnFont.NAME_KEY, name).commit(); }
-                @Override public void undo() { prefs.edit().putString(OwnFont.NAME_KEY, before).commit(); }
+                private boolean wrote;
+                private Object before;
+
+                @Override public boolean save() {
+                    if (!job.startSaving()) return false;
+                    // Read under FontFile.LOCK, so it's the name the copy in place goes with.
+                    before = prefs.getAll().get(OwnFont.NAME_KEY);
+                    wrote = true;
+                    return prefs.edit().putString(OwnFont.NAME_KEY, name).commit();
+                }
+
+                @Override public void undo() {
+                    if (wrote) OwnFont.restore(prefs, OwnFont.NAME_KEY, before);
+                }
             });
             return words.get("font_file_set", name);
         } catch (FontFile.Refused refused) {
@@ -830,11 +1096,15 @@ public final class SettingsActivity extends Activity {
         }
     }
 
-    /** The picked file's name as its provider gives it, or the last part of its address. Never its path. */
     static String fontName(Context context, android.net.Uri uri) {
+        return fontName(context, uri, null);
+    }
+
+    /** The picked file's name as its provider gives it, or the last part of its address. Never its path. */
+    static String fontName(Context context, android.net.Uri uri, android.os.CancellationSignal cancellation) {
         String name = null;
         try (android.database.Cursor cursor = context.getContentResolver().query(uri,
-                new String[] {android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+                new String[] {android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null, cancellation)) {
             if (cursor != null && cursor.moveToFirst()) name = cursor.getString(0);
         } catch (RuntimeException unknown) {
             // A provider that can't say leaves the address's own last part.
@@ -868,26 +1138,46 @@ public final class SettingsActivity extends Activity {
 
     /** Back on the main thread: the page showing the rows now, which may be a newer one than started the copy. */
     private static void fontDone(Context app, String message) {
+        SettingsActivity page = shownFontPage();
+        if (page != null) page.refreshFontFile();
+        sayFont(app, page, message, Toast.LENGTH_LONG);
+    }
+
+    /** The page showing the font rows now, if one is open. */
+    private static SettingsActivity shownFontPage() {
         SettingsActivity page = fontPage.get();
-        if (page != null && !page.isDestroyed()) {
-            page.refreshFontFile();
-            page.feedback(message, Toast.LENGTH_LONG);
+        return page != null && page.isDestroyed() ? null : page;
+    }
+
+    /** On [page] when one shows the rows, or a toast of its own once settings have closed. */
+    private static void sayFont(Context app, SettingsActivity page, String message, int length) {
+        if (page != null) {
+            page.feedback(message, length);
             return;
         }
         if (toast != null) toast.cancel();
-        toast = Toast.makeText(app, message, Toast.LENGTH_LONG);
+        toast = Toast.makeText(app, message, length);
         toast.show();
     }
 
-    /** Saves the phone's font as the choice, then removes the copy, so the name never points at a deleted file. */
+    /**
+     * Saves the phone's font as the choice, then removes the copy, so the name never points at a deleted file. A save that
+     * fails keeps the picked name and its copy together. Both run on the font save thread.
+     */
     private void usePhoneFont() {
-        if (fontBusy.get()) return;
-        boolean saved = Settings.preferences.edit().putString(OwnFont.NAME_KEY, "").commit();
-        java.io.File copy = FontFile.file(this);
-        if (saved && copy.exists() && !copy.delete()) android.util.Log.i("HushMessenger", "The font file copy couldn't be removed");
-        if (saved) FontFile.dropAdjusted(copy.getParentFile(), null);
-        refreshFontFile();
-        feedback(text.get(saved ? "font_phone_set" : "font_phone_failed"), Toast.LENGTH_LONG);
+        if (fontJob != null) return;
+        SharedPreferences prefs = Settings.preferences;
+        Context app = getApplicationContext();
+        String set = text.get("font_phone_set");
+        writeFont(app, () -> {
+            java.io.File copy = FontFile.file(app);
+            synchronized (FontFile.LOCK) {
+                if (!OwnFont.save(prefs, OwnFont.NAME_KEY, "")) throw new IllegalStateException("Not saved");
+                if (copy.exists() && !copy.delete()) android.util.Log.i("HushMessenger", "The font file copy couldn't be removed");
+            }
+            FontFile.dropAdjusted(copy.getParentFile(), null);
+            return set;
+        }, text.get("font_phone_failed"), Toast.LENGTH_LONG, true);
     }
 
     private void openNotificationSettings(String action) {
@@ -921,7 +1211,7 @@ public final class SettingsActivity extends Activity {
         if (overlay) titleLine.setPaddingRelative(0, 0, ui.dp(60), 0);
         if (ui.largeText) titleLine.setOrientation(LinearLayout.VERTICAL);
         titleLine.addView(ui.text(text.display(title), appRow ? 14 : 16, ui.text, false), new LinearLayout.LayoutParams(-2, -2));
-        if ("ads".equals(key)) {
+        if (EXPERIMENTAL.contains(key)) {
             TextView badge = ui.text(text.get("experimental"), 11, ui.warning, false);
             badge.setBackground(ui.shape(ui.warningSurface, 0, 4));
             badge.setPadding(ui.dp(6), ui.dp(3), ui.dp(6), ui.dp(3));
@@ -941,7 +1231,7 @@ public final class SettingsActivity extends Activity {
             ui.add(labels, activeLabel, 4);
         }
         row.addView(labels, new LinearLayout.LayoutParams(overlay ? -1 : 0, -2, overlay ? 0 : 1));
-        Switch control = ui.toggle(key, text.display(title), text.display(("ads".equals(key) ? text.format("experimental") + ". " : "") + description), Settings.preferences.getBoolean(key, false));
+        Switch control = ui.toggle(key, text.display(title), text.display((EXPERIMENTAL.contains(key) ? text.format("experimental") + ". " : "") + description), Settings.preferences.getBoolean(key, false));
         LinearLayout.LayoutParams switchParams = new LinearLayout.LayoutParams(ui.dp(48), -2);
         // Normal-size App descriptions span the panel. Large text reserves a separate switch column.
         switchParams.setMarginStart(ui.dp(overlay ? -48 : 12));
@@ -1056,7 +1346,7 @@ public final class SettingsActivity extends Activity {
         ui.add(access, accessHelp, 0);
         Button restart = ui.primaryButton(text.get("restart"));
         restart.setTag("restart_messenger");
-        restart.setOnClickListener(view -> HostScreens.open(this, HostScreens.RESTART));
+        restart.setOnClickListener(view -> HostScreens.restartInto(this, page));
         ui.add(access, restart, 12);
         // Without the Menu row, a launcher that has no app shortcuts would leave no way back in.
         if (menuRow && drawerAlias && !hosted) {
@@ -1082,6 +1372,21 @@ public final class SettingsActivity extends Activity {
             ui.add(access, sharedInstall, 12);
         }
         ui.add(content, access, 8);
+        if (!installedControls.isEmpty()) {
+            ui.add(content, ui.heading(text.get("quick_setups")), 22);
+            LinearLayout quick = ui.panel();
+            quick.setTag("quick_setups");
+            ui.add(quick, ui.text(text.get("quick_setups_help"), 13, ui.muted, false), 0);
+            for (String name : QuickSetups.CHOICES) {
+                ui.rule(quick, 12);
+                Button choice = ui.button(text.get("quick_" + name));
+                choice.setTag("quick_" + name);
+                choice.setOnClickListener(view -> applyQuickSetup(name));
+                ui.add(quick, choice, 8);
+                ui.add(quick, ui.text(text.get("quick_" + name + "_help"), 13, ui.muted, false), 8);
+            }
+            ui.add(content, quick, 12);
+        }
         ui.add(content, ui.heading(text.get("appearance")), 22);
         LinearLayout appearance = ui.panel();
         appearance.setPadding(ui.dp(14), ui.dp(14), ui.dp(14), ui.dp(14));
@@ -1190,25 +1495,71 @@ public final class SettingsActivity extends Activity {
         source.setTag("source_licenses");
         source.setOnClickListener(view -> openPage("https://github.com/SysAdminDoc/HushMessenger#research-and-credits"));
         ui.add(content, source, 16);
-        LinearLayout support = ui.panel();
-        support.setTag("support");
-        support.setClickable(true);
-        support.setFocusable(true);
-        support.setBackground(ui.interactive(ui.surface, ui.line, 12));
-        support.setContentDescription(text.get("support") + ". " + text.get("support_help"));
-        support.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+        // Built when tapped, so the controls listed are the ones on right then.
+        ui.add(content, linkPanel("report_problem", "report", () -> openPage(ProblemReport.issueUrl(reportFacts()))), 12);
+        ui.add(content, linkPanel("support", "support", () -> openPage(SUPPORT_PAGE)), 12);
+        ui.add(content, ui.text(text.get("credits"), 12, ui.muted, false), 16);
+        ui.add(content, ui.text(text.get("independent"), 12, ui.muted, false), 20);
+    }
+
+    /** A panel that opens a page: text [id]'s title in the accent color over its "_help" line, read out as one button. */
+    private LinearLayout linkPanel(String tag, String id, Runnable open) {
+        // A row with no "_help" text is its title alone, like Support.
+        boolean help = SettingsText.ENGLISH.containsKey(id + "_help");
+        LinearLayout panel = ui.panel();
+        panel.setTag(tag);
+        panel.setClickable(true);
+        panel.setFocusable(true);
+        panel.setBackground(ui.interactive(ui.surface, ui.line, 12));
+        panel.setContentDescription(help ? text.get(id) + ". " + text.get(id + "_help") : text.get(id));
+        panel.setAccessibilityDelegate(new View.AccessibilityDelegate() {
             @Override public void onInitializeAccessibilityNodeInfo(View host, android.view.accessibility.AccessibilityNodeInfo info) {
                 super.onInitializeAccessibilityNodeInfo(host, info);
                 // A panel that opens a page is a button to a screen reader.
                 info.setClassName(Button.class.getName());
             }
         });
-        ui.add(support, ui.text(text.get("support"), 16, ui.accent, true), 0);
-        ui.add(support, ui.text(text.get("support_help"), 14, ui.muted, false), 4);
-        support.setOnClickListener(view -> openPage(SUPPORT_PAGE));
-        ui.add(content, support, 12);
-        ui.add(content, ui.text(text.get("credits"), 12, ui.muted, false), 16);
-        ui.add(content, ui.text(text.get("independent"), 12, ui.muted, false), 20);
+        ui.add(panel, ui.text(text.get(id), 16, ui.accent, true), 0);
+        if (help) ui.add(panel, ui.text(text.get(id + "_help"), 14, ui.muted, false), 4);
+        panel.setOnClickListener(view -> open.run());
+        return panel;
+    }
+
+    /** What Report a problem fills in: versions, the phone and the English titles of the controls saved on. */
+    private ProblemReport.Facts reportFacts() {
+        String messenger = "";
+        long code = 0;
+        try {
+            PackageInfo host = getPackageManager().getPackageInfo(getPackageName(), 0);
+            messenger = host.versionName;
+            code = host.getLongVersionCode();
+        } catch (PackageManager.NameNotFoundException unknown) {
+            // The report says "unknown" instead.
+        }
+        List<String> on = new ArrayList<>();
+        for (String[] spec : installedControls) if (Settings.preferences.getBoolean(spec[0], false)) on.add(spec[1]);
+        return new ProblemReport.Facts(BuildConfig.VERSION_NAME, messenger, code, Build.MANUFACTURER, Build.MODEL,
+            Build.VERSION.RELEASE, Build.VERSION.SDK_INT, Settings.preferences.getBoolean("paused", false), CrashGuard.isSafeMode(), on);
+    }
+
+    /**
+     * Saves one Quick setups choice in a single write, then says how many controls changed. The switches, the counts and
+     * the restart row follow from refreshChoices, the same as after a tap on each switch.
+     */
+    private void applyQuickSetup(String name) {
+        java.util.Map<String, Boolean> values = QuickSetups.values(name);
+        // Turning a control off never needs this phone to run it, so Back to defaults also clears one it can't.
+        java.util.function.Predicate<String> settable = "defaults".equals(name) ? Settings.installed::contains
+            : key -> Settings.installed.contains(key) && Settings.available(key);
+        java.util.Map<String, Boolean> changes = QuickSetups.changes(values, Settings.preferences, settable);
+        if (!changes.isEmpty()) {
+            SharedPreferences.Editor edit = Settings.preferences.edit();
+            for (java.util.Map.Entry<String, Boolean> change : changes.entrySet()) edit.putBoolean(change.getKey(), change.getValue());
+            edit.apply();
+        }
+        refreshChoices();
+        feedback(!changes.isEmpty() ? text.count("quick_changed", changes.size())
+            : text.get(QuickSetups.anySettable(values, settable) ? "quick_unchanged" : "quick_missing"), Toast.LENGTH_SHORT);
     }
 
     private void copySetup() {
@@ -2412,22 +2763,23 @@ public final class SettingsActivity extends Activity {
             enabledCount.setText(text.count("enabled", enabled));
             setupNote.setText(text.get("saved"));
         }
+        updateRestartRow();
     }
 
     private void filterControls(String query) {
-        String needle = query.trim().toLowerCase(Locale.ROOT);
+        // Every word typed, in any order, with accents and case ignored (SettingsSearch).
+        List<String> terms = SettingsSearch.terms(query);
         clearQuery.setVisibility(query.isEmpty() ? View.GONE : View.VISIBLE);
         String drawerWords = "hide app drawer icon launcher settings menu row " + text.get("hide_drawer_icon") + " " + text.get("hide_menu_row");
         // One letter matches almost anything, so the link waits for a second one.
-        drawerSearchLink.setVisibility(controlRows.isEmpty() || (needle.length() >= 2 && drawerWords.toLowerCase(Locale.ROOT).contains(needle)) ? View.VISIBLE : View.GONE);
+        drawerSearchLink.setVisibility(controlRows.isEmpty() || (query.trim().length() >= 2 && SettingsSearch.matches(terms, drawerWords)) ? View.VISIBLE : View.GONE);
         int visible = 0;
         for (int i = 0; i < controlRows.size(); i++) {
             String[] spec = installedControls.get(i);
             String bucket = "inbox".equals(spec[3]) ? "inbox" :
                 ("conversations".equals(spec[3]) || "stickers".equals(spec[3])) ? "chats" : "more";
-            boolean match = ("all".equals(category) || category.equals(bucket)) &&
-                (spec[1] + " " + spec[2] + " " + SettingsText.english(spec[3]) + " " +
-                    text.display(text.control(spec, 1)) + " " + text.display(text.control(spec, 2)) + " " + text.get(spec[3])).toLowerCase(Locale.ROOT).contains(needle);
+            boolean match = ("all".equals(category) || category.equals(bucket)) && SettingsSearch.matches(terms, spec[1], spec[2],
+                SettingsText.english(spec[3]), text.display(text.control(spec, 1)), text.display(text.control(spec, 2)), text.get(spec[3]));
             controlRows.get(i).setVisibility(match ? View.VISIBLE : View.GONE);
             if (match) visible++;
         }
@@ -2490,10 +2842,15 @@ public final class SettingsActivity extends Activity {
         feedback(text.get("open_help"), Toast.LENGTH_LONG);
     }
 
-    /** Opens a web page in the phone's browser, or says there isn't one. */
+    /** Opens a web page in the phone's browser, or says why it couldn't. */
     private void openPage(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)); }
         catch (android.content.ActivityNotFoundException error) { feedback(text.get("no_browser"), Toast.LENGTH_LONG); }
+        catch (SecurityException denied) {
+            // Android can refuse a launch it would otherwise resolve. The page and the platform's message stay out of the log.
+            android.util.Log.w("HushMessenger", "The phone refused to open a web page from settings");
+            feedback(text.get("page_blocked"), Toast.LENGTH_LONG);
+        }
     }
 
     /** One toast at a time, built on the app context so no destroyed page is kept alive. */

@@ -254,7 +254,7 @@ class SaveStoriesTest {
     }
 
     @Test fun aMergedCheckOfTheSameShapeWithoutAMenuIsIgnored() {
-        // 582's 346415706 family asks its fragment manager the same way later in this merged onClick.
+        // 582's 346611351 family asks its fragment manager the same way later in this merged onClick.
         val decoy = listOf(
             "invoke-virtual {p1}, Landroidx/fragment/app/Fragment;->getParentFragmentManager()LX/0XE;",
             "move-result-object v8",

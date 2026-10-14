@@ -21,9 +21,9 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-private const val CLIENT = "LX/0bI;"
+private const val CLIENT = "LX/0mE;"
 internal const val SYNTHETIC_MQTT_PUBLISH =
-    "$CLIENT->A0R(LX/0gz;LX/0gP;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;[BIJ)LX/0in;"
+    "$CLIENT->A0R(LX/0rd;LX/0rI;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;[BIJ)LX/0qX;"
 internal const val SYNTHETIC_MQTT_KEEPALIVE = "$CLIENT->A0N(Ljava/lang/String;)V"
 private const val NOT_SENT = "LX/09t;->A00:LX/09t;"
 private const val PLAIN_PING = "$CLIENT->A05(${CLIENT}LX/14Z;)V"
@@ -103,7 +103,7 @@ class MqttTelemetryTest {
     }
 
     @Test fun everyProfileHooksTheSameTwoMethods() {
-        for (profile in listOf(SYNTHETIC_PROFILE, BASE_PROFILE, PROFILE_346415706)) {
+        for (profile in listOf(SYNTHETIC_PROFILE, BASE_PROFILE, PROFILE_346611351)) {
             assertEquals(setOf(SYNTHETIC_MQTT_PUBLISH, SYNTHETIC_MQTT_KEEPALIVE), profile.hooks.getValue(MQTT_TELEMETRY))
             activeProfile = profile
             validateControls(findControls(mqttClientFixture()), setOf(MQTT_TELEMETRY))

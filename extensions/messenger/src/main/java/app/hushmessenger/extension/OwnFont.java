@@ -39,6 +39,44 @@ final class OwnFont {
         return Math.abs(shift) > FontFile.SHIFT_MOST ? 0 : shift;
     }
 
+    /**
+     * Saves [value], a String or an Integer, under [key], or puts back the value it had when the save fails. Android takes
+     * a commit into memory before it learns whether the disk took it, so a failed one would otherwise stay in use, and the
+     * next write of any setting would save it.
+     */
+    static boolean save(SharedPreferences prefs, String key, Object value) {
+        Object before = prefs.getAll().get(key);
+        boolean saved;
+        try {
+            saved = put(prefs.edit(), key, value).commit();
+        } catch (RuntimeException failure) {
+            saved = false;
+        }
+        if (!saved) restore(prefs, key, before);
+        return saved;
+    }
+
+    /** Puts [before] back under [key], and a null as no value at all. Memory takes it even when the disk still won't. */
+    static void restore(SharedPreferences prefs, String key, Object before) {
+        try {
+            put(prefs.edit(), key, before).commit();
+        } catch (RuntimeException ignored) {
+            // Nothing more to try. Saving the choice again mends it.
+        }
+    }
+
+    /** Every type a preference can hold, so an old value of a type these keys don't use still goes back as it was. */
+    @SuppressWarnings("unchecked")
+    private static SharedPreferences.Editor put(SharedPreferences.Editor edit, String key, Object value) {
+        if (value == null) return edit.remove(key);
+        if (value instanceof Integer) return edit.putInt(key, (Integer) value);
+        if (value instanceof Boolean) return edit.putBoolean(key, (Boolean) value);
+        if (value instanceof Long) return edit.putLong(key, (Long) value);
+        if (value instanceof Float) return edit.putFloat(key, (Float) value);
+        if (value instanceof java.util.Set) return edit.putStringSet(key, (java.util.Set<String>) value);
+        return edit.putString(key, String.valueOf(value));
+    }
+
     /** The phone's sans-serif and its named weights, the families {@link #isPhoneTypeface} knows. */
     private static final String[] PHONE_SANS = {"sans-serif", "sans-serif-thin", "sans-serif-light", "sans-serif-medium", "sans-serif-black"};
     /** The weights Android and Messenger name after "sans-serif-" and "roboto-". */

@@ -26,9 +26,10 @@ import org.w3c.dom.Document
 import org.w3c.dom.Element
 
 internal const val BUBBLE_SESSION = "Lcom/facebook/auth/usersession/FbUserSession;"
-/** The specifier of the bubble rollout read. Each release renumbers it, and only this one is accepted. */
+/** The specifier of the bubble rollout read. Each release renumbers it, and only 582's and 583's are accepted. */
 internal const val BUBBLE_ROLLOUT = 36312020047499274L
-internal val BUBBLE_ROLLOUTS = setOf(BUBBLE_ROLLOUT)
+internal const val BUBBLE_ROLLOUT_583 = 36312015752531975L
+internal val BUBBLE_ROLLOUTS = setOf(BUBBLE_ROLLOUT, BUBBLE_ROLLOUT_583)
 internal const val BUBBLE_ACTIVITY = "com.facebook.messaging.msys.thread.bubbles.activity.StaxThreadViewBubblesActivity"
 internal const val NATIVE_BUBBLE_ROUTES = "$HOST_SCREENS->nativeBubbleRoutes()Z"
 internal const val NATIVE_BUBBLE_METADATA = "hush.native_bubble_routes"
@@ -119,7 +120,7 @@ internal fun injectNativeBubbles(eligibility: MutableMethod, mode: MutableMethod
     mode.validateNativeBubbleMode()
     capability.validateNativeBubbleRoutesStub()
     if (!routes) return
-    eligibility.injectSwitch("enableBubbles", "0x1")
+    eligibility.injectSwitch("$SETTINGS->enableBubbles()Z", "0x1")
     mode.injectNativeBubbleMode()
     capability.replaceInstruction(0, "const/4 v${capability.bubbleCode()[0].bubbleRegister()}, 0x1")
 }

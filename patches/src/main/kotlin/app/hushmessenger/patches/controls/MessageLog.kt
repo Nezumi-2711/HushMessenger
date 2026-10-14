@@ -246,19 +246,22 @@ internal fun MutableMethod.validateMessageLog() {
  * The constructor has only two free registers, so the id goes over first, on its own, and the sink picks it up on the
  * same thread. Every path to a sink passes its own handover first, so a sink can't get an earlier message's id.
  */
-internal fun MutableMethod.injectMessageLog() = injectIncomingMessage("logReceivedMessages", "recordReceivedMessage")
+internal fun MutableMethod.injectMessageLog() = injectIncomingMessage("$SETTINGS->logReceivedMessages()Z",
+    "$SETTINGS->recordReceivedMessage(Ljava/lang/String;Ljava/lang/String;)V")
 
 /**
  * Auto reply reads the same message at the same constructor, behind its own gate, so either control works without the
  * other. When both are in, each block runs its own gate and reads the fields itself.
  */
-internal fun MutableMethod.injectAutoReply() = injectIncomingMessage("autoReplyWanted", "autoReplyTo")
+internal fun MutableMethod.injectAutoReply() = injectIncomingMessage("$SETTINGS->autoReplyWanted()Z",
+    "$SETTINGS->autoReplyTo(Ljava/lang/String;Ljava/lang/String;)V")
 
+/** [gate] and [sink] are whole references, so the patcher DEX holds each as one string the catalog check can find. */
 private fun MutableMethod.injectIncomingMessage(gate: String, sink: String) {
     validateMessageLog()
     val contract = messageLogContract!!
     addInstructionsWithLabels(0, """
-        invoke-static {}, $SETTINGS->$gate()Z
+        invoke-static {}, $gate
         move-result v0
         if-eqz v0, :stock_behavior
         move-object/from16 v0, p2
@@ -281,6 +284,6 @@ private fun MutableMethod.injectIncomingMessage(gate: String, sink: String) {
         :incoming_no_thread
         const/4 v0, 0x0
         :incoming_hand_over
-        invoke-static {v1, v0}, $SETTINGS->$sink(Ljava/lang/String;Ljava/lang/String;)V
+        invoke-static {v1, v0}, $sink
     """.trimIndent(), ExternalLabel("stock_behavior", getInstruction(0)))
 }

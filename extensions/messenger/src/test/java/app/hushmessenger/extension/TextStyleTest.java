@@ -149,6 +149,63 @@ public class TextStyleTest {
         assertEquals("Nothing was styled, so it isn't a use", 0, Settings.lastActive(TextStyleActivity.KEY));
     }
 
+    /** Cyrillic, Arabic and Italic digits have no styled letters, so the entry used to vanish with no word why. */
+    @Test public void aSelectionWithNothingToStyleSaysWhy() {
+        Settings.preferences.edit().putBoolean(TextStyleActivity.KEY, true).commit();
+        SettingsText text = new SettingsText(app);
+        String[][] cases = {
+            {TextStyleActivity.BOLD, "привет", "text_style_bold_none"},
+            {TextStyleActivity.BOLD, "مرحبا", "text_style_bold_none"},
+            {TextStyleActivity.ITALIC, "2026", "text_style_italic_none"},
+            {TextStyleActivity.ITALIC, "привет", "text_style_italic_none"},
+        };
+        for (String[] each : cases) {
+            ShadowToast.reset();
+            try (ActivityController<TextStyleActivity> controller =
+                     Robolectric.buildActivity(TextStyleActivity.class, selection(each[0], each[1])).create()) {
+                assertEquals(each[1], Activity.RESULT_CANCELED, shadowOf(controller.get()).getResultCode());
+                assertTrue(controller.get().isFinishing());
+            }
+            assertEquals(each[1], 1, ShadowToast.shownToastCount());
+            assertEquals(each[1], text.get(each[2]), ShadowToast.getTextOfLatestToast());
+        }
+        assertEquals("Nothing was styled, so it isn't a use", 0, Settings.lastActive(TextStyleActivity.KEY));
+
+        // What can take the style still does, quietly, and keeps the letters it can't style.
+        ShadowToast.reset();
+        try (ActivityController<TextStyleActivity> controller =
+                 Robolectric.buildActivity(TextStyleActivity.class, selection(TextStyleActivity.BOLD, "é 2026 привет")).create()) {
+            ShadowActivity screen = shadowOf(controller.get());
+            assertEquals(Activity.RESULT_OK, screen.getResultCode());
+            String styled = screen.getResultIntent().getStringExtra(Intent.EXTRA_PROCESS_TEXT);
+            assertEquals(points(0x1D5F2, 0x0301) + " " + points(0x1D7EE, 0x1D7EC, 0x1D7EE, 0x1D7F2) + " привет", styled);
+            assertEquals("Bold again turns it back", "é 2026 привет", TextStyleActivity.restyle(styled, TextStyleActivity.BOLD_STYLE));
+        }
+        assertEquals(0, ShadowToast.shownToastCount());
+    }
+
+    @Test public void offPauseOtherEntriesAndEmptySelectionsStayQuiet() {
+        Intent cyrillic = selection(TextStyleActivity.BOLD, "привет");
+        assertNull("Off", TextStyleActivity.whyUnchanged(cyrillic));
+        Settings.preferences.edit().putBoolean(TextStyleActivity.KEY, true).commit();
+        assertEquals("text_style_bold_none", TextStyleActivity.whyUnchanged(cyrillic));
+        assertNull("Text it can style needs no tip", TextStyleActivity.whyUnchanged(selection(TextStyleActivity.BOLD, "Hi")));
+        assertNull("Bold digits", TextStyleActivity.whyUnchanged(selection(TextStyleActivity.BOLD, "2026")));
+        assertNull("Another entry", TextStyleActivity.whyUnchanged(selection(TextStyleActivity.class.getName(), "привет")));
+        assertNull("Empty", TextStyleActivity.whyUnchanged(selection(TextStyleActivity.ITALIC, "")));
+        assertNull("No selection", TextStyleActivity.whyUnchanged(new Intent(Intent.ACTION_PROCESS_TEXT).setClassName(app.getPackageName(), TextStyleActivity.BOLD)));
+        assertNull(TextStyleActivity.whyUnchanged(null));
+        assertEquals("Read-only keeps its own tip", "text_style_read_only",
+            TextStyleActivity.whyUnchanged(selection(TextStyleActivity.ITALIC, "2026").putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)));
+        Settings.preferences.edit().putBoolean("paused", true).commit();
+        assertNull("Pause", TextStyleActivity.whyUnchanged(cyrillic));
+        try (ActivityController<TextStyleActivity> controller = Robolectric.buildActivity(TextStyleActivity.class, cyrillic).create()) {
+            assertEquals(Activity.RESULT_CANCELED, shadowOf(controller.get()).getResultCode());
+        }
+        assertNull("Pause says nothing", ShadowToast.getLatestToast());
+        assertEquals(0, Settings.lastActive(TextStyleActivity.KEY));
+    }
+
     @Test public void theMenuEntriesFollowTheSwitchPauseAndSafeMode() {
         int off = PackageManager.COMPONENT_ENABLED_STATE_DEFAULT, on = PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
         assertTrue(TextStyleActivity.present(app));

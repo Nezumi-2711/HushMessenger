@@ -108,12 +108,12 @@ private fun imagineRow(id: String, flag: Long, flags: Int = AccessFlags.PUBLIC.v
     return v4
 """.trimIndent(), registers = 11, flags = flags)
 
-private fun rowChecks(type: String = ROW_CHECKS) = listOf(
-    metaAiRow(SYNTHETIC_META_AI_ROW.replace(ROW_CHECKS, type)),
-    metaAiChatsRow(SYNTHETIC_META_AI_CHATS_ROW.replace(ROW_CHECKS, type)),
+private fun rowChecks(type: String = ROW_CHECKS, build: AiRowFlags = AI_ROW_FLAGS_582) = listOf(
+    metaAiRow(SYNTHETIC_META_AI_ROW.replace(ROW_CHECKS, type), build.row.toList()),
+    metaAiChatsRow(SYNTHETIC_META_AI_CHATS_ROW.replace(ROW_CHECKS, type), build.chat.toList()),
     metaAiEncryptedRow(SYNTHETIC_META_AI_ENCRYPTED_ROW.replace(ROW_CHECKS, type)),
-    imagineRow(SYNTHETIC_IMAGINE_ROW.replace(ROW_CHECKS, type), IMAGINE_ROW_FLAG),
-    imagineRow(SYNTHETIC_IMAGINE_YOURSELF_ROW.replace(ROW_CHECKS, type), IMAGINE_YOURSELF_ROW_FLAG),
+    imagineRow(SYNTHETIC_IMAGINE_ROW.replace(ROW_CHECKS, type), build.imagine),
+    imagineRow(SYNTHETIC_IMAGINE_YOURSELF_ROW.replace(ROW_CHECKS, type), build.imagineYourself),
 )
 
 /** The five checks and the sibling one of them defers to. */
@@ -144,6 +144,18 @@ class AiMentionRowsTest {
         val before = checks.map { it.code() }
         injectControl(AI_MENTION_ROWS, mapOf(AI_MENTION_ROWS to checks))
         checks.zip(before).forEach { (method, code) -> assertSwitched(code, method.code(), method.hookId()) }
+    }
+
+    @Test fun messenger583RenumbersEveryRowFlagAndAllFiveMustShareOneNumbering() {
+        val checks = rowChecks(build = AI_ROW_FLAGS_583)
+        val sibling583 = encryptedSibling(flag = AI_ROW_FLAGS_583.encrypted)
+        assertEquals(setOf(SYNTHETIC_META_AI_ROW, SYNTHETIC_META_AI_CHATS_ROW, SYNTHETIC_META_AI_ENCRYPTED_ROW, SYNTHETIC_IMAGINE_ROW,
+            SYNTHETIC_IMAGINE_YOURSELF_ROW), findAiMentionRows(listOf(rowClass(checks = checks, sibling = sibling583))).map { it.hookId() }.toSet())
+        // 583's checks with 582's encrypted flag behind them, and five checks that mix the two numberings.
+        assertTrue(findAiMentionRows(listOf(rowClass(checks = checks))).isEmpty())
+        val mixed = rowChecks().take(3) + checks.drop(3)
+        assertTrue(findAiMentionRows(listOf(rowClass(checks = mixed))).isEmpty())
+        assertTrue(findAiMentionRows(listOf(rowClass(checks = mixed, sibling = sibling583))).isEmpty())
     }
 
     @Test fun aCheckThatMovedOrRepeatsLeavesTheRowsUnhooked() {

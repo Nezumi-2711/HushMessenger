@@ -92,6 +92,10 @@ class NativeBubblesTest {
         assertTrue(found(nativeBubbleModeMethod().apply {
             replaceInstruction(19, "const-wide v0, ${BUBBLE_ROLLOUT + 1}L")
         }).getValue("bubble_mode").isEmpty())
+        // Messenger 583 renumbers the same read, and its gate keeps every other instruction.
+        val renumbered = nativeBubbleModeMethod().apply { replaceInstruction(19, "const-wide v0, ${BUBBLE_ROLLOUT_583}L") }
+        assertEquals(listOf(renumbered.hookId()), found(renumbered).getValue("bubble_mode").map { it.hookId() })
+        renumbered.validateNativeBubbleMode()
         // DEX class definitions deduplicate identical signatures, so ambiguity needs a distinct method.
         val duplicate = MutableMethod(ImmutableMethod(mode.definingClass, "anotherBubbleMode", mode.parameters,
             mode.returnType, mode.accessFlags, null, null, mode.implementation))

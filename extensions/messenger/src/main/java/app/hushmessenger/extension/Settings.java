@@ -343,6 +343,27 @@ public final class Settings {
             return healthReport;
         }
     }
+    /**
+     * Asked each time Messenger is about to queue its foreground location task, the one that requests a location and
+     * starts its Wi-Fi and Bluetooth scans. True keeps the task from being queued.
+     */
+    public static boolean stopNearbyScans() { return enabled("nearby_scans"); }
+
+    static final String PINNED_CHATS = "pinned_chats";
+    /** How many chats can be pinned with the switch on. Messenger's own limit is three. */
+    static final int PINNED_CHAT_LIMIT = 20;
+    /**
+     * Asked each time Messenger reads how many chats can be pinned. With the switch on the answer is 20, or Messenger's
+     * own number if that's ever higher. Off, Pause and safe mode give Messenger's number back.
+     */
+    public static int pinnedChatLimit(int stock) {
+        try {
+            return enabled(PINNED_CHATS) ? Math.max(stock, PINNED_CHAT_LIMIT) : stock;
+        } catch (RuntimeException error) {
+            hookFailed(PINNED_CHATS, "Can't check the pinned chat limit", error);
+            return stock;
+        }
+    }
     /** Asked each time a chat's swipe up for disappearing messages could start; true keeps the gesture from starting. */
     public static boolean blockDisappearingSwipe() { return enabled("disappearing_swipe"); }
     /** Messenger's own original-upload check allows 25 MB, so a bigger video keeps its re-encode. */
@@ -685,6 +706,13 @@ public final class Settings {
         return prefs != null && prefs.getBoolean("hide_menu_row", false) && menuRowCanHide();
     }
 
+    /** Recorded with the Menu row only when the long press on the Messenger logo at the top of Chats went in too. */
+    static final String LOGO_LONG_PRESS = "logo_long_press";
+
+    static boolean logoOpensSettings() {
+        return installed.contains(LOGO_LONG_PRESS);
+    }
+
     private static final String KEPT_UNSENT_KEY = "kept_unsent_ids";
     private static final int KEPT_UNSENT_LIMIT = 4096;
     private static final Object KEPT_UNSENT_LOCK = new Object();
@@ -841,6 +869,7 @@ public final class Settings {
         if (file == null || android.os.Build.VERSION.SDK_INT < 29) {
             logEmoji("phone emoji only (" + (file == null ? "no Messenger font file yet" : "Android " + android.os.Build.VERSION.SDK_INT)
                 + "), source " + systemEmojiSource);
+            likeWithoutFont = true;
             return system;
         }
         synchronized (Settings.class) {
@@ -859,8 +888,62 @@ public final class Settings {
             }
             logEmoji(mergedEmoji != null ? "phone emoji with Messenger's font behind it, source " + systemEmojiSource
                 : "phone emoji only (merge failed), source " + systemEmojiSource);
+            if (mergedEmoji == null) likeWithoutFont = true;
             return mergedEmoji != null ? mergedEmoji : system;
         }
+    }
+
+    /**
+     * Set once this run hands Messenger an emoji typeface without Messenger's font behind it (Android 9, no font file
+     * yet, or a failed merge). Messenger keeps its first answer, so the Like stays a box until the next start even if
+     * the font turns up later.
+     */
+    static volatile boolean likeWithoutFont;
+
+    private static final String LIKE = new String(Character.toChars(0xF0000));
+    private static final String THUMBS_UP = new String(Character.toChars(0x1F44D));
+
+    /**
+     * The chat list's last-message snippet as Messenger builds it (#34 follow-up). A Like there is U+F0000, which only
+     * Messenger's downloaded emoji font can draw. With Use system emoji on, the phone's own thumbs up stands in whenever
+     * the typeface Messenger got this run can't draw it. Both are two chars long, so spans over the text stay where they
+     * were.
+     */
+    public static CharSequence chatListSnippet(CharSequence text) {
+        try {
+            if (text == null || android.text.TextUtils.indexOf(text, LIKE) < 0 || !wouldUse("use_system_emoji")
+                || likeDrawn()) return text;
+            CharSequence swapped = withThumbsUp(text);
+            if (swapped != text) enabled("use_system_emoji");
+            return swapped;
+        } catch (RuntimeException error) {
+            hookFailedPrivately("use_system_emoji", "Can't show the Like in the chat list", error);
+            return text;
+        }
+    }
+
+    /** Whether this run's emoji typeface draws the Like, as far as Hush can tell before Messenger asks for one. */
+    static boolean likeDrawn() {
+        if (likeWithoutFont) return false;
+        // Android 9 can't put Messenger's font behind the phone's, unless the phone's failed and Messenger's own is used.
+        if (android.os.Build.VERSION.SDK_INT < 29 && !systemEmojiMissing) return false;
+        return messengerEmojiFile != null || rememberedEmojiFont() != null;
+    }
+
+    /** The text with every Like swapped, as the same class so Messenger's own code sees what it built. */
+    static CharSequence withThumbsUp(CharSequence text) {
+        if (text instanceof String) return ((String) text).replace(LIKE, THUMBS_UP);
+        Class<?> type = text.getClass();
+        if (type != android.text.SpannableStringBuilder.class && type != android.text.SpannableString.class
+            && type != android.text.SpannedString.class) return text;
+        android.text.SpannableStringBuilder swapped = new android.text.SpannableStringBuilder(text);
+        for (int at = android.text.TextUtils.indexOf(swapped, LIKE); at >= 0;
+             at = android.text.TextUtils.indexOf(swapped, LIKE, at + THUMBS_UP.length())) {
+            swapped.replace(at, at + LIKE.length(), THUMBS_UP);
+        }
+        if (type == android.text.SpannableString.class) return new android.text.SpannableString(swapped);
+        if (type == android.text.SpannedString.class) return new android.text.SpannedString(swapped);
+        return swapped;
     }
 
     @android.annotation.TargetApi(29)
@@ -1321,10 +1404,10 @@ public final class Settings {
     }
 
     /**
-     * A long press on the Messenger logo at the top of Chats ends here, after Messenger's own handling of that press. The
-     * patch calls this just before the Chats title's long press handler returns, with the toolbar's context. Messenger
-     * hands the press to a title shortcut plugin that only its internal builds have, so for everyone else it did nothing
-     * but vibrate. Like the Menu rows, this doesn't ask Pause or safe mode first: it's a way back into settings to undo
+     * A long press on the Messenger logo at the top of Chats, or on the Menu tab's title, ends here, after Messenger's own
+     * handling of that press. The patch calls this just before each title's long press handler returns, with the
+     * toolbar's context. Messenger hands the press to a title shortcut plugin that only its internal builds have, so for
+     * everyone else it did nothing but vibrate. Like the Menu rows, this doesn't ask Pause or safe mode first: it's a way back into settings to undo
      * either. A launch Android refuses gets the same toast as the side menu row, pointing at the launcher shortcut.
      */
     public static void logoLongPressed(Context context) {
@@ -1332,12 +1415,12 @@ public final class Settings {
         try {
             HostScreens.open(context, HostScreens.SETTINGS);
         } catch (RuntimeException | LinkageError error) {
-            hookFailed("menu_row", "Opening settings from the Messenger logo failed", error);
+            hookFailed("menu_row", "Opening settings from a tab title failed", error);
             try {
                 android.widget.Toast.makeText(context, new SettingsText(context).get("settings_open_failed"),
                         android.widget.Toast.LENGTH_LONG).show();
             } catch (RuntimeException | LinkageError feedbackError) {
-                hookFailedPrivately("menu_row", "Messenger logo feedback unavailable", feedbackError);
+                hookFailedPrivately("menu_row", "Tab title feedback unavailable", feedbackError);
             }
         }
     }
