@@ -33,7 +33,7 @@ class AdContextBannerTest {
     }
 
     private fun found(vararg methods: MutableMethod) =
-        findControls(methods.groupBy { it.definingClass }.map { (type, group) -> fixtureClass(type, group) })
+        mirroredControls(methods.groupBy { it.definingClass }.map { (type, group) -> fixtureClass(type, group) })
 
     @Test fun theBannerGateIsFoundByTheBannerItBuilds() {
         val controls = found(fixtureMethod(SYNTHETIC_AD_BANNER_GATE, pluginBody(BANNER)))
@@ -98,7 +98,7 @@ class AdContextBannerTest {
             val dex = DexFileFactory.loadDexContainer(apk.toFile(), Opcodes.forApi(35))
             // Every class, so a gate that names the banner through a Redex string table counts too.
             val classes: List<ClassDef> = dex.dexEntryNames.flatMap { dex.getEntry(it)!!.dexFile.classes }
-            val gates = findControls(classes).getValue(AD_CONTEXT_BANNER)
+            val gates = mirroredControls(classes).getValue(AD_CONTEXT_BANNER)
             assertEquals(activeProfile.hooks.getValue(AD_CONTEXT_BANNER), gates.map { it.hookId() }.toSet(), code)
             validateControls(mapOf(AD_CONTEXT_BANNER to gates), setOf(AD_CONTEXT_BANNER))
             val method = MutableMethod(gates.single())

@@ -5,10 +5,12 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.hardware.display.DisplayManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.TextUtils;
+import android.view.Display;
 import android.view.View;
 import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
@@ -103,27 +105,48 @@ public final class ChatAnimation {
         return slide;
     }
 
-    /** A frame this much later than the last one is a stall, not the animation's own time. */
-    static final long STALL = 34;
+    /** One frame at 60 Hz, used when the screen's own rate can't be read. */
     static final long FRAME = 17;
+    /** A frame more than two frames plus this much after the last one is a stall, not the animation's own time. */
+    static final long SLACK = 2;
     /** How long the inbox waits for a chat that hasn't drawn yet. */
     static final long PENDING = 1000;
+    /** How long after a sliding chat's latest frame the inbox stays drawn under it, so one late frame can't uncover it. */
+    static final long KEEP = 4 * FRAME;
     /** Until when a chat sliding in still needs the inbox drawn under it. */
     static volatile long slidingInUntil;
+
+    /**
+     * One frame at the screen's current refresh rate. A 120 Hz screen draws every 8 ms, so a 25 ms stall there skips
+     * three frames of the slide, which a 60 Hz threshold let through (#28).
+     */
+    static long frame() {
+        try {
+            Context context = Settings.appContext;
+            DisplayManager displays = context == null ? null : context.getSystemService(DisplayManager.class);
+            Display display = displays == null ? null : displays.getDisplay(Display.DEFAULT_DISPLAY);
+            float rate = display == null ? 0f : display.getRefreshRate();
+            if (rate >= 30f && rate <= 500f) return Math.min(FRAME, Math.round(1000f / rate));
+        } catch (RuntimeException ignored) {
+            // The 60 Hz frame is what the slide used before it read the screen's rate.
+        }
+        return FRAME;
+    }
 
     /**
      * Messenger builds the chat on the main thread while the slide starts, so the next frame can come 100 ms late,
      * when the slide is nearly over. This moves the start forward by a stall so the slide goes on from where it was.
      */
-    static long steady(Animation animation, long lastFrame, long now) {
-        if (lastFrame > 0 && animation.hasStarted() && now - lastFrame > STALL) {
-            animation.setStartTime(animation.getStartTime() + now - lastFrame - FRAME);
+    static long steady(Animation animation, long lastFrame, long now, long frame) {
+        if (lastFrame > 0 && animation.hasStarted() && now - lastFrame > 2 * frame + SLACK) {
+            animation.setStartTime(animation.getStartTime() + now - lastFrame - frame);
         }
         return now;
     }
 
     static final class Slide extends TranslateAnimation {
         private final boolean in;
+        private final long frame = frame();
         private long lastFrame;
 
         Slide(boolean in, float side) {
@@ -132,21 +155,22 @@ public final class ChatAnimation {
         }
 
         @Override public boolean getTransformation(long now, Transformation out) {
-            lastFrame = steady(this, lastFrame, now);
+            lastFrame = steady(this, lastFrame, now, frame);
             boolean more = super.getTransformation(now, out);
-            if (in) slidingInUntil = more ? now + 2 * STALL : 0;
+            if (in) slidingInUntil = more ? now + KEEP : 0;
             return more;
         }
     }
 
     /** Draws the inbox as it is for the slide's length, and longer while a chat is still sliding in over it. */
     static final class Hold extends AlphaAnimation {
+        private final long frame = frame();
         private long lastFrame;
 
         Hold() { super(1f, 1f); }
 
         @Override public boolean getTransformation(long now, Transformation out) {
-            lastFrame = steady(this, lastFrame, now);
+            lastFrame = steady(this, lastFrame, now, frame);
             return super.getTransformation(now, out) | now < slidingInUntil;
         }
     }

@@ -131,7 +131,7 @@ internal val pluginGates = mapOf(
 
 /**
  * Redex's string tables: static (I)String methods that switch on the key straight to a constant, by method and key.
- * 582 moved some kill switch names into one, so a gate loads its anchor with `const/16 key` and a lookup, not a literal.
+ * 583 keeps some kill switch names in one, so a gate loads its anchor with `const/16 key` and a lookup, not a literal.
  */
 internal fun redexStringTables(classes: Iterable<ClassDef>): Map<String, Map<Int, String>> = buildMap {
     for (method in classes.asSequence().flatMap { it.methods }) {

@@ -135,7 +135,7 @@ val materialYouPatch = bytecodePatch(
             it.hookId() == darkCheckRef.toString() && AccessFlags.STATIC.isSet(it.accessFlags)
         } ?: throw app.morphe.patcher.patch.PatchException("Dark mode check not found: $darkCheckRef")
         planReturns(darkCheck, "$THEME->darkModeAnswer(Z)Z")
-        // A method that only returns another FDSColors method's answer (582's A02 hands its token to A01) already gets
+        // A method that only returns another FDSColors method's answer (583's A02 hands its token to A01) already gets
         // the remapped color from that one, so wrapping it too would remap twice.
         val fdsIds = fdsMethods.map { it.hookId() }.toSet()
         fun Method.delegatedReturns(): Set<Int> {

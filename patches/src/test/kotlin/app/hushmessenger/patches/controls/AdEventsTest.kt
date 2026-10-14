@@ -111,11 +111,11 @@ class AdEventsTest {
         activeProfile = SYNTHETIC_PROFILE
     }
 
-    private fun found(classes: List<MutableClass>) = findControls(classes).getValue(AD_EVENTS).map { it.hookId() }.toSet()
+    private fun found(classes: List<MutableClass>) = mirroredControls(classes).getValue(AD_EVENTS).map { it.hookId() }.toSet()
 
     @Test fun bothEventsAreFoundByShapeAndTheNamesTheyLog() {
         assertEquals(setOf(SYNTHETIC_INBOX_VISIBILITY, SYNTHETIC_AD_ENTRY), found(adEventsFixture()))
-        validateControls(findControls(adEventsFixture()), setOf(AD_EVENTS))
+        validateControls(mirroredControls(adEventsFixture()), setOf(AD_EVENTS))
     }
 
     @Test fun everyProfileHooksBothEvents() {
@@ -139,7 +139,7 @@ class AdEventsTest {
         )
         for ((case, classes) in cases) {
             assertEquals(1, found(classes).size, case)
-            assertFailsWith<PatchException>(case) { validateControls(findControls(classes), setOf(AD_EVENTS)) }
+            assertFailsWith<PatchException>(case) { validateControls(mirroredControls(classes), setOf(AD_EVENTS)) }
         }
     }
 

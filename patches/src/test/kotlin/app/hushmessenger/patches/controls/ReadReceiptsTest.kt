@@ -33,8 +33,8 @@ private val FINAL = AccessFlags.PUBLIC.value or AccessFlags.FINAL.value
 private val SEEN_BODY = "const-string v0, \"$CHAT_SEEN_JOB\"\nconst-string v1, \"$CHAT_SEEN_TRACE\"\nreturn-void"
 private const val DISPATCH = "LX/Dispatch;->send(${FB_USER_SESSION}LX/Enum;LX/Message;Ljava/lang/String;Ljava/lang/String;)V"
 
-/** Keep the native instruction positions while omitting unrelated composer logic. The default is 582's body. */
-private fun sendBody(changes: Map<Int, String> = emptyMap(), shape: ReplyReadShape = REPLY_READ_SHAPES[0]): String {
+/** Keep the native instruction positions while omitting unrelated composer logic. The default is 583's body. */
+private fun sendBody(changes: Map<Int, String> = emptyMap(), shape: ReplyReadShape = REPLY_READ_SHAPE): String {
     val c = MutableList(shape.size) { "nop" }
     val n = shape.nullThread
     val d = shape.dispatch
@@ -52,7 +52,7 @@ private fun sendBody(changes: Map<Int, String> = emptyMap(), shape: ReplyReadSha
     return c.joinToString("\n")
 }
 private fun seen(body: String = SEEN_BODY, registers: Int = 9) = fixtureMethod(SYNTHETIC_CHAT_SEEN, body, registers, STATIC)
-private fun send(changes: Map<Int, String> = emptyMap(), shape: ReplyReadShape = REPLY_READ_SHAPES[0]) =
+private fun send(changes: Map<Int, String> = emptyMap(), shape: ReplyReadShape = REPLY_READ_SHAPE) =
     fixtureMethod(SYNTHETIC_SEND_EVENT, sendBody(changes, shape), 36, STATIC)
 private fun Method.code() = implementation!!.instructions.map { ImmutableInstruction.of(it) }
 private fun assertStockCode(before: List<Instruction>, after: List<Instruction>, inserted: Set<Int>, label: String) {
@@ -83,7 +83,7 @@ class ReadReceiptsTest {
     @AfterTest fun reset() { activeProfile = SYNTHETIC_PROFILE; readReceiptThreadFields = emptyMap() }
 
     @Test fun discoveryFindsTheTypedSendPathAndLeavesTheReadManagerAlone() {
-        val hooks = findControls(readReceiptsFixture())
+        val hooks = mirroredControls(readReceiptsFixture())
         assertEquals(listOf(SYNTHETIC_CHAT_SEEN), hooks.getValue(HIDE_READ_RECEIPTS).map { it.hookId() })
         assertEquals(listOf(SYNTHETIC_SEND_EVENT), hooks.getValue(REPLY_READ).map { it.hookId() })
         validateControls(hooks, setOf(HIDE_READ_RECEIPTS, REPLY_READ))
@@ -97,7 +97,7 @@ class ReadReceiptsTest {
 
     @Test fun seenReceivesTheTypedAccountAndHandlerThreadBeforeAnyStockWork() {
         val method = seen()
-        findControls(readReceiptsFixture(seenMethod = method))
+        mirroredControls(readReceiptsFixture(seenMethod = method))
         val before = method.code()
         method.injectChatSeen()
         val c = method.code()
@@ -108,61 +108,57 @@ class ReadReceiptsTest {
     }
 
     @Test fun replyIsRecordedOnlyAfterDispatchWithThePreservedThread() {
+        val n = REPLY_READ_SHAPE.nullThread
+        val d = REPLY_READ_SHAPE.dispatch
         val method = send()
         val before = method.code()
-        assertEquals(Opcode.INVOKE_INTERFACE_RANGE, before[33].opcode)
-        assertEquals("LX/ThreadProvider;->thread()$THREAD_KEY_TYPE", (before[33] as ReferenceInstruction).reference.toString())
-        assertEquals(method.parameterRegister(7), (before[33] as RegisterRangeInstruction).startRegister)
-        assertEquals(1, (before[33] as RegisterRangeInstruction).registerCount)
-        assertEquals(method.parameterTypes[7], ((before[33] as ReferenceInstruction).reference as MethodReference).definingClass)
-        assertEquals(emptyList(), ((before[33] as ReferenceInstruction).reference as MethodReference).parameterTypes)
-        assertEquals(THREAD_KEY_TYPE, ((before[33] as ReferenceInstruction).reference as MethodReference).returnType)
-        assertEquals(Opcode.MOVE_RESULT_OBJECT, before[34].opcode)
-        assertEquals(12, (before[34] as OneRegisterInstruction).registerA)
-        method.injectReplyRead()
-        val c = method.code()
-        assertEquals(Opcode.MOVE_OBJECT_16, c[237].opcode)
-        assertEquals("$DISPATCH", (c[240] as ReferenceInstruction).reference.toString())
-        assertEquals("$SETTINGS->noteMessageSent(Ljava/lang/Object;Ljava/lang/Object;)V", (c[243] as ReferenceInstruction).reference.toString())
-        assertStockCode(before, c, setOf(237, 241, 242, 243), "send dispatcher")
-    }
-
-    /** Messenger 583 drops one parameter check near the top, so the same seam sits four instructions earlier. */
-    @Test fun the583DispatcherGetsTheSameSeamFourInstructionsEarlier() {
-        val shape = REPLY_READ_SHAPES[1]
-        val d = shape.dispatch
-        val method = send(shape = shape)
-        val before = method.code()
+        assertEquals(Opcode.INVOKE_INTERFACE_RANGE, before[n + 2].opcode)
+        assertEquals("LX/ThreadProvider;->thread()$THREAD_KEY_TYPE", (before[n + 2] as ReferenceInstruction).reference.toString())
+        assertEquals(method.parameterRegister(7), (before[n + 2] as RegisterRangeInstruction).startRegister)
+        assertEquals(1, (before[n + 2] as RegisterRangeInstruction).registerCount)
+        assertEquals(method.parameterTypes[7], ((before[n + 2] as ReferenceInstruction).reference as MethodReference).definingClass)
+        assertEquals(emptyList(), ((before[n + 2] as ReferenceInstruction).reference as MethodReference).parameterTypes)
+        assertEquals(THREAD_KEY_TYPE, ((before[n + 2] as ReferenceInstruction).reference as MethodReference).returnType)
+        assertEquals(Opcode.MOVE_RESULT_OBJECT, before[n + 3].opcode)
+        assertEquals(12, (before[n + 3] as OneRegisterInstruction).registerA)
         assertEquals(d, method.validateReplyRead())
         method.injectReplyRead()
         val c = method.code()
         assertEquals(Opcode.MOVE_OBJECT_16, c[d - 2].opcode)
         assertEquals(DISPATCH, (c[d + 1] as ReferenceInstruction).reference.toString())
         assertEquals("$SETTINGS->noteMessageSent(Ljava/lang/Object;Ljava/lang/Object;)V", (c[d + 4] as ReferenceInstruction).reference.toString())
-        assertStockCode(before, c, setOf(d - 2, d + 2, d + 3, d + 4), "583 send dispatcher")
-        // A 583 body with the account copied from the wrong parameter is still refused.
-        val wrong = send(mapOf(shape.session to "move-object/from16 v10, p1"), shape)
-        val wrongBefore = wrong.code()
-        assertFailsWith<PatchException> { wrong.injectReplyRead() }
-        assertStockCode(wrongBefore, wrong.code(), emptySet(), "583 wrong account")
-        // So is a body of neither known size.
-        assertFailsWith<PatchException> { fixtureMethod(SYNTHETIC_SEND_EVENT, sendBody() + "\nnop", 36, STATIC).validateReplyRead() }
+        assertStockCode(before, c, setOf(d - 2, d + 2, d + 3, d + 4), "send dispatcher")
+    }
+
+    /** Messenger 582's dispatcher had one more parameter check, so the same seam sat four instructions later. It's refused. */
+    @Test fun a582DispatcherOrABodyOfAnotherSizeIsRefused() {
+        val shape582 = ReplyReadShape(size = 402, composer = 13, session = 25, nullThread = 31, absent = 73, dispatch = 239)
+        for ((label, method) in listOf(
+            "582 send dispatcher" to send(shape = shape582),
+            "one more instruction" to fixtureMethod(SYNTHETIC_SEND_EVENT, sendBody() + "\nnop", 36, STATIC),
+        )) {
+            val before = method.code()
+            assertFailsWith<PatchException>(label) { method.injectReplyRead() }
+            assertStockCode(before, method.code(), emptySet(), label)
+        }
     }
 
     @Test fun changedIdentityFlowOrLiveScratchRefusesBothHooksBeforeAnyEdit() {
+        val n = REPLY_READ_SHAPE.nullThread
+        val d = REPLY_READ_SHAPE.dispatch
         val mutations = mapOf(
-            "wrong account" to mapOf(25 to "move-object/from16 v10, p1"),
-            "changed provider" to mapOf(33 to "invoke-interface/range {p7 .. p7}, LX/Other;->thread()$THREAD_KEY_TYPE"),
-            "wrong thread type" to mapOf(33 to "invoke-interface/range {p7 .. p7}, LX/ThreadProvider;->thread()Ljava/lang/Object;"),
-            "thread overwritten" to mapOf(235 to "move-object v12, v10"),
-            "branch into send" to mapOf(235 to "goto :bad_send", 239 to ":bad_send\ninvoke-interface/range {v11 .. v16}, $DISPATCH"),
-            "saved parameter still used" to mapOf(250 to "invoke-virtual/range {p13 .. p13}, LX/H;->use()V"),
-            "scratch read on alternate path" to mapOf(240 to "if-eqz v5, :scratch_use", 250 to ":scratch_use\ninvoke-static {v1}, LX/H;->use(Ljava/lang/Object;)V"),
+            "wrong account" to mapOf(REPLY_READ_SHAPE.session to "move-object/from16 v10, p1"),
+            "changed provider" to mapOf(n + 2 to "invoke-interface/range {p7 .. p7}, LX/Other;->thread()$THREAD_KEY_TYPE"),
+            "wrong thread type" to mapOf(n + 2 to "invoke-interface/range {p7 .. p7}, LX/ThreadProvider;->thread()Ljava/lang/Object;"),
+            "thread overwritten" to mapOf(d - 4 to "move-object v12, v10"),
+            "branch into send" to mapOf(d - 4 to "goto :bad_send", d to ":bad_send\ninvoke-interface/range {v11 .. v16}, $DISPATCH"),
+            "saved parameter still used" to mapOf(d + 11 to "invoke-virtual/range {p13 .. p13}, LX/H;->use()V"),
+            "scratch read on alternate path" to mapOf(d + 1 to "if-eqz v5, :scratch_use", d + 11 to ":scratch_use\ninvoke-static {v1}, LX/H;->use(Ljava/lang/Object;)V"),
         )
         for ((case, changes) in mutations) {
             val good = seen()
             val bad = send(changes)
-            val hooks = findControls(readReceiptsFixture(good, bad)).mapValues { (_, methods) -> methods.map { it as MutableMethod } }
+            val hooks = mirroredControls(readReceiptsFixture(good, bad)).mapValues { (_, methods) -> methods.map { it as MutableMethod } }
             val before = listOf(good.code(), bad.code())
             assertFailsWith<PatchException>(case) { injectControl(HIDE_READ_RECEIPTS, hooks) }
             assertStockCode(before[0], good.code(), emptySet(), case)
@@ -172,20 +168,21 @@ class ReadReceiptsTest {
 
     @Test fun missingImmutableThreadContractOrCrampedRegistersRefuseSeen() {
         val fixture = readReceiptsFixture()
-        findControls(fixture.filter { it.type != THREAD_KEY_TYPE })
+        mirroredControls(fixture.filter { it.type != THREAD_KEY_TYPE })
         assertFailsWith<PatchException> { seen().validateChatSeen() }
-        findControls(fixture)
+        mirroredControls(fixture)
         assertFailsWith<PatchException> { seen(SEEN_BODY.replace("v1", "v0"), 3).validateChatSeen() }
         val thread = fixture.single { it.type == THREAD_KEY_TYPE }
         val mutableKey = fixtureClass(THREAD_KEY_TYPE, thread.methods.toList(), extraFields = listOf(field(THREAD_KEY_TYPE, "key", "I", AccessFlags.PUBLIC.value)), flags = FINAL)
-        findControls(fixture.filter { it.type != THREAD_KEY_TYPE } + mutableKey)
+        mirroredControls(fixture.filter { it.type != THREAD_KEY_TYPE } + mutableKey)
         assertFailsWith<PatchException> { seen().validateChatSeen() }
     }
 
     @Test fun aThrowingScratchWriteDoesNotHideItsCatchRead() {
-        val method = send(mapOf(3 to "const-string v1, \"original scratch\"", 241 to "nop", 243 to "new-instance v1, Ljava/lang/Object;",
+        val d = REPLY_READ_SHAPE.dispatch
+        val method = send(mapOf(3 to "const-string v1, \"original scratch\"", d + 2 to "nop", d + 4 to "new-instance v1, Ljava/lang/Object;",
             300 to "move-exception v3", 301 to "invoke-static {v1}, LX/H;->use(Ljava/lang/Object;)V", 302 to "throw v3"))
-        method.implementation!!.apply { addCatch(newLabelForIndex(243), newLabelForIndex(244), newLabelForIndex(300)) }
+        method.implementation!!.apply { addCatch(newLabelForIndex(d + 4), newLabelForIndex(d + 5), newLabelForIndex(300)) }
         val before = method.code()
         val failure = assertFailsWith<PatchException> { method.injectReplyRead() }
         assertTrue(failure.message!!.contains("identity flow"))
@@ -194,7 +191,8 @@ class ReadReceiptsTest {
 
     @Test fun theNewCallbackCannotExtendANativeTryOverClobberedRegisters() {
         val method = send(mapOf(300 to "move-exception v3", 301 to "invoke-static {v0}, LX/H;->use(Ljava/lang/String;)V", 302 to "throw v3"))
-        method.implementation!!.apply { addCatch(newLabelForIndex(239), newLabelForIndex(240), newLabelForIndex(300)) }
+        val d = REPLY_READ_SHAPE.dispatch
+        method.implementation!!.apply { addCatch(newLabelForIndex(d), newLabelForIndex(d + 1), newLabelForIndex(300)) }
         val before = method.code()
         val failure = assertFailsWith<PatchException> { method.injectReplyRead() }
         assertTrue(failure.message!!.contains("unprotected send seam"))

@@ -46,7 +46,7 @@ private const val NATIVE_MENU_TITLE_LONG_PRESS = "LX/3Df;->Ccw(Landroid/content/
 private const val NATIVE_MENU_TITLE_LONG_PRESS_351 = "LX/3DZ;->Ccn(Landroid/content/Context;)V"
 
 /**
- * The Chats title's long press handler as 582 writes it: a null check, then the TitleShortcut plugin lookup with the
+ * The Chats title's long press handler as Messenger writes it: a null check, then the TitleShortcut plugin lookup with the
  * session and the Context, then the plugin call. p0 is v3 and the Context, p1, is v4.
  */
 private val CHATS_TITLE_BODY = """

@@ -1,5 +1,7 @@
 package app.hushmessenger.patches.controls
 
+import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
 import com.android.tools.smali.dexlib2.AccessFlags
@@ -21,7 +23,7 @@ internal const val NEARBY_SCANS = "nearby_scans"
 
 /**
  * Messenger's foreground location loop. While the app is in front it queues one task over and over that asks for a
- * location, starts a Wi-Fi scan and starts a Bluetooth scan. It keeps this name on every 582 build.
+ * location, starts a Wi-Fi scan and starts a Bluetooth scan. It keeps this name on every 583 build.
  */
 internal const val FOREGROUND_LOCATION = "Lcom/facebook/location/foreground/ForegroundLocationFrameworkController;"
 
@@ -112,4 +114,65 @@ internal fun MutableMethod.validateNearbyScans() {
 internal fun MutableMethod.injectNearbyScans() {
     validateNearbyScans()
     injectSwitch("$SETTINGS->stopNearbyScans()Z", "0x0")
+}
+
+/** Messenger's reads of the name and BSSID of the Wi-Fi network the phone is connected to. */
+internal const val WIFI_IDENTITY = "wifi_identity"
+
+private const val WIFI_INFO = "Landroid/net/wifi/WifiInfo;"
+
+/** WebRTC's own network monitor picks the network a call goes over, so its read is left alone. */
+private const val WEBRTC = "Lorg/webrtc/"
+
+/** Each read and the extension call that takes its answer. */
+private val WIFI_IDENTITY_FILTERS = mapOf(
+    "$WIFI_INFO->getSSID()Ljava/lang/String;" to "$SETTINGS->wifiName(Ljava/lang/String;)Ljava/lang/String;",
+    "$WIFI_INFO->getBSSID()Ljava/lang/String;" to "$SETTINGS->wifiBssid(Ljava/lang/String;)Ljava/lang/String;",
+)
+
+/** Where this method reads the network's name or BSSID. */
+private fun Method.wifiIdentityReads(): List<Int> {
+    val code = implementation?.instructions?.toList() ?: return emptyList()
+    return code.indices.filter { (code[it] as? ReferenceInstruction)?.reference?.toString() in WIFI_IDENTITY_FILTERS }
+}
+
+/** True when the very next instruction keeps the read's answer, the one place a filter can take it. */
+private fun Method.keepsEveryWifiIdentityRead(): Boolean {
+    val code = implementation?.instructions?.toList() ?: return false
+    return wifiIdentityReads().all { code.getOrNull(it + 1)?.opcode == Opcode.MOVE_RESULT_OBJECT }
+}
+
+/**
+ * Every method outside WebRTC that reads the connected network's name or BSSID. On 583 that's six: the Wi-Fi
+ * diagnostics snapshot, two network descriptions in the network manager, a per-network key (the carrier's name on mobile
+ * data) and the two methods of the Wi-Fi logger that writes down the access point's hardware address. A build where any
+ * read's answer isn't kept right away gets no hook at all, so the switch never claims more than it hides.
+ */
+internal fun findWifiIdentityReads(classes: Iterable<ClassDef>): List<Method> {
+    val readers = classes.filterNot { it.type.startsWith(WEBRTC) }.flatMap { cls -> cls.methods.filter { it.wifiIdentityReads().isNotEmpty() } }
+    return if (readers.all { it.keepsEveryWifiIdentityRead() }) readers else emptyList()
+}
+
+internal fun MutableMethod.validateWifiIdentity() {
+    if (definingClass.startsWith(WEBRTC)) nearbyScansChanged("WebRTC's network read in ${hookId()}")
+    if (wifiIdentityReads().isEmpty()) nearbyScansChanged("no Wi-Fi network read in ${hookId()}")
+    if (!keepsEveryWifiIdentityRead()) nearbyScansChanged("a Wi-Fi network read whose answer isn't kept in ${hookId()}")
+}
+
+/**
+ * Hands each answer to the extension right where it's kept. With the switch on Messenger gets what Android gives an app
+ * without location access: "<unknown ssid>" and 02:00:00:00:00:00. Messenger already handles those, since that's what
+ * it reads on every phone where it can't see your location. The connection itself, its signal and its speed stay as
+ * they are, so calls still pick their network the same way.
+ */
+internal fun MutableMethod.injectWifiIdentity() {
+    validateWifiIdentity()
+    for (read in wifiIdentityReads().asReversed()) {
+        val filter = WIFI_IDENTITY_FILTERS.getValue(getInstruction<ReferenceInstruction>(read).reference.toString())
+        val held = getInstruction<OneRegisterInstruction>(read + 1).registerA
+        addInstructions(read + 2, """
+            invoke-static/range {v$held .. v$held}, $filter
+            move-result-object v$held
+        """.trimIndent())
+    }
 }

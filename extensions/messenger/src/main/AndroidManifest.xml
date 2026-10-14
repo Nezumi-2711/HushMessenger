@@ -43,6 +43,7 @@
         <meta-data android:name="hush.feature.mqtt_telemetry" android:value="true" />
         <meta-data android:name="hush.feature.pinned_chats" android:value="true" />
         <meta-data android:name="hush.feature.nearby_scans" android:value="true" />
+        <meta-data android:name="hush.feature.phone_id_sync" android:value="true" />
         <meta-data android:name="hush.feature.message_log" android:value="true" />
         <meta-data android:name="hush.feature.auto_reply" android:value="true" />
         <meta-data android:name="hush.feature.hide_read_receipts" android:value="true" />
@@ -53,7 +54,7 @@
         <meta-data android:name="hush.feature.app_icons" android:value="true" />
         <meta-data android:name="hush.feature.custom_font" android:value="true" />
         <provider android:name="app.hushmessenger.extension.SettingsProvider" android:authorities="${applicationId}.hush.settings" android:exported="false" />
-        <activity android:name="app.hushmessenger.extension.SettingsActivity" android:icon="@android:drawable/ic_menu_preferences" android:exported="true" />
+        <activity android:name="app.hushmessenger.extension.SettingsActivity" android:icon="@android:drawable/ic_menu_preferences" android:exported="true" android:excludeFromRecents="true" />
         <provider android:name="app.hushmessenger.extension.CameraProvider" android:authorities="${applicationId}.hush.camera" android:exported="false" android:grantUriPermissions="true" />
         <activity android:name="app.hushmessenger.extension.CameraActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
         <activity android:name="app.hushmessenger.extension.RestartActivity" android:exported="false" android:excludeFromRecents="true" android:noHistory="true" android:configChanges="orientation|screenSize|keyboardHidden" />

@@ -1,8 +1,7 @@
 ![HushMessenger. Keep the conversation. Cut the friction.](assets/readme-hero.png)
 
 <p align="center">
-  <a href="https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.23.0"><img src="https://img.shields.io/badge/version-0.23.0-0084FF" alt="Version 0.23.0"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/development-0.23.3-F3A6B8" alt="Development version 0.23.3"></a>
+  <a href="https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.24.0"><img src="https://img.shields.io/badge/version-0.24.0-0084FF" alt="Version 0.24.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
   <img src="https://img.shields.io/badge/platform-Android%209%2B%20arm64-3DDC84" alt="Platform Android 9 or newer, arm64">
   <img src="https://img.shields.io/badge/Messenger-583.0.0.29.95-0084FF" alt="Messenger 583.0.0.29.95">
@@ -22,7 +21,7 @@
 
 HushMessenger is a set of [Morphe](https://morphe.software) patches for Facebook Messenger. You bring the Messenger APK, Morphe patches it on your phone, and you get a Messenger with a settings screen full of switches that stock Messenger doesn't have. Hide the ads, the suggested people, the stories row and Meta AI. Stop sending read receipts and typing indicators. Watch stories without showing up in the viewer list. Keep a log of messages so an unsend can't take them back. Send photos at their real quality, use your own font, let Material You color the app, and more.
 
-Every switch starts off, so a freshly patched Messenger behaves like stock until you turn something on. The current release has 50 patches. What changed in each version is in the [changelog](CHANGELOG.md).
+Every switch starts off, so a freshly patched Messenger behaves like stock until you turn something on. The current release has 57 patches. What changed in each version is in the [changelog](CHANGELOG.md).
 
 **[Add HushMessenger to Morphe Manager](https://morphe.software/add-source?github=SysAdminDoc%2FHushMessenger)**
 
@@ -32,11 +31,11 @@ Every switch starts off, so a freshly patched Messenger behaves like stock until
 ## Install
 
 1. **Get the APK.** HushMessenger patches arm64 Messenger 583.0.0.29.95 only. Download one from [APKMirror's 583.0.0.29.95 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-583-0-0-29-95-release/) and check its version code against the [supported builds](#supported-messenger-builds). A 32-bit build shares the version name and won't work.
-2. **Add the source.** Open the link above on your phone with Morphe Manager (1.34.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **50 patches**. If it shows an older version, tap its refresh button.
+2. **Add the source.** Open the link above on your phone with Morphe Manager (1.34.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **57 patches**. If it shows an older version, tap its refresh button.
 3. **Patch Messenger.** The default selection includes every switch. Three patches start unselected because they change the app package itself: **Clone install under another package name**, **Spoof package version** and **Custom new-message sound**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
 4. **Keep one source.** Don't add the remote source and a local copy together, and don't mix in Messenger patches from other sources.
 
-Prefer a local source? Download [`patches-0.23.0.mpp`](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.23.0) and add it through **Sources > + > Local**. It won't update itself. The `.mpp` file is a patch bundle, not a Messenger APK. Morphe Desktop 1.18.1 can load the same source too.
+Prefer a local source? Download [`patches-0.24.0.mpp`](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.24.0) and add it through **Sources > + > Local**. It won't update itself. The `.mpp` file is a patch bundle, not a Messenger APK. Morphe Desktop 1.18.1 can load the same source too.
 
 ## Settings
 
@@ -46,7 +45,7 @@ Long-press Messenger's icon on your home screen and tap **Patch controls**. The 
 
 The **Controls** tab has All, Inbox, Chats and More filters and a search box that finds every word you type, in any order. A switch that's on shows when Messenger last checked it. The **App** tab has the restart button, **Quick setups** (Quiet, Privacy or Back to defaults in one tap), appearance, **Save choices to a file** and **Restore choices from a file**, and **Copy setup**, which copies your versions and switch states with no chats or account details in it. **Report a problem** opens a new GitHub issue with your versions, phone model and the switches that are on already filled in. Issues are public, so look it over before you send it. **Check for updates** is off by default. When it's on, it asks GitHub at most once an hour and sends nothing but the request.
 
-The screenshots below show the current development settings, with grouped controls and matching dark and light themes.
+The screenshots below show the settings in the current release, in the dark and light themes.
 
 <p>
   <img src="assets/settings-dark.png" width="300" alt="Controls tab in the dark theme, with search and category filters">
@@ -66,7 +65,7 @@ The screenshots below show the current development settings, with grouped contro
 | Hide stories and notes | Hides the row of stories and notes above your chats. |
 | Hide inbox tabs | Hides the Home and Channels tabs inside the inbox. |
 | Hide Mark as read | Takes Mark as read out of the menu you get when you press and hold a chat, so you can't mark one read by accident. Mark as unread stays. |
-| Pin more chats | Raises Messenger's limit of three pinned chats to 20, so more of them can stay at the top of your chat list. Experimental, since Messenger's servers may still hold you to three. |
+| Pin more chats | Raises Messenger's limit of three pinned chats to 20, so more of them can stay at the top of your chat list. Experimental, since Messenger's servers can still stop you sooner. |
 | Hide People tab | Hides the People tab in the bottom bar. Restart Messenger to see it go. |
 | Hide Notifications tab | Hides the Notifications tab in the bottom bar. Restart Messenger to see it go. |
 | Hide Facebook shortcuts | Removes Facebook toolbar, profile and sharing shortcuts, and the "Also from Meta" and "Subscriptions" sections in the Menu tab. |
@@ -86,8 +85,9 @@ The screenshots below show the current development settings, with grouped contro
 | Stop analytics uploads | Blocks Messenger's analytics uploader. Events still get recorded on your phone and can upload once you turn this off. |
 | Stop ad attribution uploads | Stops the job that sends your advertising ID and ad tracking setting to Meta. |
 | Stop inbox and ad link logging | Stops the reports about which part of your chat list was on screen and which ad opened a chat. |
-| Stop MQTT logging | Drops the health reports and push logging Messenger's MQTT client sends. Messages and calls keep working. |
-| Stop nearby scans | Stops Messenger from reading the list of Wi-Fi networks around you. Also stops the timer it can run while it's open to check your location and scan for Wi-Fi networks and Bluetooth devices. Experimental, since Messenger hasn't started those scans on the test phones yet. |
+| Stop MQTT logging | Drops the health reports and push logging Messenger's MQTT client sends. Messenger sends most of its traffic another way, so there's often little for it to drop. Messages and calls keep working. |
+| Stop nearby scans | Stops Messenger from reading the list of Wi-Fi networks around you, and hides the name and hardware address of the one you're connected to, the way Android does when Messenger can't see your location. Also stops the timer it can run while it's open to check your location and scan for Wi-Fi networks and Bluetooth devices. Experimental, since Messenger hasn't started those scans on the test phones yet. |
+| Stop app list and device ID sharing | Stops Messenger from going through your installed apps to find other Meta apps, and from asking them for the device ID Meta uses to link its apps on one phone. Messenger keeps the ID it already has. Experimental. |
 | Keep a message log | Saves a copy of each message that raised a notification, encrypted chats included, so an unsend can't take it back. It stays on your phone, encrypted. **View log** and **Clear log** sit under the switch. |
 | Auto reply | Answers messages with a reply you write, for certain words or for any message. One reply per chat every five minutes, and group chats only when you allow it. |
 | Hide read receipts | Opening a chat no longer sends Seen. The chat stays unread on your phone until you reply or mark it read. Group chats haven't been checked. |
@@ -98,7 +98,7 @@ The screenshots below show the current development settings, with grouped contro
 | Use system emoji | Draws emoji with your phone's own set on Android 12 and newer. |
 | Send photos at original quality | With HD on, a JPEG photo up to 20 MB goes out with its own image data instead of Messenger's re-encoded copy. Location and camera details are stripped, as Messenger does. |
 | Send videos without re-encoding | A video up to 25 MB goes out as it is. |
-| Fix shared videos with xHE-AAC sound | Converts a shared video's xHE-AAC sound track to regular AAC so Messenger can send it. |
+| Fix shared videos with xHE-AAC sound | Converts a video's xHE-AAC sound track to regular AAC so Messenger can send it, whether it's shared in from another app or picked in a chat. |
 | Use the phone's camera app | A chat's camera button opens your own camera app. Photos only. |
 | Open web links externally | Opens http and https links in your default browser. |
 | Slide chats in and out | Slides a chat in from the side when you open it and back out when you leave. |
@@ -171,10 +171,10 @@ On Windows, compare your file with `Get-FileHash -Algorithm SHA256 .\messenger.a
 
 ## Verify a download
 
-The [v0.23.0 release](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.23.0) ships `SHA256SUMS.txt` beside the bundle. Compare its `.mpp` hash with your download.
+The [v0.24.0 release](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.24.0) ships `SHA256SUMS.txt` beside the bundle. Compare its `.mpp` hash with your download.
 
 ```text
-67ebd5e8a749bcf9c16632c996ff6b288b5bd7206ba6be6894e9b0c725d82595  patches-0.23.0.mpp
+2b56f21cf47449b3b773a1da5f790279a77f8580f508536c749c54729081628c  patches-0.24.0.mpp
 ```
 
 `SHA256SUMS.txt.sig` is an SSH signature made with the project's release key. Its fingerprint is `SHA256:Z+UfHy7IUbtgNRO/wHkIr68+u4I+SIKPY9avfx/VAPU` and its public half is in [`scripts/release_signers`](scripts/release_signers). Morphe doesn't check this signature, so checking it is up to you. Download the three files from the same tag and run this in a terminal (OpenSSH 8.1 or newer, which Windows 10 and later include; in PowerShell wrap it in `cmd /c "..."`):
@@ -204,7 +204,7 @@ python -m unittest discover -s scripts/tests -v
 
 The bundle lands in `patches/build/libs/`, and clean builds from the same source give the same checksum. `:patches:check` wants the exact stock APK of every supported build in a folder named by `HUSH_NATIVE_FIXTURES`, each file called `messenger-583-<version code>.apk`. `:patches:test` runs without them and skips the tests that replay on those APKs.
 
-To exercise Messenger itself, use ARM64 Android or an emulator image with ARM translation. Messenger `582/346415686` was checked on the Android 12L Google APIs x86_64 image with `libndk_translation.so`. Keep separate emulator data directories for Meta-signed stock and re-signed builds. Android users and work profiles share the installed APK and its signing key.
+To exercise Messenger itself, use ARM64 Android or an emulator image with ARM translation. Messenger `583/346611369` was checked on the Android 12L Google APIs x86_64 image with `libndk_translation.so`. Keep separate emulator data directories for Meta-signed stock and re-signed builds. Android users and work profiles share the installed APK and its signing key.
 
 For a low-RAM check, verify `ActivityManager.isLowRamDevice()` inside the app. A userdebug image can apply `debug.force_low_ram` temporarily after a framework restart. Reducing the emulator's RAM alone doesn't establish that classification. Restore the property and verify the original result afterward.
 

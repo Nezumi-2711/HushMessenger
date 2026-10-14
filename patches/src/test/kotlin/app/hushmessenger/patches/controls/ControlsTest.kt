@@ -1,5 +1,6 @@
 package app.hushmessenger.patches.controls
 
+import app.hushmessenger.patches.CompatMirror
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
@@ -86,6 +87,30 @@ class ControlsTest {
         assertEquals(5, changed.implementation!!.instructions.size)
     }
 
+    @Test fun compatReportRefusesEveryInboxTabsBodyThePatchRefuses() {
+        // CompatReport checks the body where it reads the supplier field, so a refused body fails the profile there.
+        val supplier = "Lcom/facebook/messaging/inboxsubtabs/plugins/subtabs/itemsupplier/InboxSubtabsItemSupplierImplementation;"
+        val body = """
+            iget-object v0, p0, LX/2UL;->A00:$supplier
+            iget-object v1, v0, $supplier->A07:Ljava/util/concurrent/atomic/AtomicBoolean;
+            const/4 v0, 0x1
+            invoke-virtual {v1, v0}, Ljava/util/concurrent/atomic/AtomicBoolean;->set(Z)V
+            return-void
+        """.trimIndent()
+        fun takenBy(text: String, registers: Int = 3): Pair<Boolean, Boolean> {
+            val run = method(registers = registers, returnType = "V", body = text)
+            return runCatching { run.validateSubtabs() }.isSuccess to (CompatMirror.subtabsSupplier(run) != null)
+        }
+        assertEquals(true to true, takenBy(body))
+        for ((name, taken) in listOf(
+            "the setter's value" to takenBy(body.replace("{v1, v0}", "{v1, v2}")),
+            "the value" to takenBy(body.replace("v0, 0x1", "v0, 0x0")),
+            "the flag field" to takenBy(body.replace("->A07:", "->A08:")),
+            "the setter" to takenBy(body.replace("->set(Z)V", "->lazySet(Z)V")),
+            "the register count" to takenBy(body, registers = 4),
+        )) assertEquals(false to false, taken, name)
+    }
+
     @Test fun unsentLabelHookReadsTheRowStraightFromTheWrapperList() {
         messageWrapperFixture().methods.single { it.name == "BWo" }.validateUnsentIndicator()
         // Older releases went through a static helper instead, a shape no supported build has.
@@ -128,33 +153,31 @@ class ControlsTest {
         assertFailsWith<PatchException> { flag(static, flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value).validateDeltaUnsent() }
     }
 
-    @Test fun keptUnsentHookMustBeAnInstanceMethodWithItsIntentInReach() {
+    /** 582's instance (Intent, session, String) handler, with its Intent in p1, is refused. */
+    @Test fun a582InstanceRevokeHandlerIsRefused() {
         fun revoke(registers: Int, flags: Int = AccessFlags.PUBLIC.value, types: String = "${SESSION}Ljava/lang/String;") = fixtureMethod(
             "Lfixture/Revoke;->A00(Landroid/content/Intent;$types)V", "return-void", registers, flags)
-        revoke(5).validateKeepUnsent()
+        assertFailsWith<PatchException> { revoke(5).validateKeepUnsent() }
         assertFailsWith<PatchException> { revoke(5, AccessFlags.PUBLIC.value or AccessFlags.STATIC.value).validateKeepUnsent() }
-        // p1 lands on v15 with 18 registers and on v16 with 19, where a plain invoke can't reach it.
-        revoke(18).validateKeepUnsent()
-        assertFailsWith<PatchException> { revoke(19).validateKeepUnsent() }
-        // Only 582's (Intent, session, String) handler, not another Intent method, and the Map belongs to 583's static one.
-        for (types in listOf("Ljava/lang/String;Ljava/lang/Object;", "Ljava/lang/String;$SESSION", "${SESSION}Ljava/lang/String;Ljava/util/Map;"))
+        assertFailsWith<PatchException> { revoke(11, types = "${SESSION}Ljava/lang/String;Ljava/util/Map;").validateKeepUnsent() }
+        for (types in listOf("Ljava/lang/String;Ljava/lang/Object;", "Ljava/lang/String;$SESSION"))
             assertFailsWith<PatchException>(types) { revoke(5, types = types).validateKeepUnsent() }
     }
 
-    @Test fun discoveryFindsEachBuildsRevokeHandlerAndNoOtherShape() {
+    @Test fun discoveryFindsOnlyTheStaticRevokeHandler() {
         val static = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value
         val revoke = "const-string v0, \"com.facebook.stella.ipc.messenger.ACTION_REVOKE_MESSAGE\"\nreturn-void"
-        fun found(types: String, flags: Int) = findControls(listOf(fixtureClass("Lfixture/Revoke;", listOf(
+        fun found(types: String, flags: Int) = mirroredControls(listOf(fixtureClass("Lfixture/Revoke;", listOf(
             fixtureMethod("Lfixture/Revoke;->A00(Landroid/content/Intent;$types)V", revoke, 11, flags))))).getValue("keep_unsent").size
-        assertEquals(1, found("${SESSION}Ljava/lang/String;", AccessFlags.PUBLIC.value))
         assertEquals(1, found("${SESSION}Ljava/lang/String;Ljava/util/Map;", static))
+        assertEquals(0, found("${SESSION}Ljava/lang/String;", AccessFlags.PUBLIC.value))
         assertEquals(0, found("${SESSION}Ljava/lang/String;", static))
         assertEquals(0, found("${SESSION}Ljava/lang/String;Ljava/util/Map;", AccessFlags.PUBLIC.value))
         assertEquals(0, found("Ljava/lang/String;Ljava/lang/Object;", AccessFlags.PUBLIC.value))
     }
 
     /** 583 handles the revoke in a static (Intent, session, String, Map) method, so its Intent is p0. */
-    @Test fun the583StaticRevokeHandlerReadsItsIntentFromP0() {
+    @Test fun theStaticRevokeHandlerReadsItsIntentFromP0() {
         val static = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value
         val map = "${SESSION}Ljava/lang/String;Ljava/util/Map;"
         fun handler(types: String, registers: Int = 11) =
@@ -216,19 +239,22 @@ class ControlsTest {
         assertEquals(code.lastIndex, code.branchTarget(serverBranch + 4))
     }
 
-    /** 583's reader has eight registers and keeps false in v3, and its server flag has its own number. */
-    @Test fun the583NotificationsReaderKeepsFalseInV3() {
-        val flag583 = "72344188615735036L"
-        val reader = peopleJewelMethod(serverFlag = flag583, default = "v3", registers = 8, logger = "v4")
+    /** The reader has eight registers and keeps false in v3; 582's ten-register reader with its own flag is refused. */
+    @Test fun theNotificationsReaderKeepsFalseInV3AndRefuses582s() {
+        val reader = peopleJewelMethod()
         reader.injectPeopleSection()
         val code = reader.implementation!!.instructions.toList()
         assertEquals("$SETTINGS->hidePeopleSection(Z)Z", (code[12] as ReferenceInstruction).reference.toString())
         assertEquals("$SETTINGS->keepPeopleSection(Z)Z", (code[22] as ReferenceInstruction).reference.toString())
-        // The false default has to be in the register its build keeps it in.
+        val flag582 = "72344188615734930L"
         for (changed in listOf(
-            peopleJewelMethod(serverFlag = flag583, default = "v5", registers = 8, logger = "v4"),
-            peopleJewelMethod(serverFlag = flag583, default = "v3", registers = 10, logger = "v4"),
-            peopleJewelMethod(serverFlag = flag583, default = "v3", registers = 9, logger = "v4"),
+            // The false default has to be in v3 of eight registers.
+            peopleJewelMethod(default = "v5"),
+            peopleJewelMethod(registers = 10),
+            peopleJewelMethod(registers = 9),
+            // 582's reader: its own flag, false in v5 of ten registers.
+            peopleJewelMethod(serverFlag = flag582, default = "v5", registers = 10, logger = "v3"),
+            peopleJewelMethod(serverFlag = flag582),
         )) {
             val before = changed.implementation!!.instructions.toList()
             assertFailsWith<PatchException> { changed.injectPeopleSection() }
@@ -350,7 +376,7 @@ class ControlsTest {
     }
 
     /** The launcher's preference check, read at 60 as in every supported build, with false in [default]. */
-    private fun browserCheck(registers: Int = 9, default: Int = 3, branch: String = "if-eqz", flags: Int = AccessFlags.PUBLIC.value) =
+    private fun browserCheck(registers: Int = 8, default: Int = 2, branch: String = "if-nez", flags: Int = AccessFlags.PUBLIC.value) =
         MutableMethod(ImmutableMethod(
             MESSENGER_BROWSER_LAUNCHER, "A0L",
             listOf("Landroid/net/Uri;", SESSION).map { ImmutableMethodParameter(it, null, null) },
@@ -374,22 +400,22 @@ class ControlsTest {
         assertEquals(before, browser.implementation!!.instructions.toList())
     }
 
-    /** 582 keeps false in v3 of nine registers and skips ahead when the answer is off; 583 has eight, v2, and returns when it's on. */
-    @Test fun eachBuildsBrowserCheckTakesTheAnswerBeforeItsOwnBranch() {
-        for ((registers, default, branch) in listOf(Triple(9, 3, Opcode.IF_EQZ), Triple(8, 2, Opcode.IF_NEZ))) {
-            val check = browserCheck(registers, default, if (branch == Opcode.IF_EQZ) "if-eqz" else "if-nez")
-            assertEquals(63, check.validateBrowserPreference())
-            check.injectBrowserPreference()
-            val code = check.implementation!!.instructions.toList()
-            assertEquals("$SETTINGS->preferExternalBrowser(ZLandroid/net/Uri;)Z", (code[63] as ReferenceInstruction).reference.toString())
-            assertEquals(listOf(0, check.parameterRegister(1)), (code[63] as FiveRegisterInstruction).let { listOf(it.registerC, it.registerD) })
-            assertEquals(Opcode.MOVE_RESULT, code[64].opcode)
-            assertEquals(0, (code[64] as OneRegisterInstruction).registerA)
-            assertEquals(branch, code[65].opcode)
-        }
-        // A default or branch from the other build's shape is refused before anything changes.
+    /** The check keeps false in v2 of eight registers and returns when the answer is on. */
+    @Test fun theBrowserCheckTakesTheAnswerBeforeItsBranch() {
+        val check = browserCheck()
+        assertEquals(63, check.validateBrowserPreference())
+        check.injectBrowserPreference()
+        val code = check.implementation!!.instructions.toList()
+        assertEquals("$SETTINGS->preferExternalBrowser(ZLandroid/net/Uri;)Z", (code[63] as ReferenceInstruction).reference.toString())
+        assertEquals(listOf(0, check.parameterRegister(1)), (code[63] as FiveRegisterInstruction).let { listOf(it.registerC, it.registerD) })
+        assertEquals(Opcode.MOVE_RESULT, code[64].opcode)
+        assertEquals(0, (code[64] as OneRegisterInstruction).registerA)
+        assertEquals(Opcode.IF_NEZ, code[65].opcode)
+        // 582's shape (false in v3 of nine registers, skipping ahead when the answer is off) and any mix of the two are
+        // refused before anything changes.
         for ((registers, default, branch) in listOf(
-            Triple(9, 3, "if-nez"), Triple(8, 2, "if-eqz"), Triple(8, 3, "if-nez"), Triple(9, 2, "if-eqz"), Triple(10, 3, "if-eqz"),
+            Triple(9, 3, "if-eqz"), Triple(9, 3, "if-nez"), Triple(8, 2, "if-eqz"), Triple(8, 3, "if-nez"), Triple(9, 2, "if-nez"),
+            Triple(10, 3, "if-eqz"),
         )) {
             val changed = browserCheck(registers, default, branch)
             val before = changed.implementation!!.instructions.toList()
@@ -398,7 +424,7 @@ class ControlsTest {
         }
     }
 
-    @Test fun theLauncherCheckIsTheBrowserHookOnlyWhenNoMethodLogsTheSkipReason() {
+    @Test fun theLauncherCheckIsTheBrowserHookAnd582sSkipReasonLoggerIsNot() {
         val check = "$MESSENGER_BROWSER_LAUNCHER->A0L(Landroid/net/Uri;$SESSION)Z"
         val launcher = fixtureClass(MESSENGER_BROWSER_LAUNCHER, listOf(
             fixtureMethod(check, "const/4 v0, 0x0\nreturn v0"),
@@ -406,14 +432,15 @@ class ControlsTest {
             fixtureMethod("$MESSENGER_BROWSER_LAUNCHER->A0M(Landroid/net/Uri;$SESSION)Z", "const/4 v0, 0x0\nreturn v0",
                 flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value),
         ))
-        val logged = "LX/1Iab;->A00(Landroid/net/Uri;)Z"
-        val logger = fixtureClass("LX/1Iab;", listOf(fixtureMethod(logged, """
+        // 582 logged the skip reason in a method of its own, and that method was the hook. No 583 build logs it.
+        val logger = fixtureClass("LX/1Iab;", listOf(fixtureMethod("LX/1Iab;->A00(Landroid/net/Uri;)Z", """
             const-string v0, "iab_skipped_reason"
             const-string v0, "user_prefers_external"
             const/4 v0, 0x0
             return v0
         """.trimIndent())))
-        assertEquals(listOf(check), findControls(listOf(launcher)).getValue("browser").map { it.hookId() })
-        assertEquals(listOf(logged), findControls(listOf(launcher, logger)).getValue("browser").map { it.hookId() })
+        assertEquals(listOf(check), mirroredControls(listOf(launcher)).getValue("browser").map { it.hookId() })
+        assertEquals(listOf(check), mirroredControls(listOf(launcher, logger)).getValue("browser").map { it.hookId() })
+        assertTrue(mirroredControls(listOf(logger)).getValue("browser").isEmpty())
     }
 }

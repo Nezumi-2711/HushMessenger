@@ -242,30 +242,16 @@ internal fun findCommunityInbox(classes: Iterable<ClassDef>): CommunityInboxCont
         communityRequire(n.map { it.opcode } == listOf(Opcode.IF_EQZ, Opcode.INVOKE_VIRTUAL, Opcode.MOVE_RESULT, Opcode.IF_EQZ,
             Opcode.CONST_4, Opcode.RETURN, Opcode.CONST_4, Opcode.RETURN) && n.branchTarget(0) == 6 && n.branchTarget(3) == 6 &&
             nullable.implementation!!.registerCount == 1 && n[1].communityArgs() == listOf(0) && n[4].communityLiteral(0, 1) && n[6].communityLiteral(0, 0))
-        // 582 asks a separate channel check first; 583 compares the key type with both channel types inline.
-        val channel: Method?
-        val (keyField, channelType, announcementType) = if (a.size == 10) {
-            val check = definition(calls(any).filter { it.definingClass == THREAD_KEY && it.parameterTypes.isEmpty() && it.returnType == "Z" }.communitySingle())
-            channel = check
-            val h = check.communityCode()
-            communityRequire(a.map { it.opcode } == listOf(Opcode.INVOKE_VIRTUAL, Opcode.MOVE_RESULT, Opcode.IF_NEZ, Opcode.IGET_OBJECT, Opcode.SGET_OBJECT,
-                    Opcode.IF_EQ, Opcode.CONST_4, Opcode.RETURN, Opcode.CONST_4, Opcode.RETURN) && a.branchTarget(2) == 8 && a.branchTarget(5) == 8 &&
-                a[0].communityArgs() == listOf(2) && a[6].communityLiteral(0, 0) && a[8].communityLiteral(0, 1) &&
-                h.map { it.opcode } == listOf(Opcode.IGET_OBJECT, Opcode.SGET_OBJECT, Opcode.IF_NE, Opcode.CONST_4, Opcode.RETURN, Opcode.CONST_4, Opcode.RETURN) &&
-                h.branchTarget(2) == 5 && h[3].communityLiteral(0, 1) && h[5].communityLiteral(0, 0) && h[0].communityRef().toString() == a[3].communityRef().toString())
-            Triple(h[0].communityRef(), h[1].communityRef(), a[4].communityRef())
-        } else {
-            channel = null
-            fun compares(at: Int) = (a[at] as? TwoRegisterInstruction)?.let { it.registerA == 1 && it.registerB == 0 } == true
-            communityRequire(a.map { it.opcode } == listOf(Opcode.IGET_OBJECT, Opcode.SGET_OBJECT, Opcode.IF_EQ, Opcode.SGET_OBJECT, Opcode.IF_EQ,
-                    Opcode.CONST_4, Opcode.RETURN, Opcode.CONST_4, Opcode.RETURN) && any.implementation!!.registerCount == 3 &&
-                a.branchTarget(2) == 7 && a.branchTarget(4) == 7 && a[5].communityLiteral(0, 0) && a[7].communityLiteral(0, 1) &&
-                (a[0] as TwoRegisterInstruction).let { it.registerA == 1 && it.registerB == 2 } && a[1].communityRegister() == 0 &&
-                a[3].communityRegister() == 0 && compares(2) && compares(4))
-            Triple(a[0].communityRef(), a[1].communityRef(), a[3].communityRef())
-        }
+        // The community check compares the key type with both channel types inline.
+        fun compares(at: Int) = (a[at] as? TwoRegisterInstruction)?.let { it.registerA == 1 && it.registerB == 0 } == true
+        communityRequire(a.map { it.opcode } == listOf(Opcode.IGET_OBJECT, Opcode.SGET_OBJECT, Opcode.IF_EQ, Opcode.SGET_OBJECT, Opcode.IF_EQ,
+                Opcode.CONST_4, Opcode.RETURN, Opcode.CONST_4, Opcode.RETURN) && any.implementation!!.registerCount == 3 &&
+            a.branchTarget(2) == 7 && a.branchTarget(4) == 7 && a[5].communityLiteral(0, 0) && a[7].communityLiteral(0, 1) &&
+            (a[0] as TwoRegisterInstruction).let { it.registerA == 1 && it.registerB == 2 } && a[1].communityRegister() == 0 &&
+            a[3].communityRegister() == 0 && compares(2) && compares(4))
+        val channelType = a[1].communityRef(); val announcementType = a[3].communityRef()
         // The key's own and only instance field of that enum type, as CompatReport checks.
-        val keyRef = keyField as? FieldReference ?: throw CommunityChanged()
+        val keyRef = a[0].communityRef() as? FieldReference ?: throw CommunityChanged()
         val keyFields = (byType[THREAD_KEY] ?: throw CommunityChanged()).instanceFields.filter { it.type == keyRef.type }
         communityRequire(keyRef.definingClass == THREAD_KEY && keyFields.size == 1 && keyFields[0].name == keyRef.name)
         val keyType = keyRef.type
@@ -273,7 +259,7 @@ internal fun findCommunityInbox(classes: Iterable<ClassDef>): CommunityInboxCont
         communityRequire(channelType.toString() == keyEnums["COMMUNITY_CHANNEL"].toString() &&
             announcementType.toString() == keyEnums["COMMUNITY_ANNOUNCEMENT_CHANNEL"].toString())
         val identity = (listOf(update.hookId(), ctor.hookId(), scopeGetter.hookId(), switch.hookId(), rowSummary.toString(),
-            predicate.hookId(), nullable.hookId(), any.hookId()) + listOfNotNull(channel?.hookId()) + listOf(requests.toString(), prefix.toString()) +
+            predicate.hookId(), nullable.hookId(), any.hookId(), requests.toString(), prefix.toString()) +
             folderPath.map { it.toString() } + listOf(folderGetter.hookId(), folders.getValue("INBOX").toString())).joinToString("|")
         return CommunityInboxContract(render, scope.toString(), rowSummary.toString(), predicate.hookId(), requests.toString(), identity,
             prefix.toString(), folderPath.map { it.toString() }, folderGetter.hookId(), folders.getValue("INBOX").toString())
@@ -285,8 +271,8 @@ internal fun Method.communityReadSite(scope: String): Int {
     val c = communityCode()
     val listField = "$definingClass->\$inboxUnitItems:$IMMUTABLE_LIST"
     val reads = c.indices.filter { c[it].opcode == Opcode.IGET_OBJECT && c[it].communityRef().toString() == listField }
-    // The second read follows a session-gated block before the search bar: at 64 in 582, one earlier in 583.
-    communityRequire(reads.size == 2 && reads.first() == 5 && reads.last() in setOf(63, 64))
+    // The second read follows a session-gated block before the search bar, at 63.
+    communityRequire(reads.size == 2 && reads.first() == 5 && reads.last() == 63)
     val at = reads.last()
     // The list goes into v1, and the sink takes an $onThreadInViewport after the list, moved into place after the alias.
     val list = (c[at] as? TwoRegisterInstruction)?.takeIf { it.registerA == 1 && it.registerB == 4 }?.registerA ?: throw CommunityChanged()

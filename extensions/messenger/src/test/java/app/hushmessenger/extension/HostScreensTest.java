@@ -32,7 +32,8 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {28, 36})
 public class HostScreensTest {
-    private static final int SEPARATE = Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
+    private static final int SEPARATE = Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NEW_DOCUMENT
+        | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 
     /** Stands in for the shortcut answer, fresh as of now, so its 30 s expiry can't swap in a real ShortcutManager read. */
     static void answerControlsShortcut(boolean present) {
@@ -125,7 +126,8 @@ public class HostScreensTest {
         Intent settings = HostScreens.intentFor(app, HostScreens.SETTINGS);
         assertEquals(new ComponentName(app.getPackageName(), HostScreens.SCREEN_HOST), settings.getComponent());
         assertEquals("settings", settings.getStringExtra(HostScreens.EXTRA));
-        // The host shares Messenger's task affinity, so settings open as their own document task instead.
+        // The host shares Messenger's task affinity, so settings open as their own document task instead, kept out of
+        // Recents like the installed settings.
         assertEquals(SEPARATE, settings.getFlags());
         try (var screen = Robolectric.buildActivity(Activity.class).setup()) {
             Intent restart = HostScreens.intentFor(screen.get(), HostScreens.RESTART);
@@ -408,8 +410,9 @@ public class HostScreensTest {
         assertEquals(Set.of(), Settings.bundled(null));
         assertEquals(Set.of("ads", "menu_row", "people"), Settings.bundled("ads,menu_row,people"));
         assertEquals(Set.of("ads"), Settings.bundled(",ads,"));
-        // The extension alone records nothing; the patch writes the list.
+        // The extension alone records nothing; the patch writes the list and the build it started from.
         assertEquals("", HostScreens.bundledControls());
+        assertEquals("", HostScreens.originalBuild());
     }
 
     @Test public void onARootMountInstallTheAppTabLeavesOutTheDrawerIcon() {

@@ -26,10 +26,8 @@ import org.w3c.dom.Document
 import org.w3c.dom.Element
 
 internal const val BUBBLE_SESSION = "Lcom/facebook/auth/usersession/FbUserSession;"
-/** The specifier of the bubble rollout read. Each release renumbers it, and only 582's and 583's are accepted. */
-internal const val BUBBLE_ROLLOUT = 36312020047499274L
-internal const val BUBBLE_ROLLOUT_583 = 36312015752531975L
-internal val BUBBLE_ROLLOUTS = setOf(BUBBLE_ROLLOUT, BUBBLE_ROLLOUT_583)
+/** The specifier of the bubble rollout read as 583 numbers it. Each release renumbers it, and no other is accepted. */
+internal const val BUBBLE_ROLLOUT = 36312015752531975L
 internal const val BUBBLE_ACTIVITY = "com.facebook.messaging.msys.thread.bubbles.activity.StaxThreadViewBubblesActivity"
 internal const val NATIVE_BUBBLE_ROUTES = "$HOST_SCREENS->nativeBubbleRoutes()Z"
 internal const val NATIVE_BUBBLE_METADATA = "hush.native_bubble_routes"
@@ -87,7 +85,7 @@ internal fun Method.validateNativeBubbleMode() {
         c[11].bubbleRef() != activeProfile.bubbleCapabilityGetter || !c[11].calls(1, 4, 0) ||
         c[12].bubbleRegister() != 0 || c[13].bubbleRegister() != 0 || !c.jumpsTo(13, 24) ||
         c[18].bubbleRegister() != 2 || c[19].bubbleRegister() != 0 ||
-        (c[19] as? WideLiteralInstruction)?.wideLiteral?.let { it in BUBBLE_ROLLOUTS } != true ||
+        (c[19] as? WideLiteralInstruction)?.wideLiteral != BUBBLE_ROLLOUT ||
         c[20].bubbleRegister() != 2 || c[20].bubbleRef() != MOBILE_CONFIG ||
         c[21].bubbleRef() != activeProfile.bubbleRolloutGetter || !c[21].calls(2, 0, 1) ||
         c[22].bubbleRegister() != 0 || c[23].bubbleRegister() != 0 || c[24].bubbleRegister() != 2) bubbleChanged()
@@ -172,8 +170,8 @@ private fun Method.bubbleGateHelper(gate: String): Boolean {
         c[4].bubbleRef() == gate && c[4].calls(0, 1) && c[5].bubbleRegister() == 0 && c[6].bubbleRegister() == 0
 }
 
-/** The shortcut builder names its ID itself, or (582) through a static (ThreadKey)String helper that does. */
-private fun List<Instruction>.namesThreadShortcut(byType: Map<String, ClassDef>) = any { it.bubbleRef() == "thread_shortcut_" } ||
+/** The shortcut builder names its ID through a static (ThreadKey)String helper that does. */
+private fun List<Instruction>.namesThreadShortcut(byType: Map<String, ClassDef>) =
     any { i -> i.opcode == Opcode.INVOKE_STATIC && ((i as? ReferenceInstruction)?.reference as? MethodReference)?.let { ref ->
         ref.parameterTypes.map(CharSequence::toString) == listOf("Lcom/facebook/messaging/model/threadkey/ThreadKey;") &&
             ref.returnType == "Ljava/lang/String;" && byType[ref.definingClass]?.methods?.singleOrNull { it.hookId() == ref.toString() }

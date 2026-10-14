@@ -29,7 +29,14 @@ private const val ENCRYPTED_SIBLING = "$ROW_CHECKS->A0d($FB_USER_SESSION)Z"
 internal const val SYNTHETIC_IMAGINE_ROW = "$ROW_CHECKS->A0y(${ROW_PARAMS}ZZ)Z"
 internal const val SYNTHETIC_IMAGINE_YOURSELF_ROW = "$ROW_CHECKS->A0w($ROW_PARAMS)Z"
 
-/** One server flag read the way 582 writes it, answered into v0. */
+/** One build's numbering of the five checks' flags. */
+private class AiRowFlags(val row: Set<Long>, val chat: Set<Long>, val encrypted: Long, val imagine: Long, val imagineYourself: Long)
+private val AI_ROW_FLAGS = AiRowFlags(META_AI_ROW_FLAGS, META_AI_CHAT_FLAGS, META_AI_ENCRYPTED_FLAG, IMAGINE_ROW_FLAG, IMAGINE_YOURSELF_ROW_FLAG)
+/** 582's numbering, which no 583 build reads. */
+private val AI_ROW_FLAGS_582 = AiRowFlags(setOf(0x81063b011b2d8aL, 0x81063b01042d83L), setOf(0x81063b011b2d8aL, 0x81063b00042d40L),
+    0x81063b00052d41L, 0x81063b00402d51L, 0x81063b00f92d7fL)
+
+/** One server flag read the way 583 writes it, answered into v0. */
 private fun flagRead(flag: Long) = """
     invoke-static {}, LX/19a;->A0B()LX/5dD;
     move-result-object v2
@@ -108,7 +115,7 @@ private fun imagineRow(id: String, flag: Long, flags: Int = AccessFlags.PUBLIC.v
     return v4
 """.trimIndent(), registers = 11, flags = flags)
 
-private fun rowChecks(type: String = ROW_CHECKS, build: AiRowFlags = AI_ROW_FLAGS_582) = listOf(
+private fun rowChecks(type: String = ROW_CHECKS, build: AiRowFlags = AI_ROW_FLAGS) = listOf(
     metaAiRow(SYNTHETIC_META_AI_ROW.replace(ROW_CHECKS, type), build.row.toList()),
     metaAiChatsRow(SYNTHETIC_META_AI_CHATS_ROW.replace(ROW_CHECKS, type), build.chat.toList()),
     metaAiEncryptedRow(SYNTHETIC_META_AI_ENCRYPTED_ROW.replace(ROW_CHECKS, type)),
@@ -137,7 +144,7 @@ class AiMentionRowsTest {
 
     @Test fun eachRowCheckAnswersFalseWhileTheSwitchIsOn() {
         val checks = rowChecks()
-        val found = findControls(listOf(rowClass(checks = checks)))
+        val found = mirroredControls(listOf(rowClass(checks = checks)))
         assertEquals(setOf(SYNTHETIC_META_AI_ROW, SYNTHETIC_META_AI_CHATS_ROW, SYNTHETIC_META_AI_ENCRYPTED_ROW, SYNTHETIC_IMAGINE_ROW,
             SYNTHETIC_IMAGINE_YOURSELF_ROW), found.getValue(AI_MENTION_ROWS).map { it.hookId() }.toSet())
         validateControls(found, setOf(AI_MENTION_ROWS))
@@ -146,16 +153,16 @@ class AiMentionRowsTest {
         checks.zip(before).forEach { (method, code) -> assertSwitched(code, method.code(), method.hookId()) }
     }
 
-    @Test fun messenger583RenumbersEveryRowFlagAndAllFiveMustShareOneNumbering() {
-        val checks = rowChecks(build = AI_ROW_FLAGS_583)
-        val sibling583 = encryptedSibling(flag = AI_ROW_FLAGS_583.encrypted)
-        assertEquals(setOf(SYNTHETIC_META_AI_ROW, SYNTHETIC_META_AI_CHATS_ROW, SYNTHETIC_META_AI_ENCRYPTED_ROW, SYNTHETIC_IMAGINE_ROW,
-            SYNTHETIC_IMAGINE_YOURSELF_ROW), findAiMentionRows(listOf(rowClass(checks = checks, sibling = sibling583))).map { it.hookId() }.toSet())
+    @Test fun messenger582sRowFlagsOrAMixOfTheTwoNumberingsAreRefused() {
+        val checks582 = rowChecks(build = AI_ROW_FLAGS_582)
+        val sibling582 = encryptedSibling(flag = AI_ROW_FLAGS_582.encrypted)
+        assertTrue(findAiMentionRows(listOf(rowClass(checks = checks582, sibling = sibling582))).isEmpty())
+        for (check in checks582.take(2) + checks582.drop(3)) assertNull(check.aiMentionRow(), check.hookId())
         // 583's checks with 582's encrypted flag behind them, and five checks that mix the two numberings.
-        assertTrue(findAiMentionRows(listOf(rowClass(checks = checks))).isEmpty())
-        val mixed = rowChecks().take(3) + checks.drop(3)
+        assertTrue(findAiMentionRows(listOf(rowClass(sibling = sibling582))).isEmpty())
+        val mixed = rowChecks().take(3) + checks582.drop(3)
         assertTrue(findAiMentionRows(listOf(rowClass(checks = mixed))).isEmpty())
-        assertTrue(findAiMentionRows(listOf(rowClass(checks = mixed, sibling = sibling583))).isEmpty())
+        assertTrue(findAiMentionRows(listOf(rowClass(checks = mixed, sibling = sibling582))).isEmpty())
     }
 
     @Test fun aCheckThatMovedOrRepeatsLeavesTheRowsUnhooked() {

@@ -8,9 +8,12 @@
     the others. State and assets live in build/release/<version>/.
 
       prepare    Version and pinned UTC bundle timestamp in gradle.properties, the CHANGELOG cut,
-                 README badge, links and checksum, the source index and the catalog. Builds the
-                 bundle once to learn its checksum. Then review the README counts and the index
-                 description by hand and commit "chore: release v<version>".
+                 README badge, links and checksum, the source index and the catalog. The index
+                 description keeps its summary and gets the section's ### groups after it, which
+                 Morphe Manager shows for the release an app was patched with. Builds the bundle
+                 once to learn its checksum. Then review the README counts and rewrite the
+                 description's summary by hand and commit "chore: release v<version>". After a
+                 CHANGELOG edit, run prepare again to carry it into the description.
       preflight  The quick checks, a few minutes: the script tests, the patch and extension unit
                  tests without the private fixture replays, and the release facts.
       build      From the clean, preflighted commit: the full gate with the fixture replays,
@@ -267,8 +270,11 @@ switch ($Stage) {
             throw "The first CHANGELOG heading is '$heading', neither Unreleased nor $Version."
         }
 
-        Write-Step 'bundle and catalog (one Gradle run)'
         try {
+            # The section's groups after the description's summary, again on a rerun so a CHANGELOG
+            # edit reaches it. check_release.py refuses a release whose two differ.
+            Invoke-Python (Join-Path $root 'scripts/check_release.py') --describe
+            Write-Step 'bundle and catalog (one Gradle run)'
             Invoke-Gradle @(':patches:buildAndroid', ':patches:generatePatchCatalog', '--no-configuration-cache')
             $digest = Get-FileSha256 (Join-Path $root "patches/build/libs/$bundleName")
             $readme = Get-Content -LiteralPath $readmePath -Raw
@@ -283,7 +289,7 @@ switch ($Stage) {
         }
         Save-Stage 'prepare' @{ base = (Get-Head); sha256 = $digest }
         Write-Step "bundle SHA-256 $digest"
-        Write-Host 'Next: update the README intro and counts and the index description by hand, review the diff,'
+        Write-Host 'Next: update the README intro and counts and the index description''s summary above its ### groups by hand, review the diff,'
         Write-Host "commit it as 'chore: release $tag', then run -Stage preflight."
     }
 

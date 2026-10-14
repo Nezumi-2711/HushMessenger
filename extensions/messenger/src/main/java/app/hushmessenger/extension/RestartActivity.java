@@ -1,6 +1,7 @@
 package app.hushmessenger.extension;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -9,7 +10,10 @@ import android.content.res.ColorStateList;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.DisplayCutout;
 import android.view.Gravity;
@@ -35,7 +39,7 @@ public class RestartActivity extends Activity {
         getWindow().setNavigationBarColor(ui.background);
         getWindow().getDecorView().setSystemUiVisibility(light ? android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | android.view.View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0);
         setContentView(content(ui));
-        Intent launch = launcherIntent(this);
+        launch = launcherIntent(this);
         if (launch == null) {
             fail("restart_unavailable");
             return;
@@ -44,8 +48,44 @@ public class RestartActivity extends Activity {
         String page = getIntent().getStringExtra(SettingsReopen.EXTRA);
         new Thread(() -> {
             boolean saved = saveBeforeRestart(Settings.preferences, page);
-            runOnUiThread(() -> completeRestart(launch, saved));
+            runOnUiThread(() -> saved(saved));
         }, "HushMessenger-save-restart").start();
+    }
+
+    /** How long a saved restart waits for Android to say this screen is in before it relaunches anyway. */
+    static final long SHOWN_WAIT_MS = 1_500;
+    private final Handler main = new Handler(Looper.getMainLooper());
+    Intent launch;
+    private boolean savedOk, shown, relaunched;
+    private final Runnable shownAnyway = () -> { shown = true; relaunchWhenReady(); };
+
+    /** The save finished. A failed one reports at once, a good one relaunches when this screen is in. */
+    void saved(boolean ok) {
+        if (!ok) {
+            completeRestart(launch, false);
+            return;
+        }
+        savedOk = true;
+        if (!shown) main.postDelayed(shownAnyway, SHOWN_WAIT_MS);
+        relaunchWhenReady();
+    }
+
+    /**
+     * The relaunch waits for this. Sent while this screen was still coming in, the process exited before Android had
+     * shown it, and Android, which brings back the screen in front only when a shown one dies, left Messenger's start
+     * screen without a process: a black screen on the S25 in 2 of 3 restarts.
+     */
+    @Override public void onEnterAnimationComplete() {
+        super.onEnterAnimationComplete();
+        shown = true;
+        relaunchWhenReady();
+    }
+
+    private void relaunchWhenReady() {
+        if (!shown || !savedOk || relaunched) return;
+        relaunched = true;
+        main.removeCallbacks(shownAnyway);
+        completeRestart(launch, true);
     }
 
     /** A scrollable status pane also fits large text and a short split-screen window. */
@@ -178,7 +218,11 @@ public class RestartActivity extends Activity {
         }
         try {
             startActivity(launch);
-            finish();
+            // Settings come back after a restart asked for from them, so their task goes now, while this process can
+            // still close every screen in it. One left in a dead process outlived the reopen's FLAG_ACTIVITY_CLEAR_TASK
+            // on One UI and showed on Back. A Root Mount install's settings live inside the stock host and stay.
+            if (getIntent().getStringExtra(SettingsReopen.EXTRA) != null && !HostScreens.hosted(this)) removeTask();
+            else finish();
             exitProcess();
         } catch (android.content.ActivityNotFoundException | SecurityException error) {
             Log.e("HushMessenger", "Couldn't restart Messenger", error);
@@ -188,6 +232,27 @@ public class RestartActivity extends Activity {
     }
 
     void exitProcess() { System.exit(0); }
+
+    /**
+     * Closes this screen's whole task. Activity.finishAndRemoveTask only does that from the task's first screen, and
+     * this one sits on top of settings, so the task is found by its id. Without it, this screen alone finishes.
+     */
+    void removeTask() {
+        try {
+            ActivityManager activities = getSystemService(ActivityManager.class);
+            if (activities != null) for (ActivityManager.AppTask task : activities.getAppTasks()) {
+                ActivityManager.RecentTaskInfo info = task.getTaskInfo();
+                @SuppressWarnings("deprecation") int id = Build.VERSION.SDK_INT >= 29 ? info.taskId : info.persistentId;
+                if (id == getTaskId()) {
+                    task.finishAndRemoveTask();
+                    return;
+                }
+            }
+        } catch (RuntimeException gone) {
+            Log.w("HushMessenger", "Couldn't close the settings task before the restart", gone);
+        }
+        finish();
+    }
 
     private void fail(String message) {
         Log.e("HushMessenger", message);

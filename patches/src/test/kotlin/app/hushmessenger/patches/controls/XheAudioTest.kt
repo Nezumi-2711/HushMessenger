@@ -8,6 +8,7 @@ import com.android.tools.smali.dexlib2.Opcodes
 import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import java.nio.file.Files
@@ -18,6 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -29,7 +31,7 @@ private const val COPY = "invoke-static {v2, v3}, LX/8Bb;->A00(Ljava/io/InputStr
 private const val CLOSE = "invoke-virtual {v3}, Ljava/io/OutputStream;->close()V"
 private const val FROM_FILE = "invoke-static {v8}, Landroid/net/Uri;->fromFile(Ljava/io/File;)Landroid/net/Uri;"
 
-/** The share copy's end as 582 writes it: open the copy on the File, copy the stream in, close it, point a Uri at it. */
+/** The share copy's end as Messenger writes it: open the copy on the File, copy the stream in, close it, point a Uri at it. */
 private fun shareCopy(
     name: String = SHARE_MEDIA_NAME, copy: String = COPY, close: String = CLOSE, fromFile: String = FROM_FILE,
     jump: String = "", id: String = SYNTHETIC_SHARE_COPY,
@@ -71,7 +73,7 @@ class XheAudioTest {
 
     @Test fun theFinishedCopyGoesThroughTheExtensionBeforeMessengerReadsIt() {
         val method = shareCopy()
-        val found = findControls(shareCopyFixture())
+        val found = mirroredControls(shareCopyFixture())
         assertEquals(listOf(SYNTHETIC_SHARE_COPY), found.getValue(XHE_AUDIO).map { it.hookId() })
         validateControls(found, setOf(XHE_AUDIO))
         val before = method.code()
@@ -101,6 +103,41 @@ class XheAudioTest {
         assertEquals(before, jumped.code())
     }
 
+    @Test fun thePickedVideosSourceGoesThroughTheExtensionFirst() {
+        // 24 registers and five parameters plus this: the source path is v21.
+        val method = fixtureMethod(VIDEO_TRANSCODE, TRANSCODE_SOURCE_BODY, registers = 24)
+        val found = mirroredControls(listOf(fixtureClass(MEDIA_TRANSCODER, listOf(method))))
+        assertEquals(listOf(VIDEO_TRANSCODE), found.getValue(XHE_TRANSCODE).map { it.hookId() })
+        val worker = found.getValue(XHE_TRANSCODE).single() as MutableMethod
+        assertEquals(21, worker.transcodeSourceRegister())
+        assertTrue(worker.parsesTranscodeSource())
+        val before = worker.code()
+        injectControl(XHE_TRANSCODE, mapOf(XHE_TRANSCODE to listOf(worker)))
+        assertSourceHook(before, worker.code(), 21, "fixture")
+    }
+
+    @Test fun aWorkerThatMovedItsSourceStopsBeforeAnyEdit() {
+        val moved = mapOf(
+            "overwrites the source first" to TRANSCODE_SOURCE_BODY.replace("move-object/from16 v20, v21", "const/16 v21, 0x0"),
+            "loops back to the start" to ":top\n$TRANSCODE_SOURCE_BODY".replace("return-void", "goto :top"),
+        )
+        for ((case, body) in moved) {
+            val method = fixtureMethod(VIDEO_TRANSCODE, body, registers = 24)
+            val before = method.code()
+            val failure = assertFailsWith<PatchException>(case) { method.injectXheTranscode() }
+            assertContains(failure.message.orEmpty(), "transcoder's source moved", message = case)
+            assertEquals(before, method.code(), case)
+        }
+        // A copy that's overwritten before the parse doesn't count as Messenger parsing its source.
+        val lost = fixtureMethod(VIDEO_TRANSCODE, TRANSCODE_SOURCE_BODY.replace("invoke-static/range {v20", "const/16 v20, 0x0\ninvoke-static/range {v20"), registers = 24)
+        assertFalse(lost.parsesTranscodeSource())
+        assertTrue(mirroredControls(listOf(fixtureClass(MEDIA_TRANSCODER, listOf(lost)))).getValue(XHE_TRANSCODE).isEmpty())
+        val before = lost.code()
+        val failure = assertFailsWith<PatchException> { lost.injectXheTranscode() }
+        assertContains(failure.message.orEmpty(), "isn't parsed")
+        assertEquals(before, lost.code())
+    }
+
     @Test fun everySupportedBuildHooksItsOneShareCopy() {
         val root = System.getenv("HUSH_NATIVE_FIXTURES")
         assumeTrue(root != null, "Set HUSH_NATIVE_FIXTURES to the exact stock fixture directory")
@@ -118,6 +155,40 @@ class XheAudioTest {
             val site = method.shareCopySite()!!
             method.injectXheAudio()
             assertCopyHook(before, method.code(), site, code)
+
+            // The transcoder worker's first String is the source it parses into a Uri, so the helper hands it over first.
+            val worker = dex.dexEntryNames.flatMap { dex.getEntry(it)!!.dexFile.classes }.single { it.type == MEDIA_TRANSCODER }
+                .methods.single { it.hookId() == VIDEO_TRANSCODE }
+            assertEquals(activeProfile.hooks.getValue(XHE_TRANSCODE), setOf(worker.hookId()), code)
+            assertTrue(worker.parsesTranscodeSource(), "$code parses its source")
+            val transcode = MutableMethod(worker)
+            val source = transcode.transcodeSourceRegister()
+            val stock = transcode.code()
+            transcode.injectXheTranscode()
+            assertSourceHook(stock, transcode.code(), source, code)
         }
     }
+}
+
+/**
+ * How 583's A05 starts with 24 registers: it copies its source path out of v21 and parses it into a Uri. Past v15 the
+ * call takes the range form, as in the real builds.
+ */
+internal val TRANSCODE_SOURCE_PARSE = """
+    move-object/from16 v20, v21
+    invoke-static/range {v20 .. v20}, LX/Y3L;->A02(Ljava/lang/String;)Landroid/net/Uri;
+    move-result-object v1
+""".trimIndent()
+
+private val TRANSCODE_SOURCE_BODY = "const-string v0, \"$VIDEO_PASSTHROUGH_MARK\"\n$TRANSCODE_SOURCE_PARSE\nreturn-void"
+
+/** The helper takes the source register and writes its answer back to it, ahead of every stock instruction. */
+private fun assertSourceHook(before: List<Instruction>, after: List<Instruction>, source: Int, label: String) {
+    val helper = after[0] as RegisterRangeInstruction
+    assertEquals(Opcode.INVOKE_STATIC_RANGE, helper.opcode, label)
+    assertEquals(XHE_TRANSCODE_HELPER, (helper as ReferenceInstruction).reference.toString(), label)
+    assertEquals(listOf(1, source), listOf(helper.registerCount, helper.startRegister), label)
+    assertEquals(Opcode.MOVE_RESULT_OBJECT, after[1].opcode, label)
+    assertEquals(source, (after[1] as OneRegisterInstruction).registerA, label)
+    assertStockKept(before.filter { it.opcode != Opcode.NOP }, after.drop(2).filter { it.opcode != Opcode.NOP }, label)
 }

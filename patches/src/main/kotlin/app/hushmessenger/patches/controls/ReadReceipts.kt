@@ -181,25 +181,22 @@ private class ReadFlow(method: Method) {
 }
 
 /**
- * Where the dispatcher's pieces sit in each supported body: the composer and account copies, the thread's null default
- * (its if-eqz, getter and result follow it), the null path's copy and the dispatch. Messenger 583's body is four
- * instructions shorter with the same seam: the composer copy sits three earlier and everything after it four.
+ * Where the dispatcher's pieces sit in the supported body: the composer and account copies, the thread's null default
+ * (its if-eqz, getter and result follow it), the null path's copy and the dispatch.
  */
 internal class ReplyReadShape(val size: Int, val composer: Int, val session: Int, val nullThread: Int, val absent: Int, val dispatch: Int)
 
-internal val REPLY_READ_SHAPES = listOf(
-    ReplyReadShape(size = 402, composer = 13, session = 25, nullThread = 31, absent = 73, dispatch = 239),
-    ReplyReadShape(size = 398, composer = 10, session = 21, nullThread = 27, absent = 69, dispatch = 235),
-)
+/** Messenger 583's 398-instruction dispatcher. */
+internal val REPLY_READ_SHAPE = ReplyReadShape(size = 398, composer = 10, session = 21, nullThread = 27, absent = 69, dispatch = 235)
 
-/** Exact 582 and 583 staging seams. The thread survives in v12 until the account is staged there for dispatch. */
+/** The exact 583 staging seam. The thread survives in v12 until the account is staged there for dispatch. */
 internal fun MutableMethod.validateReplyRead(): Int {
     readRequire(isReplyReadDispatch() && implementation!!.registerCount == 36)
     val flow = ReadFlow(this)
     val c = flow.code
-    val shape = REPLY_READ_SHAPES.singleOrNull { it.size == c.size }
-    readRequire(shape != null)
-    val d = shape!!.dispatch
+    val shape = REPLY_READ_SHAPE
+    readRequire(shape.size == c.size)
+    val d = shape.dispatch
     val n = shape.nullThread
     val absent = shape.absent
     // Insertion can extend a try ending at the old next instruction over the new throwing callback.

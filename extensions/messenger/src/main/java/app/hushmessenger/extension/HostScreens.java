@@ -83,6 +83,15 @@ public final class HostScreens {
         return "";
     }
 
+    /**
+     * The Messenger build the patch started from, "583.0.0.29.95|346611369|base": version name, version code and the
+     * mapping its hooks came from. The patch rewrites this, so it holds on Root Mount installs and under Spoof package
+     * version, where Android's version code says something else. The extension alone has none.
+     */
+    static String originalBuild() {
+        return "";
+    }
+
     /** Rewritten only when the native notification, shortcut and activity routes have been validated together. */
     static boolean nativeBubbleRoutes() { return false; }
 
@@ -254,8 +263,9 @@ public final class HostScreens {
             (settings ? SettingsActivity.class : RestartActivity.class).getName());
         if (hosted(context)) {
             intent = new Intent().setClassName(context.getPackageName(), SCREEN_HOST).putExtra(EXTRA, screen);
-            // The host shares Messenger's task affinity; a document task keeps settings apart like the real one.
-            if (settings) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+            // The host shares Messenger's task affinity; a document task keeps settings apart like the real one, and the
+            // flag keeps that task out of Recents as the real activity's manifest entry does.
+            if (settings) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
         }
         // Settings always get their own task, as the real activity's task affinity gives them.
         if (settings || !(context instanceof Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);

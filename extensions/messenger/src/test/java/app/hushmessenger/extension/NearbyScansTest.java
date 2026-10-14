@@ -49,6 +49,26 @@ public class NearbyScansTest {
         }
     }
 
+    @Test public void theConnectedNetworksNameAndAddressReadAsAndroidsHiddenValuesWhileOn() {
+        assertEquals("\"Home\"", Settings.wifiName("\"Home\""));
+        assertEquals("aa:bb:cc:dd:ee:ff", Settings.wifiBssid("aa:bb:cc:dd:ee:ff"));
+        assertEquals("Reading them off counts as no use", 0, Settings.lastActive("nearby_scans"));
+
+        Settings.preferences.edit().putBoolean("nearby_scans", true).commit();
+        assertEquals("<unknown ssid>", Settings.wifiName("\"Home\""));
+        assertEquals("02:00:00:00:00:00", Settings.wifiBssid("aa:bb:cc:dd:ee:ff"));
+        assertTrue(Settings.lastActive("nearby_scans") > 0);
+        // Not connected to Wi-Fi stays not connected, so Messenger's own null checks still see it.
+        assertNull(Settings.wifiName(null));
+        assertNull(Settings.wifiBssid(null));
+        // Android's own hidden values pass through as they are.
+        assertEquals("<unknown ssid>", Settings.wifiName("<unknown ssid>"));
+
+        Settings.preferences.edit().putBoolean("paused", true).commit();
+        assertEquals("Pause gives Messenger the real network again", "\"Home\"", Settings.wifiName("\"Home\""));
+        assertEquals("aa:bb:cc:dd:ee:ff", Settings.wifiBssid("aa:bb:cc:dd:ee:ff"));
+    }
+
     @Test public void theSwitchSitsUnderPrivacyStartsOffAndStaysOutOfTheQuickSetups() {
         assertTrue(Settings.installed.contains("nearby_scans"));
         String[] row = Arrays.stream(SettingsActivity.CONTROLS).filter(c -> c[0].equals("nearby_scans")).findFirst().orElseThrow();

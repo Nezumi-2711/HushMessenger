@@ -50,6 +50,50 @@ def read_json(path):
     return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_pairs)
 
 
+def changelog_groups(root, version):
+    """The ### groups of the version's CHANGELOG section, with LF line endings.
+
+    Morphe Manager shows the source index description instead of CHANGELOG.md for the release an
+    app was patched with, so a one-paragraph description hid every change of the newest release
+    (Hushfacebook #143, same here). The description is the summary written by hand, then these.
+    """
+    text = (root / "CHANGELOG.md").read_text(encoding="utf-8").replace("\r\n", "\n")
+    section = re.search(
+        rf"^## {re.escape(version)} \([^)\n]*\)\n(.*?)(?=^## |\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    require(section is not None, f"CHANGELOG.md has no section for {version}")
+    groups = re.search(r"^### .*", section.group(1), re.MULTILINE | re.DOTALL)
+    require(
+        groups is not None,
+        f"The {version} CHANGELOG section has no ### groups for the source index description",
+    )
+    return groups.group(0).strip()
+
+
+def describe(root):
+    """Write the project version's CHANGELOG groups after the source index description's summary."""
+    version = re.search(
+        r"^version=(.+)$",
+        (root / "gradle.properties").read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    require(version is not None, "Missing project version")
+    version = version[1].strip()
+    groups = changelog_groups(root, version)
+    path = root / "patches-bundle.json"
+    index = read_json(path)
+    require(index.get("version") == version, "Source index version differs from source")
+    # The summary is everything ahead of the groups a previous run wrote.
+    summary = str(index.get("description") or "").split("\n\n### ", 1)[0].rstrip()
+    require(summary.strip(), "Source index description has no summary to keep")
+    index["description"] = f"{summary}\n\n{groups}"
+    with path.open("w", encoding="utf-8", newline="\n") as out:
+        out.write(json.dumps(index, indent=2, ensure_ascii=False) + "\n")
+    return f"Source index description carries the {version} CHANGELOG groups"
+
+
 def verify(root, bundle=None, evidence=None, release_tag=None, checksums=None):
     properties = dict(
         re.findall(
@@ -171,6 +215,18 @@ def verify(root, bundle=None, evidence=None, release_tag=None, checksums=None):
     require(
         bool(headings) and headings[0].startswith(version + " ("),
         "First changelog entry must be the release version",
+    )
+    groups = changelog_groups(root, version)
+    description = index.get("description")
+    summary = (
+        description[: -len(groups) - 2]
+        if isinstance(description, str) and description.endswith("\n\n" + groups)
+        else ""
+    )
+    require(
+        summary.strip() and not re.search(r"(?m)^#", summary),
+        f"Source index description must be a summary, then the CHANGELOG's {version} groups; "
+        "run -Stage prepare again",
     )
     extension_build = (root / "extensions/messenger/build.gradle.kts").read_text(
         encoding="utf-8"
@@ -556,8 +612,26 @@ def main(argv=None):
         action="store_true",
         help="also check <checksums>.sig against scripts/release_signers",
     )
+    parser.add_argument(
+        "--describe",
+        action="store_true",
+        help="write the release's CHANGELOG groups after the source index description's summary",
+    )
     args = parser.parse_args(argv)
     args.root = args.root.resolve()
+    checks = (
+        args.bundle,
+        args.evidence,
+        args.release_tag,
+        args.checksums,
+        args.development,
+        args.held_index_sha256,
+        args.freeze,
+        args.bundle_sha256,
+        args.verify_signature,
+    )
+    if args.describe and any(checks):
+        parser.error("--describe only writes the source index description")
     if args.verify_signature and args.checksums is None:
         parser.error("--verify-signature needs --checksums")
     if args.development:
@@ -578,6 +652,9 @@ def main(argv=None):
     elif args.freeze or args.held_index_sha256 or args.bundle_sha256:
         parser.error("development options need --development")
     try:
+        if args.describe:
+            print(describe(args.root))
+            return 0
         if args.development:
             bundle = args.bundle
             if bundle is None:

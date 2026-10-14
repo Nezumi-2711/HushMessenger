@@ -156,6 +156,51 @@ public class QuickSetupsTest {
         }
     }
 
+    @Test public void theHelpLineSaysToPressAndHold() {
+        assertTrue(new SettingsText(Locale.US).get("quick_setups_help").endsWith(" Press and hold to hide this section."));
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = screen.get().getWindow().getDecorView();
+            root.findViewWithTag("tab_app").performClick();
+            assertTrue(((TextView) ((android.view.ViewGroup) root.findViewWithTag("quick_setups")).getChildAt(0))
+                .getText().toString().endsWith("Press and hold to hide this section."));
+        }
+    }
+
+    @Test public void aLongPressHidesQuickSetupsAndTheRestoreButtonBringsItBack() {
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = screen.get().getWindow().getDecorView();
+            root.findViewWithTag("tab_app").performClick();
+            TextView status = root.findViewWithTag("quick_setups_home_status");
+            assertEquals("Shown. Tap to hide it.", status.getText().toString());
+            assertFalse(Settings.preferences.getBoolean("hide_quick_setups", false));
+            assertTrue(root.findViewWithTag("quick_privacy").performLongClick());
+            assertTrue(Settings.preferences.getBoolean("hide_quick_setups", false));
+            assertFalse(root.findViewWithTag("quick_setups").isShown());
+            assertEquals("Quick setups hidden. Bring it back from App.", ShadowToast.getTextOfLatestToast());
+            assertEquals("Hidden. Tap to show it again.", status.getText().toString());
+            root.findViewWithTag("quick_setups_home").performClick();
+            assertFalse(Settings.preferences.getBoolean("hide_quick_setups", false));
+            assertTrue(root.findViewWithTag("quick_setups").isShown());
+            assertEquals("Shown. Tap to hide it.", status.getText().toString());
+            root.findViewWithTag("quick_setups_home").performClick();
+            assertFalse(root.findViewWithTag("quick_setups").isShown());
+        }
+    }
+
+    @Test public void aHiddenSectionStaysHiddenOnTheNextOpenAndNoChoiceOrBackupCarriesIt() {
+        Settings.preferences.edit().putBoolean("hide_quick_setups", true).commit();
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = screen.get().getWindow().getDecorView();
+            root.findViewWithTag("tab_app").performClick();
+            assertFalse(root.findViewWithTag("quick_setups").isShown());
+            assertEquals("Hidden. Tap to show it again.",
+                ((TextView) root.findViewWithTag("quick_setups_home_status")).getText().toString());
+        }
+        for (String name : QuickSetups.CHOICES) assertFalse(QuickSetups.values(name).containsKey("hide_quick_setups"));
+        assertFalse(controls().contains("hide_quick_setups"));
+        assertFalse(ChoiceCodec.encode(Settings.preferences, Settings.installed).contains("hide_quick_setups"));
+    }
+
     @Test public void withNoControlsInstalledThereAreNoQuickSetups() throws Exception {
         var app = RuntimeEnvironment.getApplication();
         var info = app.getPackageManager().getPackageInfo(app.getPackageName(), android.content.pm.PackageManager.GET_META_DATA);

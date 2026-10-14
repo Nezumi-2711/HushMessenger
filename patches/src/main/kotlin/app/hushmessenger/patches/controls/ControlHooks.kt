@@ -26,7 +26,6 @@ import com.android.tools.smali.dexlib2.iface.instruction.WideLiteralInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction
-import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.SwitchPayload
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference as DexMethodReference
@@ -185,13 +184,12 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     var changedViewer = false
     val drawerReaders = mutableListOf<Method>()
     val drawerAnchors = mutableListOf<Method>()
-    val browserChecks = mutableListOf<Method>()
     for (cls in classes) {
         val original = cls.fields.firstOrNull { it.name == "__redex_internal_original_name" }
             ?.initialValue.let { (it as? StringEncodedValue)?.value }
         for (method in cls.methods) {
             fun add(key: String) { found.getValue(key).add(method) }
-            if ((cls.type == EPHEMERAL_VIEWER && (method.name in EPHEMERAL_DIALOGS || method.name == "onResume")) ||
+            if ((cls.type == EPHEMERAL_VIEWER && (method.name == EPHEMERAL_DIALOG || method.name == "onResume")) ||
                 (cls.type == QUICKSNAP_VIEWER && method.name == "onCreateView")) {
                 try {
                     method.screenshotViewerSites()
@@ -235,11 +233,11 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
                 refs.any { it.toString() == "Landroid/app/ActivityManager;->isLowRamDevice()Z" }) add("bubbles")
             if (!AccessFlags.STATIC.isSet(method.accessFlags) && method.returnType == "Z" &&
                 method.parameterTypes == listOf(BUBBLE_SESSION) && instructions.any {
-                    it.opcode == Opcode.CONST_WIDE && (it as? WideLiteralInstruction)?.wideLiteral?.let { flag -> flag in BUBBLE_ROLLOUTS } == true
+                    it.opcode == Opcode.CONST_WIDE && (it as? WideLiteralInstruction)?.wideLiteral == BUBBLE_ROLLOUT
                 }) add("bubble_mode")
-            if (method.returnType == "Z" && strings.containsAll(setOf("iab_skipped_reason", "user_prefers_external"))) add("browser")
+            // The external-browser check is the launcher's own (Uri, session) instance check; it logs no skip reason.
             if (method.returnType == "Z" && cls.type == MESSENGER_BROWSER_LAUNCHER && !AccessFlags.STATIC.isSet(method.accessFlags) &&
-                method.parameterTypes == listOf("Landroid/net/Uri;", BUBBLE_SESSION)) browserChecks.add(method)
+                method.parameterTypes == listOf("Landroid/net/Uri;", BUBBLE_SESSION)) add("browser")
             if (method.returnType == "Z" && AccessFlags.STATIC.isSet(method.accessFlags) && method.isPeopleSectionShape() &&
                 refs.any { it.toString() in peopleJewelKeys } && refs.any { it.toString() == activeProfile.preferenceGetter }) add("people_jewel")
             if (AccessFlags.STATIC.isSet(method.accessFlags) && method.returnType == "V" && method.parameterTypes == listOf(cls.type) &&
@@ -265,7 +263,10 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
                 instructions.any { (it as? NarrowLiteralInstruction)?.narrowLiteral == FLAG_SECURE } &&
                 refs.any { it.toString() == "Landroid/view/Window;->addFlags(I)V" }) add("allow_screenshot")
             if (cls.type == MEDIA_TRANSCODER && method.hookId().let { it == TRANSCODE_IMAGE || it == TRANSCODE_IMAGE_ASYNC }) add("original_photo")
-            if (method.isVideoTranscode(strings)) add(ORIGINAL_VIDEO)
+            if (method.isVideoTranscode(strings)) {
+                add(ORIGINAL_VIDEO)
+                if (method.parsesTranscodeSource()) add(XHE_TRANSCODE)
+            }
             if (method.returnType == "V" && method.isKeepUnsentShape() && strings.any { "ACTION_REVOKE_MESSAGE" in it }) add("keep_unsent")
             // Both unsent hooks call the wrapper's own message id getter, so the wrapper that holds them has to have one.
             if (messageTextGetterName.isNotEmpty() && method.name == messageTextGetterName &&
@@ -359,8 +360,6 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
             ?.let { found.getValue("ai_search_chip").add(it) }
     }
     if (changedViewer) found.getValue("screenshot_viewers").clear() else screenshotViewerRefusal = null
-    // 583 dropped the skip-reason logging, so only a build without it falls back to the launcher's (Uri, session) check.
-    if (found.getValue("browser").isEmpty()) found.getValue("browser").addAll(browserChecks)
     found.getValue(EMOJI_DRAWER).addAll(connectEmojiDrawer(drawerReaders, drawerAnchors))
     found.getValue(EMOJI_SEARCH).addAll(findEmojiSearch(classes))
     found.getValue(AI_MENTIONS).addAll(findAiMentions(classes))
@@ -375,6 +374,8 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     found.getValue(MQTT_TELEMETRY).addAll(findMqttTelemetry(classes))
     found.getValue(PINNED_CHATS).addAll(findPinnedChatLimit(classes))
     found.getValue(NEARBY_SCANS).addAll(findNearbyScans(classes))
+    found.getValue(WIFI_IDENTITY).addAll(findWifiIdentityReads(classes))
+    found.getValue(PHONE_ID_SYNC).addAll(findPhoneIdSync(classes))
     found.getValue(TEXT_STYLE).addAll(findTextStyleField(classes))
     found.getValue(MESSAGE_LOG).addAll(findMessageLogHook(classes))
     found.getValue(AUTO_REPLY).addAll(findMessageLogHook(classes))
@@ -504,7 +505,7 @@ internal fun MutableMethod.validatePluginGate() {
     }
 }
 
-/** The registers 582 returns from its two exits, in order. */
+/** The registers 583 returns from its two exits, in order. */
 private val AD_FILTER_RESULTS = listOf(7, 2)
 
 /** Wrap both exits, including direct branches to a return. The returned list stays intact on the inactive path. */
@@ -624,27 +625,27 @@ internal fun MutableMethod.injectSubtabs() {
 }
 
 /**
- * How each tested build reads the external-browser preference, keyed by the check's register count: the register that
- * holds the false default, and the branch taken on the result. 582 skips ahead when it's off; 583 returns when it's on.
+ * How 583 reads the external-browser preference: an eight-register check that keeps the false default in v2 and
+ * returns when the answer is on.
  */
-internal val BROWSER_PREFERENCE_SHAPES = mapOf(9 to (3 to Opcode.IF_EQZ), 8 to (2 to Opcode.IF_NEZ))
+private const val BROWSER_PREFERENCE_REGISTERS = 8
+private const val BROWSER_PREFERENCE_DEFAULT = 2
 
 internal fun MutableMethod.validateBrowserPreference(): Int {
     val instructions = implementation!!.instructions
     val key = activeProfile.browserPreferenceIndex
     val getter = instructions.getOrNull(key + 1) as? FiveRegisterInstruction
-    val (default, branch) = BROWSER_PREFERENCE_SHAPES[implementation!!.registerCount] ?: (-1 to null)
-    if (AccessFlags.STATIC.isSet(accessFlags) ||
+    if (AccessFlags.STATIC.isSet(accessFlags) || implementation!!.registerCount != BROWSER_PREFERENCE_REGISTERS ||
         parameterTypes != listOf("Landroid/net/Uri;", "Lcom/facebook/auth/usersession/FbUserSession;") ||
         returnType != "Z" || instructions.getOrNull(key)?.opcode != Opcode.SGET_OBJECT ||
         (instructions[key] as? OneRegisterInstruction)?.registerA != 0 ||
         instructions.getOrNull(key + 1)?.opcode != Opcode.INVOKE_INTERFACE ||
-        getter?.registerCount != 3 || getter.registerC != 1 || getter.registerD != 0 || getter.registerE != default ||
+        getter?.registerCount != 3 || getter.registerC != 1 || getter.registerD != 0 || getter.registerE != BROWSER_PREFERENCE_DEFAULT ||
         (instructions.getOrNull(key) as? ReferenceInstruction)?.reference.toString() != activeProfile.browserPreferenceKey ||
         (instructions.getOrNull(key + 1) as? ReferenceInstruction)?.reference.toString() != activeProfile.preferenceGetter ||
         instructions.getOrNull(key + 2)?.opcode != Opcode.MOVE_RESULT ||
         (instructions[key + 2] as? OneRegisterInstruction)?.registerA != 0 ||
-        branch == null || instructions.getOrNull(key + 3)?.opcode != branch ||
+        instructions.getOrNull(key + 3)?.opcode != Opcode.IF_NEZ ||
         (instructions[key + 3] as? OneRegisterInstruction)?.registerA != 0) {
         throw PatchException("Messenger controls: external-browser preference no longer matches the tested build")
     }
@@ -653,7 +654,7 @@ internal fun MutableMethod.validateBrowserPreference(): Int {
 
 internal fun MutableMethod.injectBrowserPreference() {
     val branch = validateBrowserPreference()
-    // p1 is the Uri. Both builds branch on v0 being true as "open it outside", so the stock branch takes the answer.
+    // p1 is the Uri. The check returns on v0 being true as "open it outside", so the stock branch takes the answer.
     addInstructions(branch, "invoke-static {v0, p1}, $SETTINGS->preferExternalBrowser(ZLandroid/net/Uri;)Z\nmove-result v0")
 }
 
@@ -707,18 +708,19 @@ internal fun ClassDef.isRowWrapper(): Boolean =
 internal fun ClassDef.hasMessageIdGetter(): Boolean = messageIdGetterName.isNotEmpty() &&
     methods.any { it.name == messageIdGetterName && it.returnType == "Ljava/lang/String;" && it.parameterTypes == listOf("I") }
 
-/** The Notifications tab's server flag ID. Meta renumbers it with each release; these are 582's and 583's. */
-private val PEOPLE_SERVER_FLAGS = setOf(72344188615734930L, 72344188615735036L)
+/** The Notifications tab's server flag ID as 583 numbers it. Meta renumbers it with each release. */
+private const val PEOPLE_SERVER_FLAG = 72344188615735036L
 
-/** The register holding the section check's false default, by its register count: 582 has ten, 583 eight. */
-internal val PEOPLE_SECTION_DEFAULTS = mapOf(10 to 5, 8 to 3)
+/** The section check's register count, and the register that holds its false default. */
+private const val PEOPLE_SECTION_REGISTERS = 8
+private const val PEOPLE_SECTION_DEFAULT = 3
 
 /**
- * Where the Notifications tab loads its server flag: the method's only constant with one of those values, at 17,
- * after the preference branch at 12.
+ * Where the Notifications tab loads its server flag: the method's only constant with that value, at 17, after the
+ * preference branch at 12.
  */
 private fun List<Instruction>.peopleFlagIndex(): Int =
-    indices.filter { i -> this[i].opcode == Opcode.CONST_WIDE && (this[i] as? WideLiteralInstruction)?.wideLiteral in PEOPLE_SERVER_FLAGS }
+    indices.filter { i -> this[i].opcode == Opcode.CONST_WIDE && (this[i] as? WideLiteralInstruction)?.wideLiteral == PEOPLE_SERVER_FLAG }
         .singleOrNull()?.takeIf { it == 17 } ?: -1
 
 /** The section check takes the suggestions logger, then its owner. */
@@ -727,8 +729,8 @@ private fun Method.isPeopleSectionShape() = parameterTypes.map(CharSequence::toS
 /**
  * The Notifications tab reads its stock "section hidden" preference into v0 and branches on it. A hidden
  * section is still shown when a server flag (v0, three instructions after its constant) is on; both branches
- * land on the final false return. The false value lives in v5 of 582's ten-register body (v3 of 583's eight), which
- * logs a skipped impression under a monitor after the server branch.
+ * land on the final false return. The false value lives in v3 of the eight-register body, which logs a skipped
+ * impression under a monitor after the server branch.
  */
 internal fun MutableMethod.validatePeopleSection() {
     val code = implementation!!.instructions.toList()
@@ -738,7 +740,7 @@ internal fun MutableMethod.validatePeopleSection() {
     val at = code.peopleFlagIndex()
     val flag = code.getOrNull(at)
     val last = code.lastIndex
-    val no = PEOPLE_SECTION_DEFAULTS[implementation!!.registerCount] ?: -1
+    val no = if (implementation!!.registerCount == PEOPLE_SECTION_REGISTERS) PEOPLE_SECTION_DEFAULT else -1
     if (!AccessFlags.STATIC.isSet(accessFlags) || returnType != "Z" || !isPeopleSectionShape() || no < 0 ||
         flag?.opcode != Opcode.CONST_WIDE || (flag as? OneRegisterInstruction)?.registerA != 0 ||
         code.getOrNull(at + 1)?.opcode != Opcode.INVOKE_STATIC ||
@@ -960,33 +962,20 @@ internal fun MutableMethod.injectMenuDrawerAdd() {
 private const val IMMUTABLE_LIST_BUILDER = "Lcom/google/common/collect/ImmutableList\$Builder;"
 
 /**
- * Builds that fill the keyboard's tab list inline copy a local ArrayList of tab items into an ImmutableList.Builder
- * once. 583 hands the builder and the list to one static (ImmutableList.Builder, Iterable) -> ImmutableList call.
- * 582 called the builder's addAll, and the next instruction handed that builder to one static (ImmutableList.Builder)
- * -> ImmutableList call. Returns the copy's index and list register.
+ * 583 fills the keyboard's tab list inline: it copies a local ArrayList of tab items into an ImmutableList.Builder once,
+ * handing the builder and the list to one static (ImmutableList.Builder, Iterable) -> ImmutableList call. Returns the
+ * copy's index and list register.
  */
 internal fun MutableMethod.validateKeyboardTabsInline(): Pair<Int, Int> {
     fun changed(): Nothing = throw PatchException("Messenger controls: the sticker keyboard tab list differs from the tested build")
     val code = implementation!!.instructions.toList()
-    val adds = code.indices.filter { index ->
-        code[index].opcode == Opcode.INVOKE_VIRTUAL && (code[index] as ReferenceInstruction).reference.toString() ==
-            "$IMMUTABLE_LIST_BUILDER->addAll(Ljava/lang/Iterable;)$IMMUTABLE_LIST_BUILDER"
-    }
-    val folded = code.indices.filter { index ->
+    val copy = code.indices.filter { index ->
         val call = (code[index] as? ReferenceInstruction)?.reference as? DexMethodReference
         code[index].opcode == Opcode.INVOKE_STATIC && call != null && call.returnType == IMMUTABLE_LIST &&
             call.parameterTypes.map { it.toString() } == listOf(IMMUTABLE_LIST_BUILDER, "Ljava/lang/Iterable;")
-    }
-    val copy = (adds + folded).singleOrNull()
+    }.singleOrNull()
     // Code inserted before a jump target would be skipped by whatever jumps there.
     if (returnType != "V" || copy == null || copy in jumpTargets()) changed()
-    if (copy in adds) {
-        val build = code.getOrNull(copy + 1)
-        val ref = (build as? ReferenceInstruction)?.reference as? DexMethodReference
-        if (build?.opcode != Opcode.INVOKE_STATIC || ref == null || ref.returnType != IMMUTABLE_LIST ||
-            ref.parameterTypes.map { it.toString() } != listOf(IMMUTABLE_LIST_BUILDER) ||
-            (build as FiveRegisterInstruction).registerC != (code[copy] as FiveRegisterInstruction).registerC) changed()
-    }
     return copy to (code[copy] as FiveRegisterInstruction).registerD
 }
 
@@ -1017,30 +1006,17 @@ internal fun MutableMethod.injectOutgoingTyping() {
 
 /**
  * The Menu tab's folder row class, which the Settings row is built from. The builder may also make other folder rows
- * of that class (the QR code row), their folder keys and, in builds that make them in place, their icons, but nothing else.
+ * of that class (the QR code row) and their folder keys, but nothing else. 583 creates no row icons in the builder.
  */
 internal fun Method.menuFolderItemType(): String {
     val code = implementation!!.instructions.toList()
     val types = code.filter { it.opcode == Opcode.NEW_INSTANCE }
         .map { ((it as ReferenceInstruction).reference as TypeReference).type }.toSet()
     val row = ((code[settingsRowCall()] as ReferenceInstruction).reference as DexMethodReference).definingClass
-    val icons = inlineRowIcons(code, row)
-    if (row !in types || types.any { it != row && it !in icons && !(it.startsWith(DRAWER_MODEL) && it.endsWith("FolderKey;")) })
-        throw PatchException("Messenger controls: menu settings item builder creates ${types.size} types, expected its rows, folder keys and icons")
+    if (row !in types || types.any { it != row && !(it.startsWith(DRAWER_MODEL) && it.endsWith("FolderKey;")) })
+        throw PatchException("Messenger controls: menu settings item builder creates ${types.size} types, expected its rows and folder keys")
     return row
 }
-
-/** Types created by the last write before a row constructor call to the register holding the row's icon argument. */
-private fun inlineRowIcons(code: List<Instruction>, row: String): Set<String> = code.indices.mapNotNull { at ->
-    val call = (code[at] as? ReferenceInstruction)?.reference as? DexMethodReference
-    val range = code[at] as? RegisterRangeInstruction
-    if (code[at].opcode != Opcode.INVOKE_DIRECT_RANGE || range == null || call?.definingClass != row || call.name != "<init>" ||
-        range.registerCount < 4) return@mapNotNull null
-    // The receiver comes first, so the icon (the constructor's third parameter) is the fourth register.
-    val icon = range.startRegister + 3
-    val origin = (at - 1 downTo 0).firstOrNull { code[it].opcode.setsRegister() && (code[it] as? OneRegisterInstruction)?.registerA == icon }
-    origin?.takeIf { code[it].opcode == Opcode.NEW_INSTANCE }?.let { ((code[it] as ReferenceInstruction).reference as TypeReference).type }
-}.toSet()
 
 /** Messenger casts the tapped folder row just before its folder-selected trace section starts. */
 internal fun Method.menuFolderCastIndex(folderItemType: String): Int {
@@ -1122,23 +1098,22 @@ internal fun MutableMethod.injectMenuFolderClick(folderItemType: String) {
     """.trimIndent())
 }
 
-private val KEEP_UNSENT_PARAMETERS = listOf("Landroid/content/Intent;", BUBBLE_SESSION, "Ljava/lang/String;")
+private val KEEP_UNSENT_PARAMETERS = listOf("Landroid/content/Intent;", BUBBLE_SESSION, "Ljava/lang/String;", "Ljava/util/Map;")
 
-/** 582's revoke handler is an instance (Intent, session, String) method; 583's is static and also takes the extras Map. */
-private fun Method.isKeepUnsentShape() = parameterTypes.map(CharSequence::toString) ==
-    if (AccessFlags.STATIC.isSet(accessFlags)) KEEP_UNSENT_PARAMETERS + "Ljava/util/Map;" else KEEP_UNSENT_PARAMETERS
+/** The revoke handler is a static (Intent, session, String, Map) method. */
+private fun Method.isKeepUnsentShape() =
+    AccessFlags.STATIC.isSet(accessFlags) && parameterTypes.map(CharSequence::toString) == KEEP_UNSENT_PARAMETERS
 
 /**
- * Returns the parameter register number of the Intent: p1 of 582's instance handler, or p0 of 583's static one. The
- * hook reads it with a plain invoke, so it has to be in reach.
+ * Returns the parameter register number of the Intent, p0 of the static handler. The hook reads it with a plain
+ * invoke, so it has to be in reach.
  */
 internal fun MutableMethod.validateKeepUnsent(): Int {
     validateScratch()
     if (returnType != "V") throw PatchException("Messenger controls: keep_unsent hook must return void")
     if (!isKeepUnsentShape())
-        throw PatchException("Messenger controls: keep_unsent hook must be the (Intent, session, String) handler, or the static one that adds the extras Map")
-    val static = AccessFlags.STATIC.isSet(accessFlags)
-    val intent = if (static) 0 else 1
+        throw PatchException("Messenger controls: keep_unsent hook must be the static (Intent, session, String, Map) handler")
+    val intent = 0
     if (parameterRegister(intent) > 15)
         throw PatchException("Messenger controls: keep_unsent hook must have its Intent at v15 or below")
     return intent
@@ -1162,7 +1137,7 @@ internal fun MutableMethod.validateUnsentIndicator() {
     if (returnType != "Ljava/lang/String;") throw PatchException("Messenger controls: unsent_indicator hook must return String")
     if (parameterTypes != listOf("I")) throw PatchException("Messenger controls: unsent_indicator hook must take one int param")
     val code = implementation!!.instructions.toList()
-    // 582 takes the row from the wrapper's list, casts it and asks it for its text, ending in v0.
+    // 583 takes the row from the wrapper's list, casts it and asks it for its text, ending in v0.
     val shape = listOf(Opcode.IGET_OBJECT, Opcode.INVOKE_INTERFACE, Opcode.MOVE_RESULT_OBJECT, Opcode.CHECK_CAST,
         Opcode.INVOKE_INTERFACE, Opcode.MOVE_RESULT_OBJECT, Opcode.RETURN_OBJECT)
     if (code.size != shape.size) throw PatchException("Messenger controls: unsent_indicator hook has ${code.size} instructions, expected ${shape.size}")
@@ -1450,9 +1425,8 @@ internal class StorySave(
     val fragmentType: String,
     val menuType: String,
     val controller: String,
-    /** Card controllers the item is offered for, in builds that list them; empty where [canSave] answers instead. */
+    /** Card controllers the item is offered for. */
     val saveable: List<String>,
-    val canSave: String?,
     val id: Long,
     val label: Long,
     val labelOf: String,
@@ -1489,10 +1463,7 @@ internal fun MutableMethod.validateStorySave(): StorySave {
         val result = answer(i)
         op(result) == Opcode.MOVE_RESULT && reg(result) == reg(i) && op(result - 1) == Opcode.INVOKE_VIRTUAL &&
             call(result - 1)?.returnType == "Z" && params(result - 1)?.isEmpty() == true &&
-            args(result - 1) == listOf((code[i + 1] as TwoRegisterInstruction).registerB) &&
-            // The menu is built right before the question. 582's 346415706 family merges a fragment manager check of
-            // the same shape into this onClick, without a menu.
-            op(result - 2) == Opcode.MOVE_RESULT_OBJECT && op(result - 3) == Opcode.INVOKE_STATIC
+            args(result - 1) == listOf((code[i + 1] as TwoRegisterInstruction).registerB)
     }.singleOrNull() ?: fail("no longer asks once whether the story is yours")
     val result = answer(own)
     val flag = reg(own)
@@ -1523,31 +1494,19 @@ internal fun MutableMethod.validateStorySave(): StorySave {
     }
     val card = reg(entry + 3)
     val saveable = mutableListOf<String>()
-    var canSave: String? = null
     var add = entry + 4
-    if (op(add) == Opcode.INSTANCE_OF) {
-        // Older builds list the card types: a match jumps to the item, the last miss skips it.
-        while (op(add) == Opcode.INSTANCE_OF) {
-            val test = code[add] as TwoRegisterInstruction
-            if (test.registerB != card || reg(add + 1) != test.registerA) fail("Save item's card test no longer matches the tested build")
-            saveable += ((code[add] as ReferenceInstruction).reference as TypeReference).type
-            add += 2
-            if (op(add - 1) == Opcode.IF_EQZ && branch(add - 1) == skip) break
-            if (op(add - 1) != Opcode.IF_NEZ) fail("Save item's card test no longer matches the tested build")
-        }
-        if (op(add - 1) != Opcode.IF_EQZ || (entry + 5 until add - 1 step 2).any { branch(it) != add }) {
-            fail("Save item's card test no longer matches the tested build")
-        }
-    } else {
-        // Newer builds ask the card's controller.
-        val test = call(add)
-        if (op(add) != Opcode.INVOKE_VIRTUAL || test == null || test.returnType != "Z" || test.parameterTypes.isNotEmpty() ||
-            args(add) != listOf(card) || op(add + 1) != Opcode.MOVE_RESULT || op(add + 2) != Opcode.IF_EQZ ||
-            reg(add + 2) != reg(add + 1) || branch(add + 2) != skip) {
-            fail("Save item's card test no longer matches the tested build")
-        }
-        canSave = test.toString()
-        add += 3
+    // 583 lists the card types: a match jumps to the item, the last miss skips it.
+    if (op(add) != Opcode.INSTANCE_OF) fail("Save item's card test no longer matches the tested build")
+    while (op(add) == Opcode.INSTANCE_OF) {
+        val test = code[add] as TwoRegisterInstruction
+        if (test.registerB != card || reg(add + 1) != test.registerA) fail("Save item's card test no longer matches the tested build")
+        saveable += ((code[add] as ReferenceInstruction).reference as TypeReference).type
+        add += 2
+        if (op(add - 1) == Opcode.IF_EQZ && branch(add - 1) == skip) break
+        if (op(add - 1) != Opcode.IF_NEZ) fail("Save item's card test no longer matches the tested build")
+    }
+    if (op(add - 1) != Opcode.IF_EQZ || (entry + 5 until add - 1 step 2).any { branch(it) != add }) {
+        fail("Save item's card test no longer matches the tested build")
     }
     val id = literal(add)
     val label = literal(add + 1)
@@ -1571,7 +1530,7 @@ internal fun MutableMethod.validateStorySave(): StorySave {
     }
     val handler = handlers.singleOrNull() ?: fail("no longer sends its clicks to one handler")
     return StorySave(
-        others, fragment, menu, fragmentType, menuType, controller.toString(), saveable, canSave, id, label,
+        others, fragment, menu, fragmentType, menuType, controller.toString(), saveable, id, label,
         labelOf.toString(), icon.toString(), addItem.toString(), ((code[handler] as ReferenceInstruction).reference as TypeReference).type,
     )
 }
@@ -1595,10 +1554,9 @@ internal fun ClassDef.validateStoryMenuHandler(save: StorySave) {
 
 /** Offers Save on someone else's story the way the menu offers it on yours, while the switch is on. */
 internal fun storySaveHelper(definingClass: String, save: StorySave): MutableMethod {
-    val test = save.canSave?.let { "invoke-virtual {v0}, $it\nmove-result v1\nif-eqz v1, :done" }
-        ?: save.saveable.mapIndexed { i, type ->
-            "instance-of v1, v0, $type\n" + if (i == save.saveable.lastIndex) "if-eqz v1, :done" else "if-nez v1, :add"
-        }.joinToString("\n")
+    val test = save.saveable.mapIndexed { i, type ->
+        "instance-of v1, v0, $type\n" + if (i == save.saveable.lastIndex) "if-eqz v1, :done" else "if-nez v1, :add"
+    }.joinToString("\n")
     val parameters = listOf(save.fragmentType, save.menuType).map { ImmutableMethodParameter(it, null, null) }
     return MutableMethod(ImmutableMethod(definingClass, STORY_SAVE_HELPER, parameters, "V",
         AccessFlags.PUBLIC.value or AccessFlags.STATIC.value, null, null, ImmutableMethodImplementation(6, emptyList(), null, null)))

@@ -165,9 +165,9 @@ class MessageLogTest {
 
     @Test fun theConstructorIsFoundAndItsFieldsResolvePerBuild() {
         val classes = messageLogFixture()
-        val found = findControls(classes).getValue(MESSAGE_LOG).map { it.hookId() }
+        val found = mirroredControls(classes).getValue(MESSAGE_LOG).map { it.hookId() }
         assertEquals(activeProfile.hooks.getValue(MESSAGE_LOG).toList(), found)
-        validateControls(findControls(classes), setOf(MESSAGE_LOG))
+        validateControls(mirroredControls(classes), setOf(MESSAGE_LOG))
         val contract = messageLogContract!!
         assertEquals(BODY_FIELD, contract.bodyField)
         assertEquals(SECRET_FIELD, contract.secretField)
@@ -179,7 +179,7 @@ class MessageLogTest {
 
     @Test fun theHookReadsTheMessageAndThreadAndKeepsTheOriginalBody() {
         val classes = messageLogFixture()
-        findControls(classes)
+        mirroredControls(classes)
         val ctor = ctorOf(classes)
         val before = ctor.code()
         injectControl(MESSAGE_LOG, mapOf(MESSAGE_LOG to listOf(ctor)))
@@ -226,7 +226,7 @@ class MessageLogTest {
 
     @Test fun autoReplyReadsTheSameMessageBehindItsOwnGate() {
         val classes = messageLogFixture()
-        val found = findControls(classes)
+        val found = mirroredControls(classes)
         assertEquals(found.getValue(MESSAGE_LOG).map { it.hookId() }, found.getValue(AUTO_REPLY).map { it.hookId() })
         assertEquals(activeProfile.hooks.getValue(AUTO_REPLY).toList(), found.getValue(AUTO_REPLY).map { it.hookId() })
         validateControls(found, setOf(AUTO_REPLY))
@@ -255,7 +255,7 @@ class MessageLogTest {
 
     @Test fun aMissingTextGetterRefusesTheSwitchBeforeAnyEdit() {
         val classes = messageLogFixture(bodyGetter = "const-string v0, \"snippet\"\niget-object v0, v1, $BODY_FIELD\nreturn-object v0")
-        findControls(classes)
+        mirroredControls(classes)
         assertEquals(null, messageLogContract)
         val ctor = ctorOf(classes)
         val before = ctor.code()
@@ -274,7 +274,7 @@ class MessageLogTest {
             messageLogFixture(bodyFlags = 0),
             messageLogFixture(secretFlags = 0),
         )) {
-            findControls(classes)
+            mirroredControls(classes)
             assertEquals(null, messageLogContract)
             val ctor = ctorOf(classes)
             val before = ctor.code()
@@ -295,7 +295,7 @@ class MessageLogTest {
             "class not public" to messageLogFixture(unsentOwnerFlags = AccessFlags.ABSTRACT.value),
         )
         for ((case, classes) in cases) {
-            findControls(classes)
+            mirroredControls(classes)
             assertEquals(null, messageLogContract, case)
             val ctor = ctorOf(classes)
             val before = ctor.code()
@@ -321,7 +321,7 @@ class MessageLogTest {
         for ((case, shape) in cases) {
             val (classes, fields) = shape
             assertEquals(fields, findMessageIdFields(classes).size, case)
-            findControls(classes)
+            mirroredControls(classes)
             assertEquals(null, messageLogContract, case)
             val ctor = ctorOf(classes)
             val before = ctor.code()
@@ -374,7 +374,7 @@ class MessageLogTest {
         for ((case, shape) in cases) {
             val (classes, fields) = shape
             assertEquals(fields, findHiddenTextFields(classes).size, case)
-            findControls(classes)
+            mirroredControls(classes)
             assertEquals(null, messageLogContract, case)
             val ctor = ctorOf(classes)
             val before = ctor.code()
@@ -386,7 +386,7 @@ class MessageLogTest {
 
     @Test fun aConstructorWithoutARoomForTheHookIsRefused() {
         val classes = messageLogFixture(ctorRegisters = 22)
-        findControls(classes)
+        mirroredControls(classes)
         assertTrue(messageLogContract != null)
         val ctor = ctorOf(classes)
         val before = ctor.code()

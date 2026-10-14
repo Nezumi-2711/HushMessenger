@@ -26,7 +26,7 @@ class ControlFailureTest {
         val anchor = pluginGates.getValue("people").anchors.single()
         val first = fixtureMethod("LX/1pm;->A0C()Z", pluginBody(anchor))
         val second = fixtureMethod("LX/2Wl;->A04()Z", pluginBody(anchor, "if-ne"))
-        val found = findControls(listOf(fixtureClass(first.definingClass, listOf(first)),
+        val found = mirroredControls(listOf(fixtureClass(first.definingClass, listOf(first)),
             fixtureClass(second.definingClass, listOf(second))))
         validateControls(found, setOf("people"))
         val methods = found.getValue("people").map { it as MutableMethod }
@@ -146,7 +146,7 @@ class ControlFailureTest {
                             .invoke(context, patchClasses.getConstructor(Set::class.java).newInstance(classes))
                         context.use {
                             record.execute(resources)
-                            discoveredControls = findControls(classes)
+                            discoveredControls = mirroredControls(classes)
                             validateControls(discoveredControls, setOf("menu_settings"))
                             logoLongPressSites = findLogoLongPress(classes)
                             menuTitleLongPressSites = findLogoLongPress(classes, MENU_TAB_TITLE)

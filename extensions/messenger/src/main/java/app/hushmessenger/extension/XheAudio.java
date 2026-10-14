@@ -3,6 +3,7 @@
  */
 package app.hushmessenger.extension;
 
+import android.content.Context;
 import android.media.AudioFormat;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
@@ -11,10 +12,14 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.media.MediaMetadataRetriever;
 import android.media.MediaMuxer;
+import android.net.Uri;
 import android.os.Looper;
 import android.os.SystemClock;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +31,9 @@ import java.util.List;
  * the picture samples are copied as they are, and the result replaces Messenger's copy of the shared file.
  *
  * <p>Messenger calls {@link #fixSharedFile} on its background copy thread, right after it closes the copy and before
- * anything reads it. Any failure leaves the copy exactly as it was.
+ * anything reads it. Any failure leaves the copy exactly as it was. A video picked inside a chat has no copy of its
+ * own, so its transcoder calls {@link #transcodeSource} instead, which converts into the cache and never touches the
+ * picked file.
  */
 public final class XheAudio {
     static final String KEY = "xhe_audio";
@@ -49,6 +56,12 @@ public final class XheAudio {
     /** Room for one picture sample while joining; a larger one throws and the copy stays as it was. */
     static final int SAMPLE_BYTES = 8 << 20;
 
+    /** The cache folder that holds converted copies of videos picked in a chat until Messenger has sent them. */
+    static final String PICKED = "hush-xhe";
+
+    /** How long a converted copy is kept. A send still going after a day has failed anyway. */
+    static final long KEEP_MS = 24L * 60 * 60 * 1000;
+
     private XheAudio() {}
 
     /**
@@ -62,6 +75,73 @@ public final class XheAudio {
         } catch (Throwable error) {
             Settings.hookFailedPrivately(KEY, "Can't convert the shared video's sound", error);
         }
+    }
+
+    /**
+     * Called by the patched video transcoder with the source of a video Messenger is about to send, which every video
+     * picked in a chat goes through (#57). Answers the path of a copy in Messenger's cache whose sound is re-encoded to
+     * AAC-LC when the video's only sound is xHE-AAC, else [source] as it was. A plain path comes back as a path, a file
+     * or content Uri as a file Uri. Off, Pause, the main thread and any failure give [source] back.
+     */
+    public static String transcodeSource(String source) {
+        try {
+            if (source == null || source.isEmpty() || Looper.myLooper() == Looper.getMainLooper() || !Settings.enabled(KEY)) {
+                return source;
+            }
+            Context context = Settings.appContext;
+            File copy = context == null ? null : convertPicked(context, source);
+            if (copy == null) return source;
+            return source.startsWith("/") ? copy.getPath() : Uri.fromFile(copy).toString();
+        } catch (Throwable error) {
+            Settings.hookFailedPrivately(KEY, "Can't convert the picked video's sound", error);
+            return source;
+        }
+    }
+
+    /**
+     * The converted copy of [source] in the cache's {@link #PICKED} folder, made now or kept from an earlier try at
+     * the same video, or null when the video doesn't need one. Copies older than {@link #KEEP_MS} are cleared first.
+     */
+    static File convertPicked(Context context, String source) throws IOException {
+        Uri uri = source.startsWith("/") ? Uri.fromFile(new File(source)) : Uri.parse(source);
+        boolean isFile = "file".equals(uri.getScheme());
+        if (!isFile && !"content".equals(uri.getScheme())) return null;
+        File input = isFile ? new File(uri.getPath()) : null;
+        if (isFile ? !needsFix(input) : !needsFix(context, uri)) return null;
+        File folder = new File(context.getCacheDir(), PICKED);
+        if (!folder.isDirectory() && !folder.mkdirs()) throw new IOException("the cache has no room for the converted video");
+        prune(folder, System.currentTimeMillis());
+        String key = Integer.toHexString((uri + (isFile ? ":" + input.length() + ":" + input.lastModified() : "")).hashCode());
+        File done = new File(folder, key + ".mp4");
+        if (done.length() > 0) return done;
+        File copied = new File(folder, key + ".source");
+        File sound = new File(folder, key + ".sound.mp4");
+        File joined = new File(folder, key + ".joined.mp4");
+        try {
+            if (!isFile) {
+                try (InputStream in = context.getContentResolver().openInputStream(uri);
+                     OutputStream out = new FileOutputStream(copied)) {
+                    if (in == null) throw new IOException("the picked video could not be opened");
+                    byte[] buffer = new byte[1 << 16];
+                    for (int read; (read = in.read(buffer)) != -1; ) out.write(buffer, 0, read);
+                }
+                input = copied;
+            }
+            reencode(input, sound);
+            join(input, sound, joined);
+            if (!joined.renameTo(done)) throw new IOException("the converted video could not be kept");
+            return done;
+        } finally {
+            copied.delete();
+            sound.delete();
+            joined.delete();
+        }
+    }
+
+    /** Deletes what's in [folder] from more than {@link #KEEP_MS} before [now]. */
+    static void prune(File folder, long now) {
+        File[] old = folder.listFiles();
+        if (old != null) for (File file : old) if (now - file.lastModified() > KEEP_MS) file.delete();
     }
 
     /**
@@ -90,11 +170,24 @@ public final class XheAudio {
      * is none of those, so it stays as it is without counting as a hook failure.
      */
     static boolean needsFix(File file) {
+        return needsFix(source -> source.setDataSource(file.getPath()));
+    }
+
+    /** [needsFix] for a file or content Uri. */
+    static boolean needsFix(Context context, Uri uri) {
+        return needsFix(source -> source.setDataSource(context, uri, null));
+    }
+
+    private interface Opener {
+        void open(MediaExtractor source) throws IOException;
+    }
+
+    private static boolean needsFix(Opener opener) {
         MediaExtractor source = new MediaExtractor();
         try {
             try {
-                source.setDataSource(file.getPath());
-            } catch (IOException unreadable) {
+                opener.open(source);
+            } catch (IOException | IllegalArgumentException unreadable) {
                 return false;
             }
             boolean picture = false;
@@ -323,6 +416,20 @@ public final class XheAudio {
     }
 
     /**
+     * How far to move every sample so the earliest first sample lands at zero. A track that starts below zero (an
+     * encoder-delay edit list) moves both tracks by the same amount, so picture and sound stay in sync.
+     */
+    static long startShift(boolean pictureLeft, long firstPicture, boolean soundLeft, long firstSound) {
+        long first = Math.min(pictureLeft ? firstPicture : 0L, soundLeft ? firstSound : 0L);
+        return first < 0 ? -first : 0L;
+    }
+
+    /** Whether the picture's next sample goes first: it's the earlier of the two, or the sound has run out. */
+    static boolean takePicture(boolean pictureLeft, long nextPicture, boolean soundLeft, long nextSound) {
+        return !soundLeft || (pictureLeft && nextPicture <= nextSound);
+    }
+
+    /**
      * Writes [picture]'s picture tracks and [sound]'s one sound track into [out], each sample as it was, taking the
      * earlier of the two next samples each time so the file stays interleaved. Keeps the picture's rotation.
      */
@@ -357,18 +464,21 @@ public final class XheAudio {
 
             ByteBuffer buffer = ByteBuffer.allocateDirect(SAMPLE_BYTES);
             MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+            long shift = startShift(pictures.getSampleTrackIndex() >= 0, pictures.getSampleTime(),
+                sounds.getSampleTrackIndex() >= 0, sounds.getSampleTime());
             while (true) {
-                long nextPicture = pictures.getSampleTime();
-                long nextSound = sounds.getSampleTime();
-                if (nextPicture < 0 && nextSound < 0) break;
-                boolean takePicture = nextSound < 0 || (nextPicture >= 0 && nextPicture <= nextSound);
+                // A sample time can be below zero (an encoder-delay edit list), so only the track index marks the end.
+                boolean pictureLeft = pictures.getSampleTrackIndex() >= 0;
+                boolean soundLeft = sounds.getSampleTrackIndex() >= 0;
+                if (!pictureLeft && !soundLeft) break;
+                boolean takePicture = takePicture(pictureLeft, pictures.getSampleTime(), soundLeft, sounds.getSampleTime());
                 MediaExtractor from = takePicture ? pictures : sounds;
                 int track = takePicture ? pictureOut.get(pictureTracks.indexOf(from.getSampleTrackIndex())) : soundOut;
                 buffer.clear();
                 int size = from.readSampleData(buffer, 0);
                 if (size < 0) break;
                 boolean sync = (from.getSampleFlags() & MediaExtractor.SAMPLE_FLAG_SYNC) != 0;
-                info.set(0, size, from.getSampleTime(), sync ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0);
+                info.set(0, size, from.getSampleTime() + shift, sync ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0);
                 muxer.writeSampleData(track, buffer, info);
                 from.advance();
             }

@@ -11,7 +11,7 @@ import com.android.tools.smali.dexlib2.immutable.ImmutableMethodImplementation
 internal data class DrawerFixtureMapping(
     val provider: String, val getter: String, val row: String, val section: String,
     val dispatcher: String, val iconBase: String, val icon: String, val glyph: String, val enums: String,
-    /** The Settings icon is built in place instead of coming from the icon's static factory, as one 582 family did. */
+    /** The Settings icon is built in place instead of coming from the icon's static factory, a 582 form that's refused. */
     val inlineIcon: Boolean = false,
     /** 583 builds its QR code row after Settings, from the same row class and its own folder key. */
     val qrRow: Boolean = false,
@@ -59,15 +59,15 @@ private fun drawerConstructor(owner: String, params: List<String>, names: List<S
         append("return-void")
     }, registers = params.size + 2, flags = PUBLIC_CONSTRUCTOR)
 
-/** The Settings icon: built in place the way one 582 family did, from the icon's static factory otherwise. */
+/** The Settings icon from the icon's static factory, as 583 gets it, or built in place the way 582 did. */
 private fun settingsIcon(model: DrawerFixtureMapping, broken: String): String {
     val glyph = "${model.glyph}->${if (broken == "glyph") "A64" else "A65"}:${model.glyph}"
     return (if (model.inlineIcon) listOf(
         "sget-object v9, $glyph",
         "sget-object v10, $FIXTURE_COLOR->A0A:$FIXTURE_COLOR",
-        if (broken == "icon-shared") "sget-object v3, ${model.icon}->shared:${model.icon}" else "new-instance v3, ${model.icon}",
-        "invoke-direct {${if (broken == "icon-return") "v2" else "v3"}, v9, v10}, ${model.icon}-><init>(${model.glyph}$FIXTURE_COLOR_TYPE)V",
-        if (broken == "icon-origin") "const/4 v3, 0x0" else "nop",
+        "new-instance v3, ${model.icon}",
+        "invoke-direct {v3, v9, v10}, ${model.icon}-><init>(${model.glyph}$FIXTURE_COLOR_TYPE)V",
+        "nop",
     ) else listOf(
         "sget-object v3, $glyph",
         "invoke-static {v3}, ${model.icon}->A00(${model.glyph})${model.icon}",
@@ -239,7 +239,7 @@ internal fun legacyDrawerFixture(profile: ControlProfile, broken: String = "none
         fixtureClass(model.enums, extraFields = listOf(drawerField(model.enums, "A1P", FIXTURE_INTEGER, true), drawerField(model.enums, "A01", FIXTURE_INTEGER, true))),
         fixtureClass(FIXTURE_COLOR_TYPE), fixtureClass(FIXTURE_COLOR, interfaces = listOf(FIXTURE_COLOR_TYPE),
             extraFields = listOf(drawerField(FIXTURE_COLOR, "A0A", FIXTURE_COLOR, true))),
-        fixtureClass(model.icon, (if (model.inlineIcon) emptyList() else listOf(iconFactoryMethod)) + drawerConstructor(model.icon,
+        fixtureClass(model.icon, listOf(iconFactoryMethod) + drawerConstructor(model.icon,
             listOf(model.glyph, FIXTURE_COLOR_TYPE), listOf("A00", "A01"), setOf(1)), superclass = model.iconBase,
             extraFields = listOf(drawerField(model.icon, "A00", model.glyph), drawerField(model.icon, "A01", FIXTURE_COLOR_TYPE)),
             flags = allocatedFlags("icon")),

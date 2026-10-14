@@ -28,6 +28,14 @@ GIT = shutil.which("git")
 REPO = Path(__file__).parents[2]
 # Fixtures replace the git lookup; keep the real one for the test that builds a repository.
 TAGGED_PUBLIC_FEED = release.tagged_public_feed
+GROUPS = (
+    "### Reported issues\n\n- [#7](https://github.com/SysAdminDoc/HushMessenger/issues/7) "
+    'Videos send instead of "Unable to send".\n\n### New\n\n- **Pin more chats** raises the limit.'
+)
+CHANGELOG = (
+    "# Changelog\n\n## 1.2.3 (2026-09-27)\n\nThis release brings two things.\n\n"
+    f"{GROUPS}\n\n## 1.2.2 (2026-09-20)\n\n### New\n\n- Older.\n"
+)
 
 
 def setUpModule():
@@ -108,6 +116,7 @@ class ReleaseChecks(unittest.TestCase):
         self.index = {
             "version": "1.2.3",
             "created_at": "2026-09-27T23:35:48",
+            "description": f"Thirty-two patches for Messenger.\n\n{GROUPS}",
             "download_url": "https://github.com/SysAdminDoc/HushMessenger/releases/download/v1.2.3/patches-1.2.3.mpp",
         }
         self.write(
@@ -130,7 +139,7 @@ class ReleaseChecks(unittest.TestCase):
             "README.md",
             f"https://img.shields.io/badge/version-1.2.3-blue\n{self.digest}  patches-1.2.3.mpp\n",
         )
-        self.write("CHANGELOG.md", "# Changelog\n\n## 1.2.3 (2026-09-27)\n")
+        self.write("CHANGELOG.md", CHANGELOG)
         self.write(
             "extensions/messenger/build.gradle.kts",
             "versionName = project.version.toString()\n",
@@ -772,6 +781,83 @@ class ReleaseChecks(unittest.TestCase):
             ):
                 release.verify(self.root)
             self.write(path, original)
+
+    def test_description_must_be_a_summary_then_the_releases_changelog_groups(self):
+        # Morphe Manager shows the description for the release an app was patched with, so a
+        # summary alone hid that release's changes (Hushfacebook #143, same here).
+        cases = [
+            ("Thirty-two patches for Messenger.", "a summary"),
+            (GROUPS, "a summary"),
+            (f"Summary.\n\n### Older\n\n- x.\n\n{GROUPS}", "a summary"),
+            (f"Summary.\n\n{GROUPS.replace('raises', 'lifts')}", "a summary"),
+            (None, "a summary"),
+        ]
+        for description, message in cases:
+            self.write(
+                "patches-bundle.json", json.dumps({**self.index, "description": description})
+            )
+            with (
+                self.subTest(description=description),
+                self.assertRaisesRegex(ValueError, message),
+            ):
+                release.verify(self.root)
+        self.write("patches-bundle.json", json.dumps(self.index))
+        # git can check CHANGELOG.md out with CRLF; the description keeps LF.
+        (self.root / "CHANGELOG.md").write_bytes(CHANGELOG.replace("\n", "\r\n").encode())
+        release.verify(self.root)
+        self.write("CHANGELOG.md", CHANGELOG.replace("### New\n\n- **Pin", "### New\n\n- **Pin all"))
+        with self.assertRaisesRegex(ValueError, "run -Stage prepare again"):
+            release.verify(self.root)
+
+    def test_describe_keeps_the_summary_and_writes_the_releases_groups(self):
+        index = {**self.index, "description": "Thirty-two patches for Messenger."}
+        self.write("patches-bundle.json", json.dumps(index, indent=2) + "\n")
+        (self.root / "CHANGELOG.md").write_bytes(CHANGELOG.replace("\n", "\r\n").encode())
+        release.describe(self.root)
+        written = (self.root / "patches-bundle.json").read_bytes()
+        self.assertNotIn(b"\r", written)
+        self.assertTrue(written.endswith(b"}\n"))
+        written = json.loads(written)
+        self.assertEqual(list(index), list(written), "key order stays")
+        self.assertEqual(f"Thirty-two patches for Messenger.\n\n{GROUPS}", written["description"])
+        self.assertNotIn("Older", written["description"], "only the release's own section")
+        self.assertIn("Release metadata passed", release.verify(self.root))
+
+        # A rerun after a CHANGELOG edit swaps the groups and keeps the hand-written summary.
+        self.write("CHANGELOG.md", CHANGELOG.replace("raises the limit", "raises the limit to 20"))
+        release.describe(self.root)
+        description = json.loads(self.text("patches-bundle.json"))["description"]
+        self.assertEqual(
+            f"Thirty-two patches for Messenger.\n\n{GROUPS.replace('the limit', 'the limit to 20')}",
+            description,
+        )
+
+        self.write("CHANGELOG.md", "## 1.2.3 (2026-09-27)\n\nOnly prose.\n")
+        before = self.text("patches-bundle.json")
+        with self.assertRaisesRegex(ValueError, "no ### groups"):
+            release.describe(self.root)
+        self.assertEqual(before, self.text("patches-bundle.json"), "a refusal writes nothing")
+        self.write("CHANGELOG.md", CHANGELOG)
+        self.write("patches-bundle.json", json.dumps({**self.index, "description": ""}))
+        with self.assertRaisesRegex(ValueError, "no summary"):
+            release.describe(self.root)
+        self.write("patches-bundle.json", json.dumps({**self.index, "version": "1.2.2"}))
+        with self.assertRaisesRegex(ValueError, "index version"):
+            release.describe(self.root)
+
+    def test_describe_runs_alone_from_the_command_line(self):
+        self.write(
+            "patches-bundle.json",
+            json.dumps({**self.index, "description": "Summary."}),
+        )
+        with redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(0, release.main(["--root", str(self.root), "--describe"]))
+        self.assertIn("carries the 1.2.3 CHANGELOG groups", out.getvalue())
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            release.main(["--root", str(self.root), "--describe", "--release-tag", "v1.2.3"])
+
+    def text(self, path):
+        return (self.root / path).read_text(encoding="utf-8")
 
     def test_readme_may_link_another_projects_release(self):
         self.write(

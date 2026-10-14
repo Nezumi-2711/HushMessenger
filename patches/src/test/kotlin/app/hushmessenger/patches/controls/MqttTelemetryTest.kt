@@ -29,7 +29,7 @@ private const val NOT_SENT = "LX/09t;->A00:LX/09t;"
 private const val PLAIN_PING = "$CLIENT->A05(${CLIENT}LX/14Z;)V"
 
 /**
- * The publish cut down to what 582 keeps: with no connection it logs not_connected and returns the not-sent singleton,
+ * The publish cut down to what Messenger keeps: with no connection it logs not_connected and returns the not-sent singleton,
  * otherwise it checks for the health report and writes. Twenty registers and ten parameter words, so p4 is v14.
  */
 private val PUBLISH_BODY = """
@@ -47,7 +47,7 @@ private val PUBLISH_BODY = """
     return-object v0
 """.trimIndent()
 
-/** The keepalive as 582 writes it: a config flag picks the health report or, when it's off, the plain ping. */
+/** The keepalive as Messenger writes it: a config flag picks the health report or, when it's off, the plain ping. */
 private val KEEPALIVE_BODY = """
     iget-object v1, p0, $CLIENT->A08:LX/0C6;
     iget-object v2, p0, $CLIENT->A12:LX/14Z;
@@ -95,18 +95,18 @@ class MqttTelemetryTest {
         activeProfile = SYNTHETIC_PROFILE
     }
 
-    private fun found(classes: List<MutableClass>) = findControls(classes).getValue(MQTT_TELEMETRY).map { it.hookId() }.toSet()
+    private fun found(classes: List<MutableClass>) = mirroredControls(classes).getValue(MQTT_TELEMETRY).map { it.hookId() }.toSet()
 
     @Test fun thePublishAndTheKeepaliveAreFoundInTheClientAndNotItsSubclass() {
         assertEquals(setOf(SYNTHETIC_MQTT_PUBLISH, SYNTHETIC_MQTT_KEEPALIVE), found(mqttClientFixture()))
-        validateControls(findControls(mqttClientFixture()), setOf(MQTT_TELEMETRY))
+        validateControls(mirroredControls(mqttClientFixture()), setOf(MQTT_TELEMETRY))
     }
 
     @Test fun everyProfileHooksTheSameTwoMethods() {
         for (profile in listOf(SYNTHETIC_PROFILE, BASE_PROFILE, PROFILE_346611351)) {
             assertEquals(setOf(SYNTHETIC_MQTT_PUBLISH, SYNTHETIC_MQTT_KEEPALIVE), profile.hooks.getValue(MQTT_TELEMETRY))
             activeProfile = profile
-            validateControls(findControls(mqttClientFixture()), setOf(MQTT_TELEMETRY))
+            validateControls(mirroredControls(mqttClientFixture()), setOf(MQTT_TELEMETRY))
         }
     }
 
@@ -129,7 +129,7 @@ class MqttTelemetryTest {
         )
         for ((case, classes) in cases) {
             assertTrue(found(classes).isEmpty(), case)
-            assertFailsWith<PatchException>(case) { validateControls(findControls(classes), setOf(MQTT_TELEMETRY)) }
+            assertFailsWith<PatchException>(case) { validateControls(mirroredControls(classes), setOf(MQTT_TELEMETRY)) }
         }
     }
 

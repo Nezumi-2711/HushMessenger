@@ -6,13 +6,16 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The Report a problem row's GitHub link: a new issue with the versions, the phone and the controls that are on
  * filled in, and the two questions left for the person to answer. The repository has no issue form, so it all goes in
  * the body and the title is left for them.
  *
- * <p>It carries only what a report needs: version names, the phone's maker and model, Android's version, whether
+ * <p>It carries only what a report needs: version names, the Messenger build it was patched from (which Spoof package
+ * version hides from Android's version code), the phone's maker and model, Android's version, whether
  * changes are paused or in safe mode, and the English titles of the controls that are on. No account, serial number,
  * package name, file path or log line goes in. The text is for the maintainer, so it stays English whatever the
  * phone's language. The whole address is held to MAX_LENGTH characters: the list of controls is shortened first,
@@ -29,19 +32,35 @@ final class ProblemReport {
 
     private ProblemReport() { }
 
+    /** The Messenger build the patch started from, as HostScreens.originalBuild carries it: name, code and mapping. */
+    static final Pattern ORIGINAL =Pattern.compile("([0-9][0-9A-Za-z.]{0,31})\\|([1-9][0-9]{0,9})\\|([0-9A-Za-z]{1,16})");
+
+    /**
+     * "583.0.0.29.95 (346611369, base mapping)": the build the patch started from, which Android's own version code
+     * stops saying once Spoof package version is in. "unknown" for a build patched before the patch wrote it down or a
+     * value that doesn't parse, never a guess from the installed version.
+     */
+    static String patchedFrom(String original, boolean preview) {
+        if (preview) return "none, UI preview";
+        Matcher parts = ORIGINAL.matcher(original == null ? "" : original);
+        if (!parts.matches()) return "unknown";
+        return parts.group(1) + " (" + parts.group(2) + ", " + parts.group(3) + " mapping)";
+    }
+
     /** What the report says about this install. Built from the phone by SettingsActivity, or by hand in a test. */
     static final class Facts {
-        final String hushVersion, messengerVersion, manufacturer, model, androidRelease;
+        final String hushVersion, messengerVersion, patchedFrom, manufacturer, model, androidRelease;
         final long messengerCode;
         final int sdk;
         final boolean paused, safeMode;
         final List<String> controlsOn;
 
-        Facts(String hushVersion, String messengerVersion, long messengerCode, String manufacturer, String model,
-                String androidRelease, int sdk, boolean paused, boolean safeMode, List<String> controlsOn) {
+        Facts(String hushVersion, String messengerVersion, long messengerCode, String patchedFrom, String manufacturer,
+                String model, String androidRelease, int sdk, boolean paused, boolean safeMode, List<String> controlsOn) {
             this.hushVersion = clean(hushVersion);
             this.messengerVersion = clean(messengerVersion);
             this.messengerCode = messengerCode;
+            this.patchedFrom = clean(patchedFrom);
             this.manufacturer = clean(manufacturer);
             this.model = clean(model);
             this.androidRelease = clean(androidRelease);
@@ -85,6 +104,7 @@ final class ProblemReport {
     static String body(Facts facts, int shown) {
         StringBuilder body = new StringBuilder()
             .append("Versions: ").append(versionsLine(facts)).append('\n')
+            .append("Patched from: ").append(orUnknown(facts.patchedFrom)).append('\n')
             .append("Phone: ").append(phoneLine(facts)).append('\n');
         if (facts.safeMode) body.append("Safe mode: on\n");
         if (facts.paused) body.append("Pause all changes: on\n");
@@ -98,8 +118,8 @@ final class ProblemReport {
             String url = url(body(facts, shown));
             if (url.length() <= MAX_LENGTH) return url;
         }
-        // Not reached while MAX_FACT holds: five facts of 120 characters, nine each once encoded, come to 5,400. Kept so a
-        // fact added later can't push the questions out.
+        // Not reached in practice: five free-text facts of 120 characters, nine each once encoded, come to 5,400, and the
+        // patched-from line is a short ASCII line patchedFrom built. Kept so odd facts can't push the questions out.
         return url(WHAT_HAPPENED + "\n\n\n" + WHAT_EXPECTED + "\n\n");
     }
 

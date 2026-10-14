@@ -349,6 +349,35 @@ public final class Settings {
      */
     public static boolean stopNearbyScans() { return enabled("nearby_scans"); }
 
+    /**
+     * Asked when Messenger is about to list the installed apps to find other Meta apps, and when it's about to ask them
+     * for their family device ID. True gives it an empty list and skips the request.
+     */
+    public static boolean stopPhoneIdSync() { return enabled("phone_id_sync"); }
+
+    /** What Android tells an app that can't see the phone's location about the Wi-Fi network it's on. */
+    static final String HIDDEN_WIFI_NAME = "<unknown ssid>";
+    static final String HIDDEN_WIFI_BSSID = "02:00:00:00:00:00";
+
+    /**
+     * Asked each time Messenger reads the name of the Wi-Fi network the phone is connected to. With Stop nearby scans on
+     * it gets Android's answer for an app without location access. No name stays no name.
+     */
+    public static String wifiName(String name) { return hideWifi(name, HIDDEN_WIFI_NAME); }
+
+    /** The same for the network's BSSID, the access point's hardware address, which can place the phone on a map. */
+    public static String wifiBssid(String bssid) { return hideWifi(bssid, HIDDEN_WIFI_BSSID); }
+
+    private static String hideWifi(String value, String hidden) {
+        if (value == null) return null;
+        try {
+            return enabled("nearby_scans") ? hidden : value;
+        } catch (RuntimeException error) {
+            hookFailed("nearby_scans", "Can't check Stop nearby scans", error);
+            return value;
+        }
+    }
+
     static final String PINNED_CHATS = "pinned_chats";
     /** How many chats can be pinned with the switch on. Messenger's own limit is three. */
     static final int PINNED_CHAT_LIMIT = 20;

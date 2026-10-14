@@ -30,7 +30,7 @@ class ControlDiscoveryTest {
     )
 
     private fun completeFixture(): List<MutableClass> {
-        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS, XHE_AUDIO, DISAPPEARING_SWIPE, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, PINNED_CHATS, NEARBY_SCANS, TEXT_STYLE, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
+        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS, XHE_AUDIO, XHE_TRANSCODE, DISAPPEARING_SWIPE, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, PINNED_CHATS, NEARBY_SCANS, WIFI_IDENTITY, PHONE_ID_SYNC, TEXT_STYLE, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
             ids.map { id ->
                 if (key == "people_jewel") return@map peopleJewelMethod()
                 if (key == "people_tab") return@map peopleTabMethod()
@@ -63,15 +63,14 @@ class ControlDiscoveryTest {
                     "keep_unsent" -> "const-string v0, \"com.facebook.stella.ipc.messenger.ACTION_REVOKE_MESSAGE\"\nreturn-void"
                     "ai_search" -> "const-string v0, \"com.facebook.messaging.search.aiagent.plugins.implementations.SearchAiagentImplementationsKillSwitch\"\nconst/4 v0, 0x1\nreturn v0"
                     "original_photo" -> if (id.endsWith(")[B")) "const/4 v0, 0x0\nreturn-object v0" else "return-void"
-                    ORIGINAL_VIDEO -> VIDEO_TRANSCODE_BODY
+                    ORIGINAL_VIDEO -> VIDEO_TRANSCODE_BODY.replaceFirst("\n", "\n$TRANSCODE_SOURCE_PARSE\n")
                     "emoji_typeface" -> "const-string v0, \"FacebookEmojiTypefaceProviderImpl\"\nconst/4 v0, 0x0\nreturn-object v0"
                     "avatar_tabs" -> """
                         sget-object v0, $AVATAR_TAB_EVENT->A03:$AVATAR_TAB_EVENT
                         new-instance v1, Ljava/util/ArrayList;
                         invoke-static {}, $IMMUTABLE_LIST->builder()$LIST_BUILDER
                         move-result-object v2
-                        invoke-virtual {v2, v1}, $LIST_BUILDER->addAll(Ljava/lang/Iterable;)$LIST_BUILDER
-                        invoke-static {v2}, LX/34B;->A01($LIST_BUILDER)$IMMUTABLE_LIST
+                        invoke-static {v2, v1}, LX/34B;->A0l(${LIST_BUILDER}Ljava/lang/Iterable;)$IMMUTABLE_LIST
                         move-result-object v3
                         return-void
                     """.trimIndent()
@@ -93,12 +92,7 @@ class ControlDiscoveryTest {
                         id.endsWith("->A1i()V") -> "const-string v0, \"$DRAWER_REFRESH\"\nreturn-void"
                         else -> "const-string v0, \"Unknown ViewHolder\"\nreturn-void"
                     }
-                    "browser" -> """
-                        const-string v0, "iab_skipped_reason"
-                        const-string v0, "user_prefers_external"
-                        const/4 v0, 0x0
-                        return v0
-                    """.trimIndent()
+                    "browser" -> "const/4 v0, 0x0\nreturn v0"
                     "ads" -> """
                         const-string v0, "messaging.inbox.itemlistprocessor.ItemListProcessorInterfaceSpec"
                         const-string v0, "processItems"
@@ -108,7 +102,8 @@ class ControlDiscoveryTest {
                     """.trimIndent()
                     else -> error("Missing synthetic resolver fixture for $key")
                 }
-                val staticGate = (key in pluginGates || key == "ai_search" || key == "growth_story_card" || key == APP_ICONS) && !id.substringAfter('(').startsWith(')')
+                val staticGate = (key in pluginGates || key == "ai_search" || key == "growth_story_card" || key == APP_ICONS || key == "keep_unsent") &&
+                    !id.substringAfter('(').startsWith(')')
                 fixtureMethod(id, body, registers = when (key) { "original_photo" -> 22; ORIGINAL_VIDEO -> 24;"chat_animation", "chat_legacy" -> 5; else -> 8 }, flags = AccessFlags.PUBLIC.value or
                     if (staticGate) AccessFlags.STATIC.value else 0)
             }
@@ -127,7 +122,7 @@ class ControlDiscoveryTest {
             fixtureMethod("$IMMUTABLE_LIST->copyOf(Ljava/util/Collection;)$IMMUTABLE_LIST",
                 "const/4 v0, 0x0\nreturn-object v0", flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value),
         )), peopleJewelKeyHolder(), storyCardKeyHolder(), debugDumperFixture(), messageWrapperFixture(type = "LX/K1Y;"), searchFieldFixture()) +
-            aiStickerCellFixture() + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + aiMentionsFixture() + searchBarFixture() + aiMentionRowsFixture() + shareCopyFixture() + disappearingSwipeFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + pinnedChatLimitFixture() + nearbyScansFixture() + textFieldFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + customFontFixture() +
+            aiStickerCellFixture() + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + aiMentionsFixture() + searchBarFixture() + aiMentionRowsFixture() + shareCopyFixture() + disappearingSwipeFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + pinnedChatLimitFixture() + nearbyScansFixture() + phoneIdFixture() + textFieldFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + customFontFixture() +
             syntheticHooks.getValue("screenshot_viewers").map { screenshotViewerFixture(it) }
                 .groupBy { it.definingClass }.map { (type, group) -> fixtureClass(type, group) })
         .let { classes ->
@@ -150,13 +145,13 @@ class ControlDiscoveryTest {
 
     @Test fun searchChipIsTheFirstRenderableComponentOfTheSearchField() {
         val fixture = completeFixture()
-        validateControls(findControls(fixture), setOf("ai_search_chip"))
-        val withoutField = findControls(fixture.filter { it.type != "LX/OIp;" })
+        validateControls(mirroredControls(fixture), setOf("ai_search_chip"))
+        val withoutField = mirroredControls(fixture.filter { it.type != "LX/OIp;" })
         assertTrue(withoutField.getValue("ai_search_chip").isEmpty())
     }
 
     @Test fun discoversTheCompleteHookUnionThroughRealClassDefinitions() {
-        val found = findControls(completeFixture())
+        val found = mirroredControls(completeFixture())
         validateControls(found)
         assertEquals(ExpectedTotals.DISCOVERY_FIXTURE_HOOKS, found.values.sumOf { it.size })
         for (key in syntheticHooks.keys) validateControls(found, setOf(key))
@@ -164,8 +159,8 @@ class ControlDiscoveryTest {
 
     @Test fun theStoryRingHookIsOnlyThePreviewConstructorThatTakesTheCard() {
         val fixture = completeFixture()
-        validateControls(findControls(fixture), setOf("anonymous_stories"))
-        val withoutPreview = findControls(fixture.filter { it.type != MONTAGE_BUCKET_PREVIEW })
+        validateControls(mirroredControls(fixture), setOf("anonymous_stories"))
+        val withoutPreview = mirroredControls(fixture.filter { it.type != MONTAGE_BUCKET_PREVIEW })
         assertEquals(listOf(STORY_MARK_READ_HOOK), withoutPreview.getValue("anonymous_stories").map { it.hookId() })
         assertFailsWith<PatchException> { validateControls(withoutPreview, setOf("anonymous_stories")) }
         // A preview constructor without the card, or the same constructor shape on another class, doesn't count.
@@ -173,11 +168,11 @@ class ControlDiscoveryTest {
         val elsewhere = fixtureMethod(STORY_PREVIEW_INIT.replace("$MONTAGE_BUCKET_PREVIEW->", "LX/Zz9;->"), "return-void", 23)
         val moved = fixture.filter { it.type != MONTAGE_BUCKET_PREVIEW } +
             fixtureClass(MONTAGE_BUCKET_PREVIEW, listOf(noCard)) + fixtureClass("LX/Zz9;", listOf(elsewhere))
-        assertFailsWith<PatchException> { validateControls(findControls(moved), setOf("anonymous_stories")) }
+        assertFailsWith<PatchException> { validateControls(mirroredControls(moved), setOf("anonymous_stories")) }
         // A second constructor that takes a card makes the set differ from the build's, so the control stops.
         val extra = fixtureMethod("$MONTAGE_BUCKET_PREVIEW-><init>($MONTAGE_CARD)V", "return-void", 2)
         val doubled = fixture.map { if (it.type == MONTAGE_BUCKET_PREVIEW) fixtureClass(it.type, it.methods.toList() + extra) else it }
-        assertFailsWith<PatchException> { validateControls(findControls(doubled), setOf("anonymous_stories")) }
+        assertFailsWith<PatchException> { validateControls(mirroredControls(doubled), setOf("anonymous_stories")) }
     }
 
     @Test fun aChangedViewerLeavesOnlyScreenshotDiscoveryUnavailable() {
@@ -185,14 +180,14 @@ class ControlDiscoveryTest {
         val method = classes.single { it.type == EPHEMERAL_VIEWER }.methods.single { it.name == "onResume" }
         method.replaceInstruction(method.screenshotViewerSites().first(), "nop")
         val before = lifecycleDex(classes)
-        val found = findControls(classes)
+        val found = mirroredControls(classes)
         validateControls(found, syntheticHooks.keys - "screenshot_viewers")
         assertFailsWith<PatchException> { validateControls(found, setOf("screenshot_viewers")) }
         kotlin.test.assertContentEquals(before, lifecycleDex(classes))
     }
 
     @Test fun aSuppliedUnavailableCommunityContractDoesNotRunDiscoveryAgain() {
-        val found = findControls(completeFixture(), null)
+        val found = mirroredControls(completeFixture(), null)
         assertTrue(found.getValue(COMMUNITY_INBOX).isEmpty())
         validateControls(found, syntheticHooks.keys - COMMUNITY_INBOX)
     }
@@ -204,7 +199,7 @@ class ControlDiscoveryTest {
             val extra = fixtureMethod("$EPHEMERAL_VIEWER->onResume(I)V", "return-void", 2)
             val methods = viewer.methods.toList()
             val changed = fixtureClass(viewer.type, if (first) listOf(extra) + methods else methods + extra)
-            val found = findControls(classes.filter { it !== viewer } + changed)
+            val found = mirroredControls(classes.filter { it !== viewer } + changed)
             validateControls(found, syntheticHooks.keys - "screenshot_viewers")
             assertTrue(found.getValue("screenshot_viewers").isEmpty())
             assertFailsWith<PatchException> { validateControls(found, setOf("screenshot_viewers")) }
@@ -213,40 +208,40 @@ class ControlDiscoveryTest {
 
     @Test fun peopleTabHandlerIsFoundOnlyThroughItsFetchCoroutine() {
         val fixture = completeFixture()
-        validateControls(findControls(fixture), setOf("people_tab"))
+        validateControls(mirroredControls(fixture), setOf("people_tab"))
         val withoutFetch = fixture.map { cls ->
             if (cls.type != "LX/JZ6;") cls else fixtureClass(cls.type, cls.methods.filter { it.name != "A03" })
         }
-        assertTrue(findControls(withoutFetch).getValue("people_tab").isEmpty())
+        assertTrue(mirroredControls(withoutFetch).getValue("people_tab").isEmpty())
     }
 
     @Test fun screenshotHooksNeedTheCaptureInterfaceAndTheSecureFlag() {
         val fixture = completeFixture()
-        validateControls(findControls(fixture), setOf("allow_screenshot"))
+        validateControls(mirroredControls(fixture), setOf("allow_screenshot"))
         // The same callback name in a class that isn't Android's capture callback doesn't count.
         val callback = fixture.single { it.type == "LX/8xp;" }
         val notCallback = fixture.filter { it !== callback } + fixtureClass(callback.type, callback.methods.toList())
-        assertFailsWith<PatchException> { validateControls(findControls(notCallback), setOf("allow_screenshot")) }
+        assertFailsWith<PatchException> { validateControls(mirroredControls(notCallback), setOf("allow_screenshot")) }
         // A window helper that adds some other flag isn't the screenshot lock.
         val helper = fixture.single { it.type == "LX/4nW;" }
         val otherFlag = fixtureMethod("LX/4nW;->A00(Landroid/view/Window;)V", SECURE_WINDOW_BODY.replace("0x2000", "0x80"))
         val notSecure = fixture.filter { it !== helper } + fixtureClass(helper.type, listOf(otherFlag))
-        assertFailsWith<PatchException> { validateControls(findControls(notSecure), setOf("allow_screenshot")) }
+        assertFailsWith<PatchException> { validateControls(mirroredControls(notSecure), setOf("allow_screenshot")) }
     }
 
     @Test fun photoHooksAreOnlyTheTranscodersOwnEntryPoints() {
         val fixture = completeFixture()
-        assertEquals(setOf(TRANSCODE_IMAGE, TRANSCODE_IMAGE_ASYNC), findControls(fixture).getValue("original_photo").map { it.hookId() }.toSet())
+        assertEquals(setOf(TRANSCODE_IMAGE, TRANSCODE_IMAGE_ASYNC), mirroredControls(fixture).getValue("original_photo").map { it.hookId() }.toSet())
         // The same entry points on some other class aren't the encrypted-chat photo path.
         val lookalike = fixtureClass("LX/Fixture;", listOf(TRANSCODE_IMAGE, TRANSCODE_IMAGE_ASYNC).map {
             fixtureMethod(it.replace(MEDIA_TRANSCODER, "LX/Fixture;"), "return-void", registers = 22)
         })
-        validateControls(findControls(fixture + lookalike), setOf("original_photo"))
-        assertTrue(findControls(fixture.filter { it.type != MEDIA_TRANSCODER } + lookalike).getValue("original_photo").isEmpty())
+        validateControls(mirroredControls(fixture + lookalike), setOf("original_photo"))
+        assertTrue(mirroredControls(fixture.filter { it.type != MEDIA_TRANSCODER } + lookalike).getValue("original_photo").isEmpty())
     }
 
     @Test fun notificationsSuggestionsReaderNeedsTheStockKeyAndGetter() {
-        val withoutKey = findControls(completeFixture().filter { it.type != "LX/JTx;" })
+        val withoutKey = mirroredControls(completeFixture().filter { it.type != "LX/JTx;" })
         assertTrue(withoutKey.getValue("people_jewel").isEmpty())
         validateControls(withoutKey, setOf("people", "people_list_end"))
         for (changed in listOf(
@@ -254,7 +249,7 @@ class ControlDiscoveryTest {
             peopleJewelMethod(key = "LX/JTx;->A00:LX/1BL;"),
         )) {
             val fixture = completeFixture().filter { it.type != "LX/HAR;" } + fixtureClass("LX/HAR;", listOf(changed))
-            assertTrue(findControls(fixture).getValue("people_jewel").isEmpty())
+            assertTrue(mirroredControls(fixture).getValue("people_jewel").isEmpty())
         }
     }
 
@@ -263,22 +258,22 @@ class ControlDiscoveryTest {
         val peopleClass = fixture.single { it.type == "LX/1pm;" }
         val duplicate = fixtureMethod("Lfixture/Duplicate;->gate()Z",
             pluginBody(pluginGates.getValue("people").anchors.single()))
-        val ambiguous = findControls(fixture + fixtureClass(duplicate.definingClass, listOf(duplicate)))
+        val ambiguous = mirroredControls(fixture + fixtureClass(duplicate.definingClass, listOf(duplicate)))
         assertFailsWith<PatchException> { validateControls(ambiguous, setOf("people")) }
-        val missing = findControls(fixture.filter { it !== peopleClass })
+        val missing = mirroredControls(fixture.filter { it !== peopleClass })
         assertFailsWith<PatchException> { validateControls(missing, setOf("people")) }
         validateControls(missing, setOf("moments"))
     }
 
     @Test fun adResolutionRequiresTheHostTypeAndThePublicStaticCopyMethod() {
         for (missing in listOf(AD_ITEM, IMMUTABLE_LIST)) {
-            val found = findControls(completeFixture().filter { it.type != missing })
+            val found = mirroredControls(completeFixture().filter { it.type != missing })
             assertFailsWith<PatchException> { validateControls(found, setOf("ads")) }
             validateControls(found, setOf("people"))
         }
         val fixture = completeFixture()
         fixture.single { it.type == IMMUTABLE_LIST }.methods.single().setAccessFlags(AccessFlags.PUBLIC.value)
-        assertTrue(findControls(fixture).getValue("ads").isEmpty())
+        assertTrue(mirroredControls(fixture).getValue("ads").isEmpty())
     }
 
     @Test fun misleadingPluginSignaturesAndChangedRunnableNamesDoNotMatch() {
@@ -287,7 +282,7 @@ class ControlDiscoveryTest {
         people.setReturnType("Ljava/lang/Object;")
         val subtabs = fixture.single { it.type == "LX/2UL;" }
         val changed = fixture.filter { it !== subtabs } + fixtureClass(subtabs.type, subtabs.methods.toList(), "ChangedRunnable")
-        val found = findControls(changed)
+        val found = mirroredControls(changed)
         assertFailsWith<PatchException> { validateControls(found, setOf("people")) }
         assertFailsWith<PatchException> { validateControls(found, setOf("subtabs")) }
         validateControls(found, setOf("typing"))
@@ -297,9 +292,9 @@ class ControlDiscoveryTest {
         val id = "LX/PKW;->A01(LX/PKW;)Z"
         val method = fixtureMethod(id, pluginBody(pluginGates.getValue("avatar_stickers").anchors.single()))
         val classes: List<ClassDef> = listOf(fixtureClass(method.definingClass, listOf(method)))
-        assertTrue(findControls(classes).getValue("avatar_stickers").isEmpty())
+        assertTrue(mirroredControls(classes).getValue("avatar_stickers").isEmpty())
         (classes.single() as MutableClass).methods.single().setAccessFlags(AccessFlags.PUBLIC.value or AccessFlags.STATIC.value)
-        validateControls(findControls(classes), setOf("avatar_stickers"))
+        validateControls(mirroredControls(classes), setOf("avatar_stickers"))
     }
 
     // The tab's kill switch also gates its own toolbar buttons; only the gate that builds the tab content is the tab.
@@ -310,21 +305,21 @@ class ControlDiscoveryTest {
             "const-string", "const-string v1, \"com.facebook.messaging.aibot.plugins.tab.tabcontent.history.MetaAiHistoryTabToolbarButtonImplementation\"\n    const-string"),
             flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value)
         val withToolbar = completeFixture() + fixtureClass(toolbar.definingClass, listOf(toolbar))
-        val found = findControls(withToolbar)
+        val found = mirroredControls(withToolbar)
         assertEquals(listOf("LX/1iN;->A02(LX/1iN;)Z"), found.getValue("ai_tab").map { it.hookId() })
         validateControls(found, setOf("ai_tab"))
-        assertTrue(findControls(withToolbar.filter { it.type != "LX/1iN;" }).getValue("ai_tab").isEmpty())
+        assertTrue(mirroredControls(withToolbar.filter { it.type != "LX/1iN;" }).getValue("ai_tab").isEmpty())
     }
 
     // The bottom bar builds every tab in one class; each tab switch takes only the gate that builds its own tab content.
     @Test fun thePeopleAndNotificationsTabsAreEachTheirOwnBottomBarGate() {
-        val found = findControls(completeFixture())
+        val found = mirroredControls(completeFixture())
         assertEquals(listOf("LX/1iN;->A0D(LX/1iN;)Z"), found.getValue(TAB_PEOPLE).map { it.hookId() })
         assertEquals(listOf("LX/1iN;->A08(LX/1iN;)Z"), found.getValue(TAB_NOTIFICATIONS).map { it.hookId() })
         validateControls(found, setOf(TAB_PEOPLE, TAB_NOTIFICATIONS, "ai_tab"))
     }
 
-    // 582's Menu tab gives Meta's subscriptions (Facebook Plus, Meta Verified, Meta One) a section of their own next to
+    // Messenger's Menu tab gives Meta's subscriptions (Facebook Plus, Meta Verified, Meta One) a section of their own next to
     // Also from Meta. Both are Facebook shortcuts. The tab's own sections, built by the same class, aren't.
     @Test fun theMenuTabsMetaSectionsAreFacebookShortcutGates() {
         val section = { name: String, plugin: String ->
@@ -339,7 +334,7 @@ class ControlDiscoveryTest {
             section("A05", "subscriptionsfoldersection/SubscriptionsFolderSection"),
             section("A04", "settingsfoldersection/SettingsDrawerFolderSectionImplementation"),
         ))
-        val found = findControls(listOf(drawer))
+        val found = mirroredControls(listOf(drawer))
         assertEquals(setOf("LX/WRg;->A02()Z", "LX/WRg;->A05()Z"), found.getValue("facebook").map { it.hookId() }.toSet())
     }
 
@@ -351,11 +346,11 @@ class ControlDiscoveryTest {
             if (cls.type != unread.definingClass) cls
             else fixtureClass(cls.type, cls.methods.toList() + unread)
         }
-        val found = findControls(classes)
+        val found = mirroredControls(classes)
         assertEquals(setOf("LX/KHu;->A0W()Z", "LX/MKS;->A0F()Z"), found.getValue("mark_read_action").map { it.hookId() }.toSet())
         validateControls(found, setOf("mark_read_action"))
         assertFailsWith<PatchException> {
-            validateControls(findControls(classes.filter { it.type != "LX/KHu;" }), setOf("mark_read_action"))
+            validateControls(mirroredControls(classes.filter { it.type != "LX/KHu;" }), setOf("mark_read_action"))
         }
     }
 }

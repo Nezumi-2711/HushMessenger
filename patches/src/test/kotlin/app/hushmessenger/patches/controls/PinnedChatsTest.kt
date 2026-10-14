@@ -24,7 +24,7 @@ internal const val SYNTHETIC_PINNED_CHAT_LIMIT = "LX/2na;->A00($FB_USER_SESSION)
 private const val CONFIG_READ = "LX/17Q;->A06(Ljava/lang/Object;J)I"
 private val STATIC = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value
 
-/** The getter as 582 writes it: the session's config, the limit's id, one read and its answer handed back. */
+/** The getter as Messenger writes it: the session's config, the limit's id, one read and its answer handed back. */
 private val LIMIT_BODY = """
     invoke-static {p0}, LX/19a;->A0E(Ljava/lang/Object;)LX/5dD;
     move-result-object p0
@@ -47,11 +47,11 @@ class PinnedChatsTest {
         activeProfile = SYNTHETIC_PROFILE
     }
 
-    private fun found(classes: List<MutableClass>) = findControls(classes).getValue(PINNED_CHATS).map { it.hookId() }.toSet()
+    private fun found(classes: List<MutableClass>) = mirroredControls(classes).getValue(PINNED_CHATS).map { it.hookId() }.toSet()
 
     @Test fun theLimitsGetterIsFoundByItsConfigId() {
         assertEquals(setOf(SYNTHETIC_PINNED_CHAT_LIMIT), found(pinnedChatLimitFixture()))
-        validateControls(findControls(pinnedChatLimitFixture()), setOf(PINNED_CHATS))
+        validateControls(mirroredControls(pinnedChatLimitFixture()), setOf(PINNED_CHATS))
     }
 
     @Test fun everyProfileHooksItsOwnGetter() {
@@ -60,7 +60,7 @@ class PinnedChatsTest {
             val id = SYNTHETIC_PINNED_CHAT_LIMIT.replace("LX/2na;", owner)
             assertEquals(setOf(id), profile.hooks.getValue(PINNED_CHATS))
             activeProfile = profile
-            validateControls(findControls(pinnedChatLimitFixture(limit(id = id))), setOf(PINNED_CHATS))
+            validateControls(mirroredControls(pinnedChatLimitFixture(limit(id = id))), setOf(PINNED_CHATS))
         }
     }
 
@@ -79,7 +79,7 @@ class PinnedChatsTest {
         )
         for ((case, classes) in cases) {
             assertTrue(found(classes).isEmpty(), case)
-            assertFailsWith<PatchException>(case) { validateControls(findControls(classes), setOf(PINNED_CHATS)) }
+            assertFailsWith<PatchException>(case) { validateControls(mirroredControls(classes), setOf(PINNED_CHATS)) }
         }
     }
 

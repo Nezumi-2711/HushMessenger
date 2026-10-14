@@ -54,11 +54,11 @@ class DisappearingSwipeTest {
         activeProfile = SYNTHETIC_PROFILE
     }
 
-    private fun found(classes: List<MutableClass>) = findControls(classes).getValue(DISAPPEARING_SWIPE).map { it.hookId() }
+    private fun found(classes: List<MutableClass>) = mirroredControls(classes).getValue(DISAPPEARING_SWIPE).map { it.hookId() }
 
     @Test fun theStartMethodIsFoundByItsClassAndTheImpressionItLogs() {
         assertEquals(listOf(OVERSCROLL_START), found(disappearingSwipeFixture()))
-        validateControls(findControls(disappearingSwipeFixture()), setOf(DISAPPEARING_SWIPE))
+        validateControls(mirroredControls(disappearingSwipeFixture()), setOf(DISAPPEARING_SWIPE))
     }
 
     @Test fun everyProfileHooksTheSameNamedMethod() {
@@ -66,7 +66,7 @@ class DisappearingSwipeTest {
         for (profile in profiles) {
             assertEquals(setOf(OVERSCROLL_START), profile.hooks.getValue(DISAPPEARING_SWIPE))
             activeProfile = profile
-            validateControls(findControls(disappearingSwipeFixture()), setOf(DISAPPEARING_SWIPE))
+            validateControls(mirroredControls(disappearingSwipeFixture()), setOf(DISAPPEARING_SWIPE))
         }
     }
 
@@ -79,7 +79,7 @@ class DisappearingSwipeTest {
         )
         for ((case, classes) in cases) {
             assertTrue(found(classes).isEmpty(), case)
-            assertFailsWith<PatchException>(case) { validateControls(findControls(classes), setOf(DISAPPEARING_SWIPE)) }
+            assertFailsWith<PatchException>(case) { validateControls(mirroredControls(classes), setOf(DISAPPEARING_SWIPE)) }
         }
     }
 

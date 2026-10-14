@@ -109,6 +109,9 @@ public final class SettingsActivity extends Activity {
     /** #22's control and whether it could be turned on when it was built. */
     private LinearLayout menuRowControl;
     private boolean menuRowAvailable;
+    /** The Quick setups heading and panel, hidden by a long press on either, and the line that says which way the choice is. */
+    private TextView quickHeading, quickHomeStatus;
+    private LinearLayout quickPanel;
     /** The App tab's line on how to get back here, which names the Menu row only while it shows. */
     private TextView accessHelp;
     private String accessHelpId;
@@ -126,7 +129,7 @@ public final class SettingsActivity extends Activity {
     private static Toast toast;
     static final String SUPPORT_PAGE = "https://ko-fi.com/X8K126YVER";
     /** Switches whose effect hasn't been confirmed on a phone. Each shows the Experimental badge. */
-    static final Set<String> EXPERIMENTAL = Set.of("ads", "pinned_chats", "nearby_scans");
+    static final Set<String> EXPERIMENTAL = Set.of("ads", "pinned_chats", "nearby_scans", "phone_id_sync");
     static final String[][] CONTROLS = {
         {"ads", "Hide inbox ads", "Hides ad cards in your chat list. Meta stopped selling these ads in November 2025, so this only matters if they come back.", "inbox"},
         {"people", "Hide People You May Know", "Hides suggested people in chats, search and stories, and on the People and Notifications tabs. Good if you only want people you know.", "inbox"},
@@ -137,7 +140,7 @@ public final class SettingsActivity extends Activity {
         {"stories", "Hide stories and notes", "Hides the row of stories and notes above your chats.", "inbox"},
         {"subtabs", "Hide inbox tabs", "Hides the Home and Channels tabs inside your inbox.", "inbox"},
         {"mark_read_action", "Hide Mark as read", "Hides Mark as read in the menu you get when you press and hold a chat in your chat list, so you can't mark a chat read by accident. Mark as unread stays.", "inbox"},
-        {"pinned_chats", "Pin more chats", "Raises Messenger's limit of three pinned chats to 20, so you can keep more chats at the top of your chat list.", "inbox"},
+        {"pinned_chats", "Pin more chats", "Raises Messenger's limit of three pinned chats to 20, so you can keep more chats at the top of your chat list. Messenger's servers can still stop you sooner.", "inbox"},
         {"facebook", "Hide Facebook shortcuts", "Hides Facebook buttons, profile and sharing shortcuts, and the Also from Meta and Subscriptions sections in the Menu tab. Handy if you only use Messenger.", "navigation"},
         {"meta_ai", "Hide Meta AI", "Hides the Meta AI floating button, toolbar button, tab and menu entries, plus AI in search and in @ suggestions. Restart Messenger to see the tab go.", "navigation"},
         {"moments", "Hide Chat Moments", "Hides Chat Moments in the menu.", "navigation"},
@@ -158,7 +161,7 @@ public final class SettingsActivity extends Activity {
         {"use_system_emoji", "Use system emoji", "Shows emoji in your phone's own style instead of Messenger's built-in set.", "conversations"},
         {"original_photo", "Send photos at original quality", "With HD on, sends JPEG photos as the original image, not a smaller copy. Location is still removed. Photos over 20 MB are still compressed.", "conversations"},
         {"original_video", "Send videos without re-encoding", "Sends a video as the original file when Messenger allows it, instead of a recompressed copy. Videos over 25 MB and edited videos are still compressed.", "conversations"},
-        {"xhe_audio", "Fix shared videos with xHE-AAC sound", "A video you share into Messenger from another app whose only sound is xHE-AAC, which Messenger can't send, gets that sound converted to regular AAC first. The picture isn't touched.", "conversations"},
+        {"xhe_audio", "Fix shared videos with xHE-AAC sound", "A video whose only sound is xHE-AAC, which Messenger can't send, gets that sound converted to regular AAC first, whether you share it into Messenger from another app or pick it in a chat. The picture isn't touched.", "conversations"},
         {"disappearing_swipe", "Turn off the swipe up for disappearing messages", "Swiping up at the bottom of a chat no longer turns on disappearing messages. Scrolling works as usual, and you can still set them in the chat's settings.", "conversations"},
         {"auto_reply", "Auto reply", "Answers a message with a reply you write below when it has words you pick, or any message if you leave the words empty. Replies go out through Messenger's own notification reply, encrypted chats too, at most once every five minutes per chat. One-to-one chats only unless you allow groups. A chat with disappearing messages on gets no notification reply from Messenger, so it isn't answered.", "conversations"},
         {"system_camera", "Use the phone's camera app", "The camera button in a chat opens your phone's camera app. The photo opens in Messenger's editor, ready to send. Photos only.", "conversations"},
@@ -169,7 +172,8 @@ public final class SettingsActivity extends Activity {
         {"attribution_uploads", "Stop ad attribution uploads", "Stops the job that reads your phone's advertising ID and sends it to Meta with your ad tracking setting. The ID itself doesn't change.", "privacy"},
         {"ad_events", "Stop inbox and ad link logging", "Stops two reports Messenger logs. One says which part of your chat list was on screen, which Messenger files under inbox ads. The other says which ad brought you in when a link from an ad opens a chat.", "privacy"},
         {"mqtt_telemetry", "Stop MQTT logging", "Drops the health reports and push logging Messenger's MQTT client sends. Messenger sends most of its traffic another way, so there's often little for it to drop. Messages, calls and active status keep working.", "privacy"},
-        {"nearby_scans", "Stop nearby scans", "Stops Messenger from reading the list of Wi-Fi networks around you. Also stops the timer it can run while it's open to check your location and scan for Wi-Fi networks and Bluetooth devices.", "privacy"},
+        {"nearby_scans", "Stop nearby scans", "Stops Messenger from reading the list of Wi-Fi networks around you, and hides the name and hardware address of the one you're connected to, the way Android does when Messenger can't see your location. Also stops the timer it can run while it's open to check your location and scan for Wi-Fi networks and Bluetooth devices.", "privacy"},
+        {"phone_id_sync", "Stop app list and device ID sharing", "Stops Messenger from going through the apps on your phone to find other Meta apps, and from asking them for the device ID Meta uses to link the apps on one phone. Messenger keeps the ID it already has.", "privacy"},
         {"message_log", "Keep a message log", "Saves each message when its notification arrives, so you can read it after it's unsent. Works in encrypted chats. Stays on your phone. In a chat with disappearing messages on, Messenger leaves the words out of its notification, so those messages aren't logged.", "privacy"},
         {"allow_screenshot", "Allow screenshots", "Lets you screenshot protected chat media, such as view-once photos and Quicksnap, and stops screenshot notices. It doesn't add replay or saving.", "privacy"},
         {"hide_read_receipts", "Hide read receipts", "Opening a chat no longer tells people you read their message, and the chat stays unread here. Marking it read yourself or replying marks it read and shows Seen, like Messenger does. Group chats aren't tested. Messenger's own Read receipts setting under Privacy & safety marks chats read without Seen.", "privacy"},
@@ -359,6 +363,28 @@ public final class SettingsActivity extends Activity {
         } else cancelDocumentJob(null);
         cancelUpdateCheck();
         super.onDestroy();
+    }
+
+    /** Kept in the settings file like the other choices, but not a control: backups and Quick setups never carry it. */
+    static final String HIDE_QUICK_SETUPS = "hide_quick_setups";
+
+    private static boolean quickSetupsHidden() { return Settings.preferences.getBoolean(HIDE_QUICK_SETUPS, false); }
+
+    /** Shows or hides the Quick setups section to match the saved choice, and words the restore button's line. */
+    private void showQuickSetups() {
+        int shown = quickSetupsHidden() ? View.GONE : View.VISIBLE;
+        if (quickHeading != null) quickHeading.setVisibility(shown);
+        if (quickPanel != null) quickPanel.setVisibility(shown);
+        if (quickHomeStatus != null) quickHomeStatus.setText(text.get(quickSetupsHidden() ? "quick_setups_home_hidden" : "quick_setups_home_shown"));
+    }
+
+    private void holdToHide(View view) {
+        view.setOnLongClickListener(held -> {
+            Settings.preferences.edit().putBoolean(HIDE_QUICK_SETUPS, true).apply();
+            showQuickSetups();
+            feedback(text.get("quick_setups_hidden", text.format("app")), Toast.LENGTH_LONG);
+            return true;
+        });
     }
 
     private LinearLayout menuRowControl() {
@@ -1373,8 +1399,9 @@ public final class SettingsActivity extends Activity {
         }
         ui.add(content, access, 8);
         if (!installedControls.isEmpty()) {
-            ui.add(content, ui.heading(text.get("quick_setups")), 22);
-            LinearLayout quick = ui.panel();
+            quickHeading = ui.heading(text.get("quick_setups"));
+            ui.add(content, quickHeading, 22);
+            LinearLayout quick = quickPanel = ui.panel();
             quick.setTag("quick_setups");
             ui.add(quick, ui.text(text.get("quick_setups_help"), 13, ui.muted, false), 0);
             for (String name : QuickSetups.CHOICES) {
@@ -1386,6 +1413,11 @@ public final class SettingsActivity extends Activity {
                 ui.add(quick, ui.text(text.get("quick_" + name + "_help"), 13, ui.muted, false), 8);
             }
             ui.add(content, quick, 12);
+            // A long press anywhere on the section hides it, buttons and help lines included.
+            holdToHide(quickHeading);
+            holdToHide(quick);
+            for (int i = 0; i < quick.getChildCount(); i++) holdToHide(quick.getChildAt(i));
+            showQuickSetups();
         }
         ui.add(content, ui.heading(text.get("appearance")), 22);
         LinearLayout appearance = ui.panel();
@@ -1468,6 +1500,21 @@ public final class SettingsActivity extends Activity {
             documentJob != null && documentJob.request == READ_CHOICES ? "choices_file_canceled_read" : "choices_file_canceled"));
         ui.add(choices, cancelChoicesFile, 8);
         ui.add(choices, ui.text(text.get("choices_file_help"), 13, ui.muted, false), 8);
+        // Where the Quick setups section comes back after a long press hid it.
+        if (quickPanel != null) {
+            ui.rule(choices, 12);
+            Button quickHome = ui.button(text.get("quick_setups_home"));
+            quickHome.setTag("quick_setups_home");
+            quickHome.setOnClickListener(view -> {
+                Settings.preferences.edit().putBoolean(HIDE_QUICK_SETUPS, !quickSetupsHidden()).apply();
+                showQuickSetups();
+            });
+            ui.add(choices, quickHome, 8);
+            quickHomeStatus = ui.text("", 13, ui.muted, false);
+            quickHomeStatus.setTag("quick_setups_home_status");
+            ui.add(choices, quickHomeStatus, 8);
+            showQuickSetups();
+        }
         ui.add(content, choices, 12);
         LinearLayout updates = ui.panel();
         ui.add(updates, controlRow("check_updates", text.format("check_updates"), text.format("check_updates_help"), false), 0);
@@ -1538,7 +1585,8 @@ public final class SettingsActivity extends Activity {
         }
         List<String> on = new ArrayList<>();
         for (String[] spec : installedControls) if (Settings.preferences.getBoolean(spec[0], false)) on.add(spec[1]);
-        return new ProblemReport.Facts(BuildConfig.VERSION_NAME, messenger, code, Build.MANUFACTURER, Build.MODEL,
+        return new ProblemReport.Facts(BuildConfig.VERSION_NAME, messenger, code,
+            ProblemReport.patchedFrom(HostScreens.originalBuild(), Settings.preview), Build.MANUFACTURER, Build.MODEL,
             Build.VERSION.RELEASE, Build.VERSION.SDK_INT, Settings.preferences.getBoolean("paused", false), CrashGuard.isSafeMode(), on);
     }
 
@@ -1572,6 +1620,7 @@ public final class SettingsActivity extends Activity {
                 .append("\nSettings provider: ").append(HostScreens.settingsProviderFound(this) ? "found" : "missing")
                 .append("\nHost version: ").append(host.versionName == null ? "unknown" : host.versionName)
                 .append("\nHost version code: ").append(host.getLongVersionCode())
+                .append("\nPatched from: ").append(ProblemReport.patchedFrom(HostScreens.originalBuild(), Settings.preview))
                 .append("\nAndroid API: ").append(Build.VERSION.SDK_INT)
                 .append("\nPaused: ").append(paused)
                 .append("\nSafe mode: ").append(safeMode).append('\n');
@@ -1816,6 +1865,9 @@ public final class SettingsActivity extends Activity {
 
     private Dialog messageLogDialog;
     private LinearLayout messageLogList;
+    private ScrollView messageLogScroll;
+    /** Builds the log's next page of cards, while one is left. */
+    private Runnable messageLogMore;
     private Button messageLogClear;
     private long messageLogGeneration;
     private boolean messageLogClearFailed;
@@ -1856,11 +1908,17 @@ public final class SettingsActivity extends Activity {
             if (messageLogDialog == dismissed) {
                 messageLogDialog = null;
                 messageLogList = null;
+                messageLogScroll = null;
+                messageLogMore = null;
                 messageLogClear = null;
                 messageLogGeneration++;
             }
         });
         messageLogList = sheet.body;
+        messageLogScroll = sheet.scroll;
+        // Scrolling near the end builds the next page, and so does a layout that leaves the end in view.
+        sheet.scroll.setOnScrollChangeListener((view, x, y, oldX, oldY) -> moreMessageLogIfNear());
+        sheet.scroll.getViewTreeObserver().addOnGlobalLayoutListener(this::moreMessageLogIfNear);
         messageLogClear = ui.button(text.get("message_log_clear"));
         messageLogClear.setTag("message_log_dialog_clear");
         messageLogClear.setOnClickListener(clicked -> clearMessageLog());
@@ -1903,6 +1961,7 @@ public final class SettingsActivity extends Activity {
         final LinearLayout list = messageLogList;
         if (list == null) return;
         final long generation = ++messageLogGeneration;
+        messageLogMore = null;
         list.removeAllViews();
         TextView loading = ui.text(text.get("message_log_loading"), 14, ui.muted, false);
         loading.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
@@ -1951,9 +2010,35 @@ public final class SettingsActivity extends Activity {
                     }
                 }
                 if (!result.entries.isEmpty()) ui.add(list, ui.text(text.get("message_log_retention"), 13, ui.muted, false), list.getChildCount() > 0 ? 12 : 0);
-                for (MessageLog.Entry entry : result.entries) list.addView(messageLogEntry(entry));
+                showMessageLogPage(list, generation, result.entries, 0);
             });
         }, "HushMessageLogView").start();
+    }
+
+    /** Cards built at a time. A full log is 500 of them, and building them all at once froze the screen for two seconds. */
+    static final int MESSAGE_LOG_PAGE = 20;
+
+    private void showMessageLogPage(LinearLayout list, long generation, List<MessageLog.Entry> entries, int from) {
+        messageLogMore = null;
+        if (messageLogList != list || generation != messageLogGeneration) return;
+        int to = Math.min(entries.size(), from + MESSAGE_LOG_PAGE);
+        for (int i = from; i < to; i++) list.addView(messageLogEntry(entries.get(i)));
+        if (to < entries.size()) messageLogMore = () -> showMessageLogPage(list, generation, entries, to);
+    }
+
+    /**
+     * Builds the next page once the log is scrolled within a screen of its end. A list still waiting for its layout is
+     * measured after it, so a page that was just added can't count as the end and pull in the rest. The dismiss listener
+     * runs a message after the sheet goes, so a page asked for just before then checks the sheet is still up.
+     */
+    private void moreMessageLogIfNear() {
+        ScrollView scroll = messageLogScroll;
+        Runnable more = messageLogMore;
+        if (scroll == null || more == null || scroll.getChildCount() == 0) return;
+        View content = scroll.getChildAt(0);
+        int height = scroll.getHeight();
+        if (height == 0 || content.isLayoutRequested()) return;
+        if (content.getBottom() - (scroll.getScrollY() + height) < height) scroll.post(() -> { if (messageLogMore == more && scroll.isAttachedToWindow()) more.run(); });
     }
 
     private void removeSetAsideLog() {

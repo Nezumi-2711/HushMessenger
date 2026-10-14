@@ -145,6 +145,8 @@ hook people_list_end LX/2I0;->A02()Z
 hook people_search LX/CkT;->DUa(LX/EL3;Ljava/lang/Object;)LX/EMz;
 hook people_story Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A0b(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)V
 hook people_tab LX/NwV;->A01(LX/NwV;)V
+hook phone_id_sync LX/1Au;->A03(LX/1Au;)Ljava/util/ArrayList;
+hook phone_id_sync LX/1Au;->A06(Ljava/lang/String;)V
 hook pinned_chats LX/2nP;->A00(Lcom/facebook/auth/usersession/FbUserSession;)I
 hook reels_badge LX/4Cz;->A09(LX/4Cz;)Z
 hook reply_read LX/9tP;->A01(Lcom/facebook/auth/usersession/FbUserSession;LX/59o;LX/4t6;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/Ch3;LX/5DJ;LX/59n;LX/Ceb;LX/5uL;LX/5WP;LX/5Op;Lcom/facebook/xapp/messaging/composer/send/event/SendMessageEvent;Lcom/facebook/xapp/messaging/map/HeterogeneousMap;LX/4tE;Ljava/lang/String;)V
@@ -168,7 +170,14 @@ hook text_style LX/A1H;->onFocusChanged(ZILandroid/graphics/Rect;)V
 hook typing LX/AoE;->run()V
 hook typing_mailbox LX/4gQ;->A0L(Ljava/lang/String;Z)LX/337;
 hook unsent_indicator LX/TAo;->BbV(I)Ljava/lang/String;
+hook wifi_identity LX/1fX;->A02()LX/UzZ;
+hook wifi_identity LX/36j;->AoL()Ljava/lang/String;
+hook wifi_identity LX/36j;->BFu()J
+hook wifi_identity LX/AhN;->A03()Ljava/lang/String;
+hook wifi_identity LX/AhN;->A04(Ljava/util/Map;)V
+hook wifi_identity LX/MWw;->A01(LX/MWw;)Ljava/lang/String;
 hook xhe_audio LX/KYZ;->call()Ljava/lang/Object;
+hook xhe_transcode Lcom/facebook/msys/mci/transcoder/DefaultMediaTranscoder;->A05(Lcom/facebook/msys/mci/TranscodeVideoCompletionCallback;Lcom/facebook/msys/mci/VideoEdits;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)V
 pluginSentinel LX/1fl;->A03:Ljava/lang/Object;
 preferenceGetter Lcom/facebook/prefs/shared/FbSharedPreferences;->AjV(LX/2vT;Z)Z
 peopleKey LX/PO9;->A01:LX/2vU;
