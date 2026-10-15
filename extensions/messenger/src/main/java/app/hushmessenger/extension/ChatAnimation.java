@@ -177,6 +177,8 @@ public final class ChatAnimation {
 
     /** Search and notifications open a chat as an activity of its own instead of a fragment over the inbox. */
     static final String CHAT_ACTIVITY = "com.facebook.messaging.msys.thread.fragment.MsysThreadViewActivity";
+    /** Page and business chats open in Messenger's older chat activity, so they slide too (#28). */
+    static final String BUSINESS_CHAT_ACTIVITY = "com.facebook.orca.threadview.ThreadViewActivity";
     /** Android takes an activity's transition only from a resource, so the patch adds these to Messenger's own. */
     static final String IN = "hush_chat_in";
     static final String OUT = "hush_chat_out";
@@ -203,10 +205,15 @@ public final class ChatAnimation {
         return ids;
     }
 
+    static boolean chatActivity(Activity activity) {
+        String name = activity.getClass().getName();
+        return CHAT_ACTIVITY.equals(name) || BUSINESS_CHAT_ACTIVITY.equals(name);
+    }
+
     static final class ChatActivities implements Application.ActivityLifecycleCallbacks {
         @Override @SuppressWarnings("deprecation") public void onActivityCreated(Activity activity, Bundle state) {
             // A chat Android brings back after a restart or a rotation is already on screen.
-            if (state != null || !CHAT_ACTIVITY.equals(activity.getClass().getName())) return;
+            if (state != null || !chatActivity(activity)) return;
             try {
                 if (!on()) return;
                 int[] ids = transitions(activity);

@@ -58,7 +58,8 @@ public final class SettingsActivity extends Activity {
     private final Map<Switch, CharSequence> switchDescriptions = new java.util.HashMap<>();
     private long documentGeneration;
     private final SharedPreferences.OnSharedPreferenceChangeListener preferenceListener = (preferences, key) -> {
-        if (key == null || "paused".equals(key) || Settings.BUBBLE_CHAT_HEADS.equals(key) || Settings.installed.contains(key))
+        if (key == null || "paused".equals(key) || Settings.BUBBLE_CHAT_HEADS.equals(key) || Settings.KEEP_FACEBOOK_PROFILE.equals(key)
+            || Settings.installed.contains(key))
             documentGeneration++;
         refreshChoices();
         if (key == null || "check_updates".equals(key)) syncUpdateChoice(true);
@@ -129,7 +130,7 @@ public final class SettingsActivity extends Activity {
     private static Toast toast;
     static final String SUPPORT_PAGE = "https://ko-fi.com/X8K126YVER";
     /** Switches whose effect hasn't been confirmed on a phone. Each shows the Experimental badge. */
-    static final Set<String> EXPERIMENTAL = Set.of("ads", "pinned_chats", "nearby_scans", "phone_id_sync");
+    static final Set<String> EXPERIMENTAL = Set.of("ads", "pinned_chats", "nearby_scans", "phone_id_sync", "mark_read_button", "story_hold");
     static final String[][] CONTROLS = {
         {"ads", "Hide inbox ads", "Hides ad cards in your chat list. Meta stopped selling these ads in November 2025, so this only matters if they come back.", "inbox"},
         {"people", "Hide People You May Know", "Hides suggested people in chats, search and stories, and on the People and Notifications tabs. Good if you only want people you know.", "inbox"},
@@ -148,6 +149,7 @@ public final class SettingsActivity extends Activity {
         {"tab_people", "Hide People tab", "Hides the People tab in the bar at the bottom. Restart Messenger to see the tab go.", "navigation"},
         {"tab_notifications", "Hide Notifications tab", "Hides the Notifications tab in the bar at the bottom. Restart Messenger to see the tab go.", "navigation"},
         {"chat_animation", "Slide chats in and out", "Slides a chat in from the side when you open it and out when you go back. Chat heads and bubbles aren't affected.", "navigation"},
+        {"story_hold", "Hold stories at the end", "Keeps a story on screen when it ends instead of moving on to the next one, so you go on with a tap or a swipe. Photos and videos both wait, and the last story stays open until you close it.", "navigation"},
         {"ai_stickers", "Hide AI sticker tools", "Hides the Generate AI sticker buttons, the AI sticker tab and AI sticker suggestions.", "stickers"},
         {"avatar_stickers", "Hide avatar stickers", "Hides the avatar tab in the sticker keyboard.", "stickers"},
         {"emoji_drawer", "Restore old emoji drawer", "Brings back the earlier emoji keyboard layout by turning off Meta's redesign. Restart Messenger to see the change. Nothing changes if you never got the redesign.", "stickers"},
@@ -161,7 +163,7 @@ public final class SettingsActivity extends Activity {
         {"use_system_emoji", "Use system emoji", "Shows emoji in your phone's own style instead of Messenger's built-in set.", "conversations"},
         {"original_photo", "Send photos at original quality", "With HD on, sends JPEG photos as the original image, not a smaller copy. Location is still removed. Photos over 20 MB are still compressed.", "conversations"},
         {"original_video", "Send videos without re-encoding", "Sends a video as the original file when Messenger allows it, instead of a recompressed copy. Videos over 25 MB and edited videos are still compressed.", "conversations"},
-        {"xhe_audio", "Fix shared videos with xHE-AAC sound", "A video whose only sound is xHE-AAC, which Messenger can't send, gets that sound converted to regular AAC first, whether you share it into Messenger from another app or pick it in a chat. The picture isn't touched.", "conversations"},
+        {"xhe_audio", "Fix videos that won't send", "Videos whose only sound is xHE-AAC and some Samsung screen recordings fail with \"Unable to send\", even in stock Messenger. Whether you share one into Messenger or pick it in a chat, the sound is converted to regular AAC, or the tag Samsung's recorder adds is dropped, before it's sent. The picture isn't touched.", "conversations"},
         {"disappearing_swipe", "Turn off the swipe up for disappearing messages", "Swiping up at the bottom of a chat no longer turns on disappearing messages. Scrolling works as usual, and you can still set them in the chat's settings.", "conversations"},
         {"auto_reply", "Auto reply", "Answers a message with a reply you write below when it has words you pick, or any message if you leave the words empty. Replies go out through Messenger's own notification reply, encrypted chats too, at most once every five minutes per chat. One-to-one chats only unless you allow groups. A chat with disappearing messages on gets no notification reply from Messenger, so it isn't answered.", "conversations"},
         {"system_camera", "Use the phone's camera app", "The camera button in a chat opens your phone's camera app. The photo opens in Messenger's editor, ready to send. Photos only.", "conversations"},
@@ -177,6 +179,7 @@ public final class SettingsActivity extends Activity {
         {"message_log", "Keep a message log", "Saves each message when its notification arrives, so you can read it after it's unsent. Works in encrypted chats. Stays on your phone. In a chat with disappearing messages on, Messenger leaves the words out of its notification, so those messages aren't logged.", "privacy"},
         {"allow_screenshot", "Allow screenshots", "Lets you screenshot protected chat media, such as view-once photos and Quicksnap, and stops screenshot notices. It doesn't add replay or saving.", "privacy"},
         {"hide_read_receipts", "Hide read receipts", "Opening a chat no longer tells people you read their message, and the chat stays unread here. Marking it read yourself or replying marks it read and shows Seen, like Messenger does. Group chats aren't tested. Messenger's own Read receipts setting under Privacy & safety marks chats read without Seen.", "privacy"},
+        {"mark_read_button", "Mark as read button", "Puts Messenger's Mark as read icon in a chat's top bar while Hide read receipts is on. Opening the chat still sends nothing. Tap the icon when you want the sender to see Seen, and the chat turns read here too. It takes the place of the chat details button (tapping the chat's name opens the same page), so the call buttons stay put.", "privacy"},
         {"keep_unsent", "Keep unsent messages", "Keeps messages on screen after someone unsends them, in chats where it works. Encrypted chats aren't supported and group chats aren't tested. Your own unsends may be limited.", "privacy"},
         {"anonymous_stories", "View stories anonymously", "Opens other people's stories without adding you to their viewer list. Messenger still marks them as seen on your side.", "privacy"},
         {"save_stories", "Save any story", "Adds Save to the More options menu on other people's stories, so you can keep the photo or video on your phone.", "privacy"},
@@ -257,8 +260,11 @@ public final class SettingsActivity extends Activity {
                 super.onLayout(changed, left, top, right, bottom);
                 if (!revealSearch) return;
                 revealSearch = false;
-                if (search.hasFocus() && search.isShown())
-                    search.requestRectangleOnScreen(new Rect(0, 0, search.getWidth(), search.getHeight()), false);
+                if (!search.hasFocus() || !search.isShown()) return;
+                // From the search row down a whole page, so its filters and first matches show above the keyboard too.
+                View row = (View) search.getParent();
+                int viewport = controlsScroll.getHeight() - controlsScroll.getPaddingTop() - controlsScroll.getPaddingBottom();
+                row.requestRectangleOnScreen(new Rect(0, 0, row.getWidth(), Math.max(row.getHeight(), viewport)), false);
             }
         };
         root.setOrientation(LinearLayout.VERTICAL);
@@ -683,11 +689,13 @@ public final class SettingsActivity extends Activity {
                 groups.add(group);
             }
             LinearLayout row = controlRow(spec[0], text.control(spec, 1), text.control(spec, 2), true);
-            if ("bubbles".equals(spec[0]) || OwnFont.KEY.equals(spec[0]) || MessageLog.KEY.equals(spec[0]) || AutoReply.KEY.equals(spec[0])) {
+            if ("bubbles".equals(spec[0]) || "facebook".equals(spec[0]) || OwnFont.KEY.equals(spec[0]) || MessageLog.KEY.equals(spec[0]) || AutoReply.KEY.equals(spec[0])) {
                 // Below the row, where TalkBack reaches them: the row's label column hides its descendants.
                 LinearLayout wrapper = ui.column();
                 ui.add(wrapper, row, 0);
                 if ("bubbles".equals(spec[0])) addBubbleModes(wrapper);
+                else if ("facebook".equals(spec[0])) ui.add(wrapper, controlRow(Settings.KEEP_FACEBOOK_PROFILE,
+                    text.format("facebook_keep_profile"), text.format("facebook_keep_profile_help"), false), 8);
                 else if (OwnFont.KEY.equals(spec[0])) addFontFile(wrapper);
                 else if (AutoReply.KEY.equals(spec[0])) addAutoReplyActions(wrapper);
                 else addMessageLogActions(wrapper);
@@ -1234,7 +1242,9 @@ public final class SettingsActivity extends Activity {
         LinearLayout labels = ui.column();
         labels.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         LinearLayout titleLine = ui.row();
-        if (overlay) titleLine.setPaddingRelative(0, 0, ui.dp(60), 0);
+        LinearLayout.LayoutParams titleSpace = new LinearLayout.LayoutParams(-1, -2);
+        // A margin, since relative padding set before the row is attached stays on the right in a mirrored layout.
+        if (overlay) titleSpace.setMarginEnd(ui.dp(60));
         if (ui.largeText) titleLine.setOrientation(LinearLayout.VERTICAL);
         titleLine.addView(ui.text(text.display(title), appRow ? 14 : 16, ui.text, false), new LinearLayout.LayoutParams(-2, -2));
         if (EXPERIMENTAL.contains(key)) {
@@ -1245,7 +1255,7 @@ public final class SettingsActivity extends Activity {
             params.setMarginStart(ui.dp(ui.largeText ? 0 : 8));
             titleLine.addView(badge, params);
         }
-        ui.add(labels, titleLine, 0);
+        labels.addView(titleLine, titleSpace);
         if (!description.isEmpty()) ui.add(labels, ui.text(text.display(description), appRow ? 13 : 14, ui.muted, false), appRow ? 4 : 6);
         // A switch records a use only when Messenger reaches its screen or event, so an off switch shows nothing.
         // A failure newer than the last use means the switch isn't doing its job, so that shows instead.
@@ -2396,12 +2406,13 @@ public final class SettingsActivity extends Activity {
         java.util.Set<String> known = new java.util.HashSet<>();
         for (String[] spec : CONTROLS) known.add(spec[0]);
         known.add(Settings.BUBBLE_CHAT_HEADS);
+        known.add(Settings.KEEP_FACEBOOK_PROFILE);
         Map<String, Boolean> supported = new java.util.LinkedHashMap<>();
         int unknown = 0, unavailable = 0;
         for (Map.Entry<String, Boolean> choice : choices.entrySet()) {
             String key = choice.getKey();
-            if ("paused".equals(key) || (known.contains(key) && Settings.installed.contains(
-                Settings.BUBBLE_CHAT_HEADS.equals(key) ? "bubbles" : key))) supported.put(key, choice.getValue());
+            if ("paused".equals(key) || (known.contains(key) && Settings.installed.contains(Settings.BUBBLE_CHAT_HEADS.equals(key) ? "bubbles"
+                : Settings.KEEP_FACEBOOK_PROFILE.equals(key) ? "facebook" : key))) supported.put(key, choice.getValue());
             else if (known.contains(key)) unavailable++;
             else unknown++;
         }
@@ -2863,8 +2874,10 @@ public final class SettingsActivity extends Activity {
             String[] spec = installedControls.get(i);
             String bucket = "inbox".equals(spec[3]) ? "inbox" :
                 ("conversations".equals(spec[3]) || "stickers".equals(spec[3])) ? "chats" : "more";
+            // A switch inside a control's block is found by its own words too.
+            String inside = "facebook".equals(spec[0]) ? text.get("facebook_keep_profile") + " " + text.get("facebook_keep_profile_help") : "";
             boolean match = ("all".equals(category) || category.equals(bucket)) && SettingsSearch.matches(terms, spec[1], spec[2],
-                SettingsText.english(spec[3]), text.display(text.control(spec, 1)), text.display(text.control(spec, 2)), text.get(spec[3]));
+                SettingsText.english(spec[3]), text.display(text.control(spec, 1)), text.display(text.control(spec, 2)), text.get(spec[3]), inside);
             controlRows.get(i).setVisibility(match ? View.VISIBLE : View.GONE);
             if (match) visible++;
         }

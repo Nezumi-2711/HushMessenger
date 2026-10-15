@@ -87,10 +87,14 @@ internal const val TRANSCODE_IMAGE_ASYNC = "$MEDIA_TRANSCODER->transcodeImageAsy
 private const val ORIGINAL_PHOTO = "Lapp/hushmessenger/extension/OriginalPhoto;"
 private const val FLAG_SECURE = 0x2000
 
+internal const val FACEBOOK_PROFILE = "facebook_profile"
+internal const val FACEBOOK_PROFILE_BUTTON =
+    "Lcom/facebook/messaging/profile/plugins/core/threadsettingsactionbutton/facebookprofile/ThreadSettingsFacebookProfileActionButton;"
+
 private val facebookPlugins = setOf(
     "Lcom/facebook/messaging/inbox/tab/plugins/core/tabtoolbarbutton/facebookbutton/facebooktoolbarbutton/FacebookButtonTabButtonImplementation;",
     "Lcom/facebook/messaging/marketplace/plugins/folder/navbarmenuitem/NavBarMenuItemImplementation;",
-    "Lcom/facebook/messaging/profile/plugins/core/threadsettingsactionbutton/facebookprofile/ThreadSettingsFacebookProfileActionButton;",
+    FACEBOOK_PROFILE_BUTTON,
     "Lcom/facebook/messaging/navigation/plugins/drawerfoldersections/fbshortcutsfoldersection/FacebookShortcutsFolderSection;",
     "Lcom/facebook/messaging/navigation/plugins/drawerfoldersections/subscriptionsfoldersection/SubscriptionsFolderSection;",
     "Lcom/facebook/messaging/communitymessaging/plugins/channelinvite/sharetofacebookbutton/ShareToFacebookButtonImplementation;",
@@ -215,10 +219,14 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
                 strings.containsAll(setOf("messaging.inbox.itemlistprocessor.ItemListProcessorInterfaceSpec", "processItems", "new_friend_bump_threads"))) add("ads")
             if (gate && "com.facebook.messaging.friendsinboxunit.plugins.inboxunit.FriendsInboxUnitKillSwitch" in strings) add("stories")
             if (cls.type in appIconManagers && method.isAppIconGate()) add(APP_ICONS)
-            if (gate && instructions.any {
-                it.opcode == Opcode.NEW_INSTANCE &&
-                    ((it as? ReferenceInstruction)?.reference as? TypeReference)?.type in facebookPlugins
-            }) add("facebook")
+            if (gate) {
+                val shortcuts = instructions.filter { it.opcode == Opcode.NEW_INSTANCE }
+                    .mapNotNull { ((it as? ReferenceInstruction)?.reference as? TypeReference)?.type }
+                    .filter { it in facebookPlugins }.toSet()
+                // A gate that builds only the chat details Profile button gets its own key, so Keep the Profile button can spare it.
+                if (shortcuts == setOf(FACEBOOK_PROFILE_BUTTON)) add(FACEBOOK_PROFILE)
+                else if (shortcuts.isNotEmpty()) add("facebook")
+            }
             if (gate && strings.any {
                 it == "com.facebook.messaging.navigation.plugins.aicreationfolder.folderitem.AiCreationFolderItem" ||
                     it == "com.facebook.messaging.navigation.plugins.aihomefolder.folderitem.AiHomeFolderItem"
@@ -376,11 +384,15 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     found.getValue(NEARBY_SCANS).addAll(findNearbyScans(classes))
     found.getValue(WIFI_IDENTITY).addAll(findWifiIdentityReads(classes))
     found.getValue(PHONE_ID_SYNC).addAll(findPhoneIdSync(classes))
+    found.getValue(STORY_HOLD).addAll(findStoryHold(classes))
     found.getValue(TEXT_STYLE).addAll(findTextStyleField(classes))
     found.getValue(MESSAGE_LOG).addAll(findMessageLogHook(classes))
     found.getValue(AUTO_REPLY).addAll(findMessageLogHook(classes))
     messageLogContract = resolveMessageLogContract(classes)
     readReceiptThreadFields = resolveReadReceiptThreadFields(classes)
+    val (markReadBar, markReadClick) = findMarkReadButton(classes)
+    found.getValue(MARK_READ_BAR).addAll(markReadBar)
+    found.getValue(MARK_READ_CLICK).addAll(markReadClick)
     found.getValue(SYSTEM_CAMERA).addAll(findSystemCamera(classes))
     for ((hook, methods) in findCustomFont(classes)) found.getValue(hook).addAll(methods)
     return found
@@ -1671,6 +1683,9 @@ internal fun MutableMethod.injectLegacyChatAnimation() {
 
 /** Search and notifications open a chat in this activity instead of over the inbox; the extension matches its name. */
 internal const val CHAT_ACTIVITY = "Lcom/facebook/messaging/msys/thread/fragment/MsysThreadViewActivity;"
+
+/** Page and business chats open in Messenger's older chat activity; the extension matches its name too. */
+internal const val BUSINESS_CHAT_ACTIVITY = "Lcom/facebook/orca/threadview/ThreadViewActivity;"
 
 private const val ANDROID_NAMESPACE = "http://schemas.android.com/apk/res/android"
 

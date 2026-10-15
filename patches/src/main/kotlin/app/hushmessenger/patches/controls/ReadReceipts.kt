@@ -77,15 +77,16 @@ private fun readRequire(condition: Boolean, detail: String = "identity flow") {
 }
 
 internal fun MutableMethod.validateChatSeen() {
-    readRequire(isChatSeenBroadcast() && readReceiptThreadFields.containsKey(hookId()) && parameterRegister(1) <= 15)
+    readRequire(isChatSeenBroadcast() && readReceiptThreadFields.containsKey(hookId()) && parameterRegister(2) <= 15)
     validateSwitch()
 }
 
+/** The handler and message id go along, so a Seen held back can be sent later by the Mark as read button. */
 internal fun MutableMethod.injectChatSeen() {
     validateChatSeen()
     addInstructionsWithLabels(0, """
         iget-object v0, p1, ${readReceiptThreadFields.getValue(hookId())}
-        invoke-static {p0, v0}, $SETTINGS->hideChatSeen(Ljava/lang/Object;Ljava/lang/Object;)Z
+        invoke-static {p0, v0, p1, p2}, $SETTINGS->hideChatSeen(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;)Z
         move-result v0
         if-eqz v0, :stock_read
         return-void

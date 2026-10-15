@@ -17,6 +17,7 @@
         <meta-data android:name="hush.feature.tab_people" android:value="true" />
         <meta-data android:name="hush.feature.tab_notifications" android:value="true" />
         <meta-data android:name="hush.feature.chat_animation" android:value="true" />
+        <meta-data android:name="hush.feature.story_hold" android:value="true" />
         <meta-data android:name="hush.feature.ai_stickers" android:value="true" />
         <meta-data android:name="hush.feature.avatar_stickers" android:value="true" />
         <meta-data android:name="hush.feature.chat_promotions" android:value="true" />
@@ -47,6 +48,7 @@
         <meta-data android:name="hush.feature.message_log" android:value="true" />
         <meta-data android:name="hush.feature.auto_reply" android:value="true" />
         <meta-data android:name="hush.feature.hide_read_receipts" android:value="true" />
+        <meta-data android:name="hush.feature.mark_read_button" android:value="true" />
         <meta-data android:name="hush.feature.keep_unsent" android:value="true" />
         <meta-data android:name="hush.feature.anonymous_stories" android:value="true" />
         <meta-data android:name="hush.feature.save_stories" android:value="true" />

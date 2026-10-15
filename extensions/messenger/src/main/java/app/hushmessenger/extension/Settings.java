@@ -160,6 +160,12 @@ public final class Settings {
 
     public static boolean hideStories() { return enabled("stories"); }
     public static boolean hideFacebook() { return enabled("facebook"); }
+
+    /** Under Hide Facebook shortcuts: leaves the Profile button on a chat's details page while the rest stays hidden. */
+    static final String KEEP_FACEBOOK_PROFILE = "facebook_keep_profile";
+
+    /** Asked by the gates that create only the chat details Profile button. */
+    public static boolean hideFacebookProfile() { return hideFacebook() && !preferences.getBoolean(KEEP_FACEBOOK_PROFILE, false); }
     public static boolean hideMetaAi() { return enabled("meta_ai"); }
 
     /**
@@ -354,6 +360,12 @@ public final class Settings {
      * for their family device ID. True gives it an empty list and skips the request.
      */
     public static boolean stopPhoneIdSync() { return enabled("phone_id_sync"); }
+
+    /**
+     * Asked when a story card ends on its own, from its timer, its video or a failed load, just before Messenger moves to
+     * the next card. True keeps the card on screen. Taps and swipes never ask.
+     */
+    public static boolean holdStoryAtEnd() { return enabled("story_hold"); }
 
     /** What Android tells an app that can't see the phone's location about the Wi-Fi network it's on. */
     static final String HIDDEN_WIFI_NAME = "<unknown ssid>";
@@ -566,6 +578,21 @@ public final class Settings {
             if (sentThread != null && since >= 0 && since < REPLY_READ_MS && sentThread.equals(thread)) return false;
         }
         return enabled("hide_read_receipts");
+    }
+
+    /**
+     * The read receipt hook's entry, with Messenger's read handler and the message it's marking. A Seen held back is kept
+     * for the Mark as read button, and the button's own tap goes through.
+     */
+    public static boolean hideChatSeen(Object session, Object thread, Object handler, String messageId) {
+        if (MarkReadButton.replaying()) return false;
+        if (!hideChatSeen(session, thread)) return false;
+        try {
+            MarkReadButton.hold(session, thread, handler, messageId);
+        } catch (RuntimeException error) {
+            hookFailed(MarkReadButton.KEY, "Can't keep the chat's Seen for Mark as read", error);
+        }
+        return true;
     }
 
     /** Record the account and thread only after the native composer dispatch returns. */

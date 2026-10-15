@@ -68,7 +68,7 @@ The screenshots below show the settings in the current release, in the dark and 
 | Pin more chats | Raises Messenger's limit of three pinned chats to 20, so more of them can stay at the top of your chat list. Experimental, since Messenger's servers can still stop you sooner. |
 | Hide People tab | Hides the People tab in the bottom bar. Restart Messenger to see it go. |
 | Hide Notifications tab | Hides the Notifications tab in the bottom bar. Restart Messenger to see it go. |
-| Hide Facebook shortcuts | Removes Facebook toolbar, profile and sharing shortcuts, and the "Also from Meta" and "Subscriptions" sections in the Menu tab. |
+| Hide Facebook shortcuts | Removes Facebook toolbar, profile and sharing shortcuts, and the "Also from Meta" and "Subscriptions" sections in the Menu tab. Keep the Profile button, right under it, leaves the chat details Profile button in place. |
 | Hide Meta AI | Hides the Meta AI button, tab and menu entries, the "Ask Meta AI" search button and the AI suggestions when you type @ in a chat. Existing AI chats stay. The tab changes after a restart. |
 | Hide Chat Moments | Removes Chat Moments from the menu. |
 | Hide Reels badge | Hides the Reels notification badge. |
@@ -91,6 +91,7 @@ The screenshots below show the settings in the current release, in the dark and 
 | Keep a message log | Saves a copy of each message that raised a notification, encrypted chats included, so an unsend can't take it back. It stays on your phone, encrypted. **View log** and **Clear log** sit under the switch. |
 | Auto reply | Answers messages with a reply you write, for certain words or for any message. One reply per chat every five minutes, and group chats only when you allow it. |
 | Hide read receipts | Opening a chat no longer sends Seen. The chat stays unread on your phone until you reply or mark it read. Group chats haven't been checked. |
+| Mark as read button | Works with Hide read receipts. A chat's top bar gets Messenger's own Mark as read icon, and tapping it sends the Seen that opening the chat held back. When the bar is full it replaces the chat details button (tapping the chat's name opens the same page). Experimental. |
 | View stories anonymously | Opens other people's stories without adding you to their viewer list. |
 | Save any story | Adds **Save** to the **More options** menu on other people's stories. |
 | Keep unsent messages | Keeps messages on the older unsend routes and marks them "[unsent]". Encrypted chats aren't covered. |
@@ -98,10 +99,11 @@ The screenshots below show the settings in the current release, in the dark and 
 | Use system emoji | Draws emoji with your phone's own set on Android 12 and newer. |
 | Send photos at original quality | With HD on, a JPEG photo up to 20 MB goes out with its own image data instead of Messenger's re-encoded copy. Location and camera details are stripped, as Messenger does. |
 | Send videos without re-encoding | A video up to 25 MB goes out as it is. |
-| Fix shared videos with xHE-AAC sound | Converts a video's xHE-AAC sound track to regular AAC so Messenger can send it, whether it's shared in from another app or picked in a chat. |
+| Fix videos that won't send | A video whose only sound is xHE-AAC gets that sound converted to regular AAC, and a Samsung screen recording loses the tag Samsung's recorder adds when Messenger's media check rejects it, so neither ends in "Unable to send". Works for videos shared in from another app and ones picked in a chat. |
 | Use the phone's camera app | A chat's camera button opens your own camera app. Photos only. |
 | Open web links externally | Opens http and https links in your default browser. |
 | Slide chats in and out | Slides a chat in from the side when you open it and back out when you leave. |
+| Hold stories at the end | A story stays on screen when it ends, photo or video, until you tap or swipe to the next one. The last one stays open until you close it. Experimental. |
 | Turn off the swipe up for disappearing messages | Swiping up at the bottom of a chat no longer turns on disappearing messages. |
 | Allow chat bubbles | **Stock**, **Chat Heads** or **Native Bubbles** (Android 11 and newer). See [Chat heads and bubbles](#chat-heads-and-bubbles). |
 | Unlock app icons | Every icon in Messenger's App icon setting becomes selectable without a subscription. |

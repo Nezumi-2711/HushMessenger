@@ -58,6 +58,29 @@ public class SettingsLocaleTest {
         }
     }
 
+    @Test public void englishOnARightToLeftPhoneStaysLeftToRightUntilTheLanguageIsTranslated() {
+        Locale arabic = Locale.forLanguageTag("ar-EG");
+        assertEquals(View.LAYOUT_DIRECTION_LTR, new SettingsText(arabic).layoutDirection());
+        assertEquals(View.LAYOUT_DIRECTION_RTL, new SettingsText(Locale.forLanguageTag("ar-XB")).layoutDirection());
+        RuntimeEnvironment.setQualifiers("ar-rEG-ldrtl-w400dp-h800dp-mdpi");
+        RuntimeEnvironment.getApplication().getApplicationInfo().flags |= android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL;
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = layout(screen.get(), 400, 800);
+            assertEquals(View.LAYOUT_DIRECTION_LTR, root.findViewWithTag("controls_page").getLayoutDirection());
+            // English sentences keep their periods and counts where they belong.
+            assertNotEquals(View.TEXT_DIRECTION_RTL, ((TextView) root.findViewWithTag("search_status")).getTextDirection());
+        }
+        SettingsTranslations.LOCALES.put("ar", java.util.Map.of("tab_controls", "Controls in Arabic"));
+        try {
+            assertEquals(View.LAYOUT_DIRECTION_RTL, new SettingsText(arabic).layoutDirection());
+            try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+                View root = layout(screen.get(), 400, 800);
+                assertEquals(View.LAYOUT_DIRECTION_RTL, root.findViewWithTag("controls_page").getLayoutDirection());
+                assertEquals(View.TEXT_DIRECTION_RTL, ((TextView) root.findViewWithTag("search_status")).getTextDirection());
+            }
+        } finally { SettingsTranslations.LOCALES.remove("ar"); }
+    }
+
     @Test @Config(sdk = 36) public void requestedAppLocaleWinsWhenResourceSelectionFallsBackToEnglish() {
         RuntimeEnvironment.setQualifiers("en-rUS-w400dp-h800dp-mdpi");
         android.app.LocaleManager manager = RuntimeEnvironment.getApplication().getSystemService(android.app.LocaleManager.class);

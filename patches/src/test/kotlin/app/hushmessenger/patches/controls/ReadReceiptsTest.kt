@@ -8,6 +8,7 @@ import com.android.tools.smali.dexlib2.DexFileFactory
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.Opcodes
 import com.android.tools.smali.dexlib2.iface.Method
+import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction
@@ -102,7 +103,10 @@ class ReadReceiptsTest {
         method.injectChatSeen()
         val c = method.code()
         assertEquals("$SEEN_HANDLER->A04:$THREAD_KEY_TYPE", (c[0] as ReferenceInstruction).reference.toString())
-        assertEquals("$SETTINGS->hideChatSeen(Ljava/lang/Object;Ljava/lang/Object;)Z", (c[1] as ReferenceInstruction).reference.toString())
+        assertEquals("$SETTINGS->hideChatSeen(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/String;)Z", (c[1] as ReferenceInstruction).reference.toString())
+        // The account, the chat, then the handler and message id the Mark as read button replays.
+        assertEquals(listOf(method.parameterRegister(0), 0, method.parameterRegister(1), method.parameterRegister(2)),
+            (c[1] as FiveRegisterInstruction).let { listOf(it.registerC, it.registerD, it.registerE, it.registerF) })
         assertEquals(5, c.branchTarget(3))
         assertStockCode(before, c, (0..4).toSet(), "seen handler")
     }

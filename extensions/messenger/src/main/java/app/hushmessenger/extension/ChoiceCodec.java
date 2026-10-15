@@ -25,6 +25,8 @@ final class ChoiceCodec {
         }
         if (installed.contains("bubbles")) result.append(Settings.BUBBLE_CHAT_HEADS).append('=')
             .append(preferences.getBoolean(Settings.BUBBLE_CHAT_HEADS, false)).append('\n');
+        if (installed.contains("facebook")) result.append(Settings.KEEP_FACEBOOK_PROFILE).append('=')
+            .append(preferences.getBoolean(Settings.KEEP_FACEBOOK_PROFILE, false)).append('\n');
         return result.toString();
     }
 

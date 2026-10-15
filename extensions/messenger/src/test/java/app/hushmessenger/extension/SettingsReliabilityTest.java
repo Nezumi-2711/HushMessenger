@@ -119,6 +119,14 @@ public class SettingsReliabilityTest {
     @Test @Config(sdk = {28, 36})
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     public void normalSizeAppDescriptionsStayClearOfTheSwitchTrack() {
+        // English stays left to right, so the mirrored rows need an Arabic table.
+        SettingsTranslations.LOCALES.put("ar", java.util.Map.of("tab_controls", "Controls in Arabic"));
+        try {
+            normalSizeAppDescriptionsStayClearOfTheSwitchTrackIn();
+        } finally { SettingsTranslations.LOCALES.remove("ar"); }
+    }
+
+    private void normalSizeAppDescriptionsStayClearOfTheSwitchTrackIn() {
         for (String locale : new String[] {"en-rUS-ldltr", "ar-rEG-ldrtl"}) {
             RuntimeEnvironment.setQualifiers(locale + "-w390dp-h844dp-mdpi");
             RuntimeEnvironment.setFontScale(1f);
@@ -539,6 +547,34 @@ public class SettingsReliabilityTest {
         }
     }
 
+    @Test @Config(sdk = {28, 36}) public void phoneKeyboardLeavesTheFirstMatchVisibleUnderSearch() {
+        // A phone-sized window that Samsung's keyboard resizes to a little over half its height.
+        RuntimeEnvironment.setQualifiers("w360dp-h740dp-mdpi");
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = layout(screen.get(), 360, 740);
+            EditText search = root.findViewWithTag("find_control");
+            ScrollView controls = scroll(root.findViewWithTag("controls_page"));
+            assertEquals(0, controls.getScrollY());
+            search.setText("People You May");
+            assertTrue(search.requestFocus());
+            layout(screen.get(), 360, 426);
+            for (int frame = 0; frame < 40; frame++) {
+                Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(16));
+                controls.computeScroll();
+            }
+            Rect visible = new Rect();
+            assertTrue(search.getGlobalVisibleRect(visible));
+            assertEquals("Whole search visible above the keyboard", search.getHeight(), visible.height());
+            Rect page = new Rect();
+            assertTrue(controls.getGlobalVisibleRect(page));
+            assertTrue("Search moves up to make room: " + visible + " in " + page, visible.top - page.top < page.height() / 3);
+            View match = root.findViewWithTag("people");
+            assertTrue("The match shows under the search instead of behind the keyboard", match.getGlobalVisibleRect(visible));
+            assertEquals("Whole match visible", match.getHeight(), visible.height());
+            assertTrue(search.hasFocus());
+        }
+    }
+
     @Test @Config(sdk = {29, 36}) public void cutoutInsetsKeepTheScreenClearOnEitherSide() {
         try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
             View content = ((ViewGroup) screen.get().findViewById(android.R.id.content)).getChildAt(0);
@@ -565,6 +601,8 @@ public class SettingsReliabilityTest {
     @Test public void rtlKeepsTheGapBetweenTheSwitchAndItsLabel() {
         RuntimeEnvironment.setQualifiers("ar-rEG-ldrtl-w400dp-h800dp-mdpi");
         RuntimeEnvironment.getApplication().getApplicationInfo().flags |= ApplicationInfo.FLAG_SUPPORTS_RTL;
+        // English stays left to right, so the mirrored rows need an Arabic table.
+        SettingsTranslations.LOCALES.put("ar", java.util.Map.of("tab_controls", "Controls in Arabic"));
         try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
             View root = screen.get().getWindow().getDecorView();
             root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
@@ -579,7 +617,9 @@ public class SettingsReliabilityTest {
             titleLine.getChildAt(0).getDrawingRect(titleBounds);
             row.offsetDescendantRectToMyCoords(titleLine.getChildAt(0), titleBounds);
             assertTrue("The visible title stays clear of the switch", titleBounds.left - control.getRight() >= 12);
-        }
+            // The space kept for the switch sits on its side, so the title starts at the mirrored edge like its description.
+            assertEquals("The title starts at the right edge", labels.getRight() - labels.getPaddingRight(), titleBounds.right);
+        } finally { SettingsTranslations.LOCALES.remove("ar"); }
     }
 
     @Test @Config(sdk = {28, 36}) public void accessiblePageActionsExposeTheActivePaneAndCheckedState() {

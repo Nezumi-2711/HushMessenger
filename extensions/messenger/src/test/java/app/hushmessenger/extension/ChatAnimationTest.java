@@ -11,6 +11,7 @@ import android.view.animation.Animation;
 import android.view.animation.Transformation;
 import android.view.animation.TranslateAnimation;
 import com.facebook.messaging.msys.thread.fragment.MsysThreadViewActivity;
+import com.facebook.orca.threadview.ThreadViewActivity;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -336,6 +337,18 @@ public class ChatAnimationTest {
         assertTransition(chat, Activity.OVERRIDE_TRANSITION_CLOSE, 103, 102);
         assertTrue(Settings.hookErrors.isEmpty());
         assertTrue(Settings.lastActive("chat_animation") > 0);
+    }
+
+    @Test public void pageAndBusinessChatsSlideInTheirOwnActivityToo() {
+        on();
+        register();
+        ActivityController<ThreadViewActivity> controller = Robolectric.buildActivity(ThreadViewActivity.class);
+        Activity chat = controller.create().start().resume().get();
+        assertTransition(chat, Activity.OVERRIDE_TRANSITION_OPEN, 101, 103);
+        assertTransition(chat, Activity.OVERRIDE_TRANSITION_CLOSE, 103, 102);
+        controller.pause().stop().destroy();
+        assertTrue(ChatAnimation.slidActivities.isEmpty());
+        assertTrue(Settings.hookErrors.isEmpty());
     }
 
     @Test public void chatActivitiesKeepStockWhenOffRestoredOrUnderRemoveAnimations() {

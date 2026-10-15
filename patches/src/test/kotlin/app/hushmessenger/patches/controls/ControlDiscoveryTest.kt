@@ -30,7 +30,7 @@ class ControlDiscoveryTest {
     )
 
     private fun completeFixture(): List<MutableClass> {
-        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS, XHE_AUDIO, XHE_TRANSCODE, DISAPPEARING_SWIPE, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, PINNED_CHATS, NEARBY_SCANS, WIFI_IDENTITY, PHONE_ID_SYNC, TEXT_STYLE, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
+        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS, XHE_AUDIO, XHE_TRANSCODE, DISAPPEARING_SWIPE, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, PINNED_CHATS, NEARBY_SCANS, WIFI_IDENTITY, PHONE_ID_SYNC, STORY_HOLD, MARK_READ_BAR, MARK_READ_CLICK, TEXT_STYLE, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
             ids.map { id ->
                 if (key == "people_jewel") return@map peopleJewelMethod()
                 if (key == "people_tab") return@map peopleTabMethod()
@@ -52,6 +52,7 @@ class ControlDiscoveryTest {
                         const/4 v0, 0x1
                         return v0
                     """.trimIndent()
+                    FACEBOOK_PROFILE -> "new-instance v0, $FACEBOOK_PROFILE_BUTTON\nconst/4 v0, 0x1\nreturn v0"
                     "ai_menu" -> """
                         const-string v0, "com.facebook.messaging.navigation.plugins.aihomefolder.folderitem.AiHomeFolderItem"
                         const/4 v0, 0x1
@@ -122,7 +123,7 @@ class ControlDiscoveryTest {
             fixtureMethod("$IMMUTABLE_LIST->copyOf(Ljava/util/Collection;)$IMMUTABLE_LIST",
                 "const/4 v0, 0x0\nreturn-object v0", flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value),
         )), peopleJewelKeyHolder(), storyCardKeyHolder(), debugDumperFixture(), messageWrapperFixture(type = "LX/K1Y;"), searchFieldFixture()) +
-            aiStickerCellFixture() + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + aiMentionsFixture() + searchBarFixture() + aiMentionRowsFixture() + shareCopyFixture() + disappearingSwipeFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + pinnedChatLimitFixture() + nearbyScansFixture() + phoneIdFixture() + textFieldFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + customFontFixture() +
+            aiStickerCellFixture() + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + aiMentionsFixture() + searchBarFixture() + aiMentionRowsFixture() + shareCopyFixture() + disappearingSwipeFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + pinnedChatLimitFixture() + nearbyScansFixture() + phoneIdFixture() + storyHoldFixture() + markReadFixture(immutableList = false) + textFieldFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + customFontFixture() +
             syntheticHooks.getValue("screenshot_viewers").map { screenshotViewerFixture(it) }
                 .groupBy { it.definingClass }.map { (type, group) -> fixtureClass(type, group) })
         .let { classes ->
@@ -336,6 +337,22 @@ class ControlDiscoveryTest {
         ))
         val found = mirroredControls(listOf(drawer))
         assertEquals(setOf("LX/WRg;->A02()Z", "LX/WRg;->A05()Z"), found.getValue("facebook").map { it.hookId() }.toSet())
+    }
+
+    // Keep the Profile button (#51) spares only the gates that build nothing but the chat details Profile button.
+    // A gate that also builds another Facebook shortcut stays with Hide Facebook shortcuts.
+    @Test fun theProfileButtonGateIsItsOwnHookAndAMixedGateIsNot() {
+        val gate = { name: String, body: String -> fixtureMethod("LX/Pf1;->$name()Z", "$body\nconst/4 v0, 0x1\nreturn v0") }
+        val share = "Lcom/facebook/messaging/communitymessaging/plugins/channelinvite/sharetofacebookbutton/ShareToFacebookButtonImplementation;"
+        val details = fixtureClass("LX/Pf1;", listOf(
+            gate("A01", "new-instance v0, $FACEBOOK_PROFILE_BUTTON"),
+            gate("A02", "new-instance v0, $FACEBOOK_PROFILE_BUTTON\nnew-instance v0, $FACEBOOK_PROFILE_BUTTON"),
+            gate("A03", "new-instance v0, $FACEBOOK_PROFILE_BUTTON\nnew-instance v0, $share"),
+            gate("A04", "new-instance v0, Lcom/facebook/messaging/profile/plugins/core/threadsettingsactionbutton/mute/ThreadSettingsMuteActionButton;"),
+        ))
+        val found = mirroredControls(listOf(details))
+        assertEquals(setOf("LX/Pf1;->A01()Z", "LX/Pf1;->A02()Z"), found.getValue(FACEBOOK_PROFILE).map { it.hookId() }.toSet())
+        assertEquals(listOf("LX/Pf1;->A03()Z"), found.getValue("facebook").map { it.hookId() })
     }
 
     // Both chat menu builders gate Mark as read by its plugin name. Mark as unread has the same shape and its own name.
