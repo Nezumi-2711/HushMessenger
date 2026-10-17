@@ -17,7 +17,8 @@ internal object MessengerTarget {
 
     /** Each supported version name and the version codes of its checked arm64 builds. */
     val VERSIONS: Map<String, List<Int>> = mapOf(
-        "583.0.0.29.95" to listOf(346611351, 346611369, 346611423, 346611438, 346611439, 346611440),
+        "583.0.0.29.95" to listOf(346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422,
+            346611423, 346611435, 346611436, 346611438, 346611439, 346611440),
     )
     val VERSION_CODES = VERSIONS.values.flatten()
 

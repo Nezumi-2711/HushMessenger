@@ -463,8 +463,10 @@ public final class Settings {
     public static int cameraRequestCode(android.content.Intent intent, int requestCode) {
         return CameraActivity.isCapture(appContext, intent) ? CameraActivity.EXTERNAL_MEDIA_REQUEST : requestCode;
     }
-    /** Set on the extras Messenger 582's chat screen copies into its camera launcher, so that one launch can be told apart. */
+    /** Set on the extras the chat screen copies into its camera launcher. Edit opens its editor through that launcher too. */
     static final String CHAT_CAMERA_MARK = "app.hushmessenger.chat_camera";
+    /** Set on one launch's own extras when the chat's camera button opens the camera, so Edit's launches go without it. */
+    static final String CHAT_CAPTURE_MARK = "app.hushmessenger.chat_capture";
     /**
      * The chat camera's launcher factory hands over its copy of the camera screen's extras. Story and note replies build
      * the same kind of launcher for the same screen, and their extras never get the mark.
@@ -472,14 +474,23 @@ public final class Settings {
     public static void markChatCamera(android.os.Bundle extras) {
         if (extras != null) extras.putBoolean(CHAT_CAMERA_MARK, true);
     }
+    /** The camera button's ActivateCameraEvent handler hands over the extras of the launch it's about to make. */
+    public static void markChatCapture(android.os.Bundle extras) {
+        if (extras != null) extras.putBoolean(CHAT_CAPTURE_MARK, true);
+    }
     /**
-     * Every intent Messenger's activity launcher starts for a result comes past here. Only the chat camera's carries the
-     * mark, which comes off again so Messenger's camera gets its extras as they were, and that one goes to systemCamera.
+     * Every intent Messenger's activity launcher starts for a result comes past here. Only a capture from the chat's
+     * camera button carries both marks, and that one goes to systemCamera. The marks come off either way, so Messenger's
+     * camera and editor get their extras as they were.
      */
     public static android.content.Intent chatCamera(android.content.Intent intent) {
         try {
-            if (intent == null || !intent.hasExtra(CHAT_CAMERA_MARK)) return intent;
+            if (intent == null) return null;
+            boolean capture = intent.getBooleanExtra(CHAT_CAMERA_MARK, false)
+                && intent.getBooleanExtra(CHAT_CAPTURE_MARK, false);
             intent.removeExtra(CHAT_CAMERA_MARK);
+            intent.removeExtra(CHAT_CAPTURE_MARK);
+            if (!capture) return intent;
         } catch (RuntimeException error) {
             hookFailed(CameraActivity.KEY, "Couldn't read the chat camera's launch", error);
             return intent;

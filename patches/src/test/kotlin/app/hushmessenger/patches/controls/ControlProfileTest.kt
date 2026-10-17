@@ -32,8 +32,10 @@ class ControlProfileTest {
 
     @Test fun theVersionCodePicksTheProfile() {
         assertEquals(MessengerTarget.VERSION_CODES.toSet(), controlProfiles.keys)
-        assertSame(PROFILE_346611351, controlProfileFor("346611351"))
-        for (code in listOf("346611369", "346611423", "346611438", "346611439", "346611440", null)) {
+        for (code in listOf("346611350", "346611351", "346611353")) assertSame(PROFILE_346611351, controlProfileFor(code))
+        // 346611418 and 346611435 are the nodpi builds Morphe Manager downloads.
+        for (code in listOf("346611369", "346611386", "346611418", "346611420", "346611422", "346611423", "346611435", "346611436", "346611438",
+            "346611439", "346611440", null)) {
             assertSame(BASE_PROFILE, controlProfileFor(code))
         }
     }

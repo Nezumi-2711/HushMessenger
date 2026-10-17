@@ -14,6 +14,7 @@ import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
@@ -42,6 +43,8 @@ internal const val CAMERA_AUTHORITY_SUFFIX = ".hush.camera"
 private const val CAMERA_INTENT_CALL = "$SETTINGS->systemCamera(Landroid/content/Intent;)Landroid/content/Intent;"
 private const val CAMERA_REQUEST_CALL = "$SETTINGS->cameraRequestCode(Landroid/content/Intent;I)I"
 private const val CHAT_CAMERA_MARK_CALL = "$SETTINGS->markChatCamera(Landroid/os/Bundle;)V"
+private const val CHAT_CAPTURE_MARK_CALL = "$SETTINGS->markChatCapture(Landroid/os/Bundle;)V"
+internal const val ACTIVATE_CAMERA = "Lcom/facebook/xapp/messaging/composer/camera/event/ActivateCameraEvent;"
 private const val CHAT_CAMERA_CALL = "$SETTINGS->chatCamera(Landroid/content/Intent;)Landroid/content/Intent;"
 private const val TRUST_CAPTURE_CALL = "$SETTINGS->trustCapturedPhoto(Landroid/net/Uri;)Z"
 private const val INTERNAL_FILE_CALL = "$SETTINGS->internalFile(ZLandroid/net/Uri;)Z"
@@ -101,6 +104,45 @@ internal fun Method.isChatCameraFactory(): Boolean {
         code.any { it.literal() == CHAT_CAMERA_REQUEST } && code.any { it.isCameraClass() }
 }
 
+/** A capture event owns its fresh per-launch extras. Editor events share the launcher, but not this entry. */
+internal fun Method.isChatCapture(): Boolean = AccessFlags.STATIC.isSet(accessFlags) && returnType == "V" &&
+    parameterTypes.size == 3 && parameterTypes.first().toString() == ACTIVATE_CAMERA
+
+internal fun Method.chatCaptureMarkSite(): Int {
+    val code = implementation?.instructions?.toList() ?: cameraChanged("no capture code")
+    val receiver = implementation!!.registerCount - 1
+    val launches = code.indices.filter { at ->
+        code[at].opcode == Opcode.INVOKE_INTERFACE && code[at].methodRef()?.let {
+            it.definingClass == parameterTypes.last().toString() && it.returnType == "Z" &&
+                it.parameterTypes.map { p -> p.toString() } == listOf(BUNDLE)
+        } == true
+    }
+    val launch = launches.singleOrNull() ?: cameraChanged("${launches.size} capture launches")
+    val call = code[launch] as FiveRegisterInstruction
+    if (call.registerCount != 2 || call.registerC != receiver) cameraChanged("capture receiver")
+    val extras = call.registerD
+    val builds = (0 until launch).filter { at ->
+        code[at].opcode == Opcode.INVOKE_STATIC && code[at].methodRef()?.let {
+            it.returnType == BUNDLE && it.parameterTypes.isEmpty()
+        } == true && code.getOrNull(at + 1)?.let {
+            it.opcode == Opcode.MOVE_RESULT_OBJECT && (it as OneRegisterInstruction).registerA == extras
+        } == true
+    }
+    val build = builds.singleOrNull() ?: cameraChanged("${builds.size} capture extras")
+    val at = build + 2
+    if (extras > 15 || code.take(build).any { it is OffsetInstruction } ||
+        jumpTargets().any { it in build..at }) cameraChanged("capture extras entry")
+    for (i in at until launch) {
+        val insn = code[i]
+        if (insn.opcode.setsRegister() && (insn as? OneRegisterInstruction)?.registerA.let {
+                it == extras || (insn.opcode.setsWideRegister() && it != null && it + 1 == extras)
+            }) cameraChanged("capture extras reused")
+    }
+    if (code.getOrNull(launch + 1)?.opcode != Opcode.RETURN_VOID || launch + 2 != code.size)
+        cameraChanged("after capture launch")
+    return at
+}
+
 /** The launcher type the factory builds: what its builder returns right after it's handed the camera screen's class. */
 internal fun Method.chatCameraLauncherType(): String? {
     val code = implementation?.instructions?.toList() ?: return null
@@ -148,7 +190,8 @@ internal fun findSystemCamera(classes: Iterable<ClassDef>): List<Method> {
     if (readers.single().implementation!!.instructions.none { it.literal() == CHAT_CAMERA_REQUEST }) return listeners
     val factories = methods.filter { it.isChatCameraFactory() }
     val launcher = factories.singleOrNull()?.chatCameraLauncherType()
-    return listeners + factories + methods.filter { it.definingClass == launcher && it.isLauncherStart() } +
+    return listeners + factories + methods.filter { it.isChatCapture() } +
+        methods.filter { it.definingClass == launcher && it.isLauncherStart() } +
         methods.filter { it.isThirdPartyUriCheck() } + methods.filter { it.isInternalFileOpen() }
 }
 
@@ -276,6 +319,7 @@ internal fun Method.internalFileSite(): Int {
 }
 
 internal fun MutableMethod.validateSystemCamera(): Int = when {
+    isChatCapture() -> chatCaptureMarkSite()
     isChatCameraFactory() -> chatCameraMarkSite()
     isLauncherStart() -> chatCameraLaunchSite()
     // The URI is the last parameter, and the hook passes it to a plain invoke.
@@ -299,6 +343,11 @@ internal fun MutableMethod.validateSystemCamera(): Int = when {
  */
 internal fun MutableMethod.injectSystemCamera() {
     val at = validateSystemCamera()
+    if (isChatCapture()) {
+        val extras = (implementation!!.instructions.elementAt(at - 1) as OneRegisterInstruction).registerA
+        addInstructions(at, "invoke-static {v$extras}, $CHAT_CAPTURE_MARK_CALL")
+        return
+    }
     if (isInternalFileOpen()) {
         val internal = (implementation!!.instructions.elementAt(at) as OneRegisterInstruction).registerA
         addInstructions(at, """

@@ -115,7 +115,7 @@ class CompatProfileTest {
         val (exit, output) = compatReport("--kotlin", "../scripts/profiles/346611369.txt")
         assertEquals(0, exit, output)
         assertFalse("internal val" in output, output)
-        val base = "346611423, 346611438, 346611439, 346611440"
+        val base = "346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439, 346611440"
         assertContains(output, "the controls match build $base.")
         assertContains(output, "the permission loads match build $base.")
         for (code in base.split(", ") + "346611369") assertSame(BASE_PROFILE, controlProfileFor(code))

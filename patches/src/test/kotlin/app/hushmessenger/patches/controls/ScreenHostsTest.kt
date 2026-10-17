@@ -91,7 +91,8 @@ class ScreenHostsTest {
 
     @Test fun everySupportedBuildRecordsItsNameCodeAndMapping() {
         for ((name, codes) in app.hushmessenger.patches.MessengerTarget.VERSIONS) for (code in codes) {
-            val mapping = if (code == 346611351) "346611351" else "base"
+            // The builds that share 346611351's naming report the lowest of them.
+            val mapping = if (controlProfiles[code] === PROFILE_346611351) "346611350" else "base"
             assertEquals("$name|$code|$mapping", originalBuild(name, code.toString(), controlProfiles), "$code")
         }
         // Anything that could break the string, or isn't a version at all, is left for the report to call unknown.

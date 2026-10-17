@@ -30,7 +30,7 @@ Every switch starts off, so a freshly patched Messenger behaves like stock until
 
 ## Install
 
-1. **Get the APK.** HushMessenger patches arm64 Messenger 583.0.0.29.95 only. Download one from [APKMirror's 583.0.0.29.95 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-583-0-0-29-95-release/) and check its version code against the [supported builds](#supported-messenger-builds). A 32-bit build shares the version name and won't work.
+1. **Get the APK.** HushMessenger patches arm64 Messenger 583.0.0.29.95 only. Download one from [APKMirror's 583.0.0.29.95 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-583-0-0-29-95-release/). Every arm64 build there is one of the [supported builds](#supported-messenger-builds). A 32-bit build shares the version name and won't work.
 2. **Add the source.** Open the link above on your phone with Morphe Manager (1.34.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **57 patches**. If it shows an older version, tap its refresh button.
 3. **Patch Messenger.** The default selection includes every switch. Three patches start unselected because they change the app package itself: **Clone install under another package name**, **Spoof package version** and **Custom new-message sound**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
 4. **Keep one source.** Don't add the remote source and a local copy together, and don't mix in Messenger patches from other sources.
@@ -115,7 +115,7 @@ The screenshots below show the settings in the current release, in the dark and 
 ### Patches without a switch
 
 - **Install beside Meta apps** renames Messenger's two shared Meta permissions so a patched Messenger installs next to a stock or patched Facebook. If you patch [Hushfacebook](https://github.com/SysAdminDoc/Hushfacebook) too, sign both with the same key.
-- **Restore screens on re-signed builds** answers Messenger's check of its own certificate with Meta's, so a re-signed build opens to your chats instead of a blank screen.
+- **Restore screens on re-signed builds** answers Messenger's check of its own certificate with Meta's, so a re-signed build opens to your chats instead of a blank screen. It also opens Threads links and Instagram video links in a Threads or Instagram you patched yourself. Messenger only hands those to apps signed by Meta and does nothing otherwise, so now the link goes to the app the normal way, or to your browser if the app can't take it.
 - **Clone install under another package name** installs a second Messenger beside the first, as `com.facebook.orca.hush` and **Messenger Clone** unless you change them. Push notifications may not reach the copy, and Root Mount can't use it.
 - **Spoof package version** gives Messenger a very high version code (2147483647 unless you pick another) so the Play Store stops offering updates. Keep it selected with the same number when you patch a later build, since Android won't install a lower code over a higher one.
 - **Custom new-message sound** plays a sound file you pick when you patch (.ogg, .mp3, .m4a or .wav, 1 MB or less) in place of Messenger's new-message sound.
@@ -126,9 +126,10 @@ The screenshots below show the settings in the current release, in the dark and 
 
 - **Can't find the settings.** Long-press Messenger's home screen icon and tap **Patch controls**. If no way in shows up at all, refresh the source and patch again.
 - **Switches do nothing.** The settings live inside the patched Messenger, and refreshing a source only downloads patches. Patch and install again. The Meta AI tab and the old emoji drawer only change after **Restart Messenger**. Inbox options wait for the next chat list Messenger builds, and a restart applies them right away.
-- **The source shows an old version or misses a patch.** Refresh it and check that it shows v0.23.0. A local source needs the new `.mpp` added by hand.
+- **The source shows an old version or misses a patch.** Refresh it and check that it shows the version of the [latest release](https://github.com/SysAdminDoc/HushMessenger/releases/latest). A local source needs the new `.mpp` added by hand.
 - **APK rejected.** Use an unmodified arm64 Messenger 583.0.0.29.95 whose version code is in the [supported builds](#supported-messenger-builds). The error names the builds it checked.
 - **Android won't install over stock Messenger.** A re-signed APK can't replace Meta's signed copy. Back up first, since going from one to the other means uninstalling. Later updates of your patched copy need the same key.
+- **`signatures do not match` even though you uninstalled Messenger.** Every user on a phone shares one copy of an app, so Messenger is probably still installed somewhere else: Samsung's Secure Folder, a work profile or a second user. Look there before changing anything, and back up that copy's chats if you decide to remove it. **Clone install under another package name** gets around it without touching that copy. The [install check](#verify-a-download) lists the signer it finds.
 - **`INSTALL_FAILED_VERSION_DOWNGRADE ... older than current 2147483647`.** Another patch set raised Messenger's version code to Android's maximum, and Android remembers it even after an uninstall that kept data. Don't uninstall or clear data to get past it. An in-place update needs the same signing key and a version code at least that high, so patch with **Spoof package version** selected at that number.
 - **Uninstalling the settings icon removes Messenger.** Both icons belong to one app. Hide the icon with **App > Hide app drawer icon** instead.
 - **Install blocked on a Galaxy phone.** Samsung's Auto Blocker only lets apps in from Galaxy Store and Google Play, and it blocks USB installs too. Turn it off in **Settings > Security and privacy > Auto Blocker**, install, then turn it back on. Google's Advanced Protection (**Settings > Google > All services > Privacy & security > Advanced Protection**) blocks the install the same way.
@@ -151,19 +152,27 @@ With **Hide read receipts** on, a chat you open stays unread on your phone, beca
 | --- | --- |
 | Package | `com.facebook.orca` |
 | Version | `583.0.0.29.95` |
-| Version codes | `346611351`, `346611369`, `346611423`, `346611438`, `346611439`, `346611440` |
+| Version codes | `346611350`, `346611351`, `346611353`, `346611369`, `346611386`, `346611418`, `346611420`, `346611422`, `346611423`, `346611435`, `346611436`, `346611438`, `346611439`, `346611440` |
 | Architecture | `arm64-v8a` |
 | Minimum Android version | Android 9 (API 28) |
 | APKMirror downloads | [All variants of 583.0.0.29.95](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-583-0-0-29-95-release/). Every arm64 one works. |
 
-All five arm64 builds APKMirror lists for 583.0.0.29.95 work, and so does build 346611440, which isn't on APKMirror. The patch checks the version code before it changes anything and stops on a build that isn't listed. Older Messenger versions aren't supported by current bundles. v0.23.0 still takes 582.0.0.61.92.
+All 13 arm64 builds APKMirror lists for 583.0.0.29.95 work, the nodpi ones Morphe Manager's download button opens included, and so does build 346611440, which isn't on APKMirror. The patch checks the version code before it changes anything and stops on a build that isn't listed. Older Messenger versions aren't supported by current bundles. v0.23.0 still takes 582.0.0.61.92.
 
 SHA-256 of the stock APKs the checks ran against:
 
 ```text
+346611350  10fbf15046ec8087c99b45f1bbbc0d836d932077d68b0e5747a4327c0a8ead8e
 346611351  675856b8762abf8e4a7f1bc41228e2baa5464e276cd1fef7ac5ce822c7fbfba5
+346611353  f8cad3acfe2d56efeabced57cadbdac5cea5836c56dc43c412c6f470aa913c25
 346611369  8f22f198e7e5fc69b6e0fd416b25e43924c9cdb9a25585fd84080c41f2b0656d
+346611386  e0f4a2969107768022039cdb960045f6d2e110d818c69249b21b002cc6a5ba4d
+346611418  0d45dbea76f5b425047575634c21b50297684dbf596e9fc7cf9690584abd20a1
+346611420  7b27042e9d4d2b2d68d5fa68af8adb43a713c9c812ca6b1506574729cd2cbb28
+346611422  fce6bd8d19e2a41c52573b135502e6c350bff36f2ee194083a6e0ce0b1990e88
 346611423  4986bcb22182d0d17d6814a0aaa30a3333d462d9ce61f000064e125d20a8c796
+346611435  23205233ff75ef682204b5dcaca9a290d832509b0f731a569ef00923e42afbdc
+346611436  833e46c02f4e10b2d5978cec4e599a68ca286b16411dde0b351961a5383acfaa
 346611438  fda7b7e9818aca3183d4c27097be8d350aeeb8f5efe0f8e07e1a8eca7ac75fd3
 346611439  6150df6d26e0beb6653dc69b4ae9ccde63e713eccd23e6a2a055cc3728019771
 346611440  cbb1b91799aba7a39afbd34f3daf3d325d1c715c8f41110cb95c44c45c7283bd

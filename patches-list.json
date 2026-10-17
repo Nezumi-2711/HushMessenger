@@ -52,7 +52,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -109,7 +109,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -166,7 +166,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -223,7 +223,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -280,7 +280,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -329,7 +329,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -396,7 +396,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -453,7 +453,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -510,7 +510,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -567,7 +567,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -624,7 +624,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -681,7 +681,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -738,7 +738,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -795,7 +795,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -852,7 +852,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -909,7 +909,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -966,7 +966,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1023,7 +1023,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1080,7 +1080,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1137,7 +1137,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1194,7 +1194,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1251,7 +1251,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1308,7 +1308,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1365,7 +1365,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1422,7 +1422,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1479,7 +1479,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1536,7 +1536,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1593,7 +1593,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1650,7 +1650,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1707,7 +1707,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1764,7 +1764,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1821,7 +1821,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1865,7 +1865,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1922,7 +1922,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -1979,7 +1979,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2036,7 +2036,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2093,7 +2093,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2150,7 +2150,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2207,7 +2207,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2264,7 +2264,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2321,7 +2321,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2378,7 +2378,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2387,7 +2387,7 @@
         },
         {
             "name": "Restore screens on re-signed builds",
-            "description": "Patching and signing Messenger yourself can break some of its screens. This makes Messenger's signature check pass again, including for a Facebook you patched with the same key. Works as soon as you patch it in, with no switch.",
+            "description": "Patching and signing Messenger yourself can break some of its screens. This makes Messenger's signature check pass again, including for a Facebook you patched with the same key, and lets Threads and Instagram video links open in a Threads or Instagram you patched yourself. Works as soon as you patch it in, with no switch.",
             "default": true,
             "category": "Fixes",
             "dependencies": [
@@ -2422,7 +2422,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2479,7 +2479,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2536,7 +2536,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2593,7 +2593,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2650,7 +2650,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2701,7 +2701,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2768,7 +2768,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2825,7 +2825,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2882,7 +2882,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2939,7 +2939,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -2996,7 +2996,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -3053,7 +3053,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -3110,7 +3110,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -3167,7 +3167,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -3224,7 +3224,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -3281,7 +3281,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -3338,7 +3338,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }
@@ -3395,7 +3395,7 @@
                             "versionCodes": null,
                             "isExperimental": false,
                             "minSdk": 28,
-                            "description": "Arm64 builds 346611351, 346611369, 346611423, 346611438, 346611439 and 346611440; checked again during patching"
+                            "description": "Arm64 builds 346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422, 346611423, 346611435, 346611436, 346611438, 346611439 and 346611440; checked again during patching"
                         }
                     ]
                 }

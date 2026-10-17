@@ -1592,6 +1592,97 @@ public class CompatReport {
         return problems;
     }
 
+    /**
+     * The Threads and Instagram link launchers (RestoreTrustPatch.kt's linkLaunchSite): a void (Context, Uri)
+     * method naming the app's package and then its log tag, with one (Context, Intent)Z family launch whose
+     * answer the return-void after it drops. Each must take the extension call the way the patch places it.
+     */
+    static List<String> linkLauncherProblems(List<ClassDef> classes) {
+        var problems = new ArrayList<String>();
+        String[][] apps = {{"Threads", "com.instagram.barcelona", "ThreadsLinkLauncher"}, {"Instagram", "com.instagram.android", "InstagramLinkLauncher"}};
+        for (var app : apps) {
+            var launchers = new ArrayList<Method>();
+            for (var cls : classes) {
+                for (var method : cls.getMethods()) {
+                    if (!"V".equals(method.getReturnType()) || method.getImplementation() == null) continue;
+                    if (!List.of("Landroid/content/Context;", "Landroid/net/Uri;").equals(method.getParameterTypes().stream().map(CharSequence::toString).toList())) continue;
+                    int step = 0;
+                    for (var insn : method.getImplementation().getInstructions()) {
+                        if (insn instanceof ReferenceInstruction ref && ref.getReference() instanceof StringReference s && s.getString().equals(app[step + 1])) {
+                            if (++step == 2) break;
+                        }
+                    }
+                    if (step == 2) launchers.add(method);
+                }
+            }
+            if (launchers.size() != 1) {
+                problems.add("expected one " + app[0] + " link launcher, found " + launchers.size());
+                continue;
+            }
+            String why = linkLaunchProblem(launchers.get(0));
+            if (why != null) problems.add(app[0] + "'s link launcher " + hookId(launchers.get(0)) + " " + why);
+        }
+        return problems;
+    }
+
+    static String linkLaunchProblem(Method method) {
+        if (AccessFlags.STATIC.isSet(method.getAccessFlags())) return "is static";
+        var code = instructions(method);
+        int index = -1, launches = 0;
+        for (int i = 0; i < code.size(); i++) {
+            if (code.get(i).getOpcode() == Opcode.INVOKE_VIRTUAL && ((ReferenceInstruction) code.get(i)).getReference() instanceof MethodReference m
+                && "Z".equals(m.getReturnType()) && List.of("Landroid/content/Context;", "Landroid/content/Intent;").equals(m.getParameterTypes().stream().map(CharSequence::toString).toList())) {
+                index = i;
+                launches++;
+            }
+        }
+        if (launches != 1) return "has " + launches + " launches, expected 1";
+        if (index + 1 >= code.size() || code.get(index + 1).getOpcode() != Opcode.RETURN_VOID) return "uses its launch's answer";
+        if (mediaTargets(method).contains(index + 1)) return "jumps to the return after its launch";
+        var call = (FiveRegisterInstruction) code.get(index);
+        int launcher = call.getRegisterC(), context = call.getRegisterD(), intent = call.getRegisterE();
+        if (launcher == context || launcher == intent || context == intent || Math.max(launcher, Math.max(context, intent)) > 15) {
+            return "launches with v" + launcher + ", v" + context + " and v" + intent + ", which the call can't name";
+        }
+        if (context != method.getImplementation().getRegisterCount() - 2) return "launches with a Context other than its own";
+        int build = -1, builds = 0;
+        for (int i = 0; i < code.size(); i++) {
+            if (code.get(i).getOpcode() == Opcode.INVOKE_STATIC && ((ReferenceInstruction) code.get(i)).getReference() instanceof MethodReference m
+                && "Landroid/content/Intent;".equals(m.getReturnType()) && List.of("Landroid/net/Uri;").equals(m.getParameterTypes().stream().map(CharSequence::toString).toList())) {
+                build = i;
+                builds++;
+            }
+        }
+        if (builds != 1) return "builds " + builds + " intents from its link, expected 1";
+        if (build > index || code.get(build + 1).getOpcode() != Opcode.MOVE_RESULT_OBJECT
+            || ((OneRegisterInstruction) code.get(build + 1)).getRegisterA() != intent) {
+            return "launches an intent other than the one it built from the link";
+        }
+        // The catch block after the return reuses the register for its log message, which can't reach the launch.
+        for (int i = build + 2; i < index; i++) {
+            if (code.get(i).getOpcode().setsRegister() && code.get(i) instanceof OneRegisterInstruction one && one.getRegisterA() == intent) {
+                return "writes its intent's register again before its launch";
+            }
+        }
+        int[] addresses = new int[code.size() + 1];
+        for (int i = 0; i < code.size(); i++) addresses[i + 1] = addresses[i] + code.get(i).getCodeUnits();
+        var indexAt = new HashMap<Integer, Integer>();
+        for (int i = 0; i < code.size(); i++) indexAt.put(addresses[i], i);
+        for (int i = index + 1; i < code.size(); i++) {
+            if (!(code.get(i) instanceof OffsetInstruction jump)) continue;
+            int landing = addresses[i] + jump.getCodeOffset();
+            var cases = new ArrayList<Integer>();
+            if (jump.getOpcode() == Opcode.PACKED_SWITCH || jump.getOpcode() == Opcode.SPARSE_SWITCH) {
+                Integer at = indexAt.get(landing);
+                if (at != null && code.get(at) instanceof SwitchPayload payload) for (var e : payload.getSwitchElements()) cases.add(addresses[i] + e.getOffset());
+            } else {
+                cases.add(landing);
+            }
+            for (int c : cases) if (c <= addresses[index]) return "jumps back to its launch from after it";
+        }
+        return null;
+    }
+
     static final String EPHEMERAL_VIEWER = "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;";
     static final String QUICKSNAP_VIEWER = "Lcom/facebook/messaging/quicksnap/consumption/viewer/MsgrQuicksnapViewerFragment;";
     static final String WINDOW = "Landroid/view/Window;";
@@ -2654,6 +2745,7 @@ public class CompatReport {
     static List<Method> systemCameraLaunches(List<ClassDef> classes) {
         var launches = new ArrayList<Method>();
         var factories = new ArrayList<Method>();
+        var captures = new ArrayList<Method>();
         var starts = new ArrayList<Method>();
         var checks = new ArrayList<Method>();
         int readers = 0;
@@ -2681,12 +2773,15 @@ public class CompatReport {
             if ("V".equals(m.getReturnType()) && params.equals(List.of(MONTAGE_PARAMS, NAVIGATION_TRIGGER)) &&
                 !AccessFlags.STATIC.isSet(m.getAccessFlags()) && buildsIntent && hasLiteral(m, 7377)) launches.add(m);
             if (isChatCameraFactory(m)) factories.add(m);
+            if (AccessFlags.STATIC.isSet(m.getAccessFlags()) && "V".equals(m.getReturnType()) && params.size() == 3 &&
+                "Lcom/facebook/xapp/messaging/composer/camera/event/ActivateCameraEvent;".equals(params.get(0))) captures.add(m);
             if (isLauncherStart(m)) starts.add(m);
             if (isThirdPartyUriCheck(m) || isInternalFileOpen(m)) checks.add(m);
         }
         if (readers != 1) return List.of();
         if (!readsChatCamera) return launches;
         launches.addAll(factories);
+        launches.addAll(captures);
         var launcher = factories.size() == 1 ? chatCameraLauncherType(factories.get(0)) : null;
         for (var m : starts) if (m.getDefiningClass().equals(launcher)) launches.add(m);
         launches.addAll(checks);
@@ -5204,6 +5299,7 @@ public class CompatReport {
         {
             Method signerMethod = findSignerMethod(classes);
             var fbns = fbnsCheckProblems(classes);
+            fbns.addAll(linkLauncherProblems(classes));
             if (signerMethod != null && fbns.isEmpty()) {
                 System.out.println("[PASS] Restore screens on re-signed builds (" + hookId(signerMethod) + ")");
             } else {

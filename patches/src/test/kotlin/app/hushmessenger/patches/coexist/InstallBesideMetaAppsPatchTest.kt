@@ -20,6 +20,8 @@ class InstallBesideMetaAppsPatchTest {
         validateVersionCode("346611369")
         validateVersionCode("346611351")
         validateVersionCode("346611440")
+        // The nodpi build Morphe Manager downloads.
+        validateVersionCode("346611435")
     }
 
     @Test
@@ -31,7 +33,7 @@ class InstallBesideMetaAppsPatchTest {
 
     private fun assertActionable(failure: PatchException) {
         assertContains(failure.message.orEmpty(), "Use an unmodified arm64 Messenger 583.0.0.29.95 APK")
-        assertContains(failure.message.orEmpty(), "version code 346611351 or 346611369 or 346611423")
+        assertContains(failure.message.orEmpty(), "version code 346611350 or 346611351 or 346611353 or 346611369")
     }
 
     private fun manifest(): Document {

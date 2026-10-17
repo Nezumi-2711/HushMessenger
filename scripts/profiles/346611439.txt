@@ -165,6 +165,7 @@ hook suggested_replies LX/7Qb;->A05(LX/7Qb;)Z
 hook suggested_replies LX/HV8;->A03()Z
 hook system_camera LX/0FR;->A01(Landroid/content/Context;Landroid/net/Uri;)Landroid/content/res/AssetFileDescriptor;
 hook system_camera LX/153;->A00(Landroid/content/Context;Landroid/net/Uri;)Ljava/lang/Boolean;
+hook system_camera LX/5g7;->A01(Lcom/facebook/xapp/messaging/composer/camera/event/ActivateCameraEvent;LX/5WP;LX/6iB;)V
 hook system_camera LX/5nw;->A00(Landroid/content/Context;Landroid/os/Bundle;Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;LX/Cer;)LX/6iB;
 hook system_camera LX/5ws;->C0d(Landroid/os/Bundle;)Z
 hook system_camera LX/7GX;->DhA(Lcom/facebook/messaging/montage/composer/model/MontageComposerFragmentParams;Lcom/facebook/messaging/send/trigger/NavigationTrigger;)V

@@ -32,7 +32,7 @@ internal class ControlProfile(
 )
 
 /**
- * Five of the six arm64 builds of 583.0.0.29.95 share this mapping. Generated from
+ * Most arm64 builds of 583.0.0.29.95 share this mapping ([controlProfiles] lists them). Generated from
  * 346611369's record.
  */
 internal val BASE_PROFILE = ControlProfile(
@@ -191,6 +191,7 @@ internal val BASE_PROFILE = ControlProfile(
         "system_camera" to setOf(
             "LX/0FR;->A01(Landroid/content/Context;Landroid/net/Uri;)Landroid/content/res/AssetFileDescriptor;",
             "LX/153;->A00(Landroid/content/Context;Landroid/net/Uri;)Ljava/lang/Boolean;",
+            "LX/5g7;->A01(Lcom/facebook/xapp/messaging/composer/camera/event/ActivateCameraEvent;LX/5WP;LX/6iB;)V",
             "LX/5nw;->A00(Landroid/content/Context;Landroid/os/Bundle;Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;LX/Cer;)LX/6iB;",
             "LX/5ws;->C0d(Landroid/os/Bundle;)Z",
             "LX/7GX;->DhA(Lcom/facebook/messaging/montage/composer/model/MontageComposerFragmentParams;Lcom/facebook/messaging/send/trigger/NavigationTrigger;)V",
@@ -225,7 +226,8 @@ internal val BASE_PROFILE = ControlProfile(
 )
 
 /**
- * 346611351, the 213-240dpi build, names most classes a few steps earlier. Generated from its record.
+ * 346611351, a 213-240dpi build, names most classes a few steps earlier, and so do the other builds [controlProfiles]
+ * maps here. Generated from 346611351's record.
  */
 internal val PROFILE_346611351 = ControlProfile(
     hooks = mapOf(
@@ -383,6 +385,7 @@ internal val PROFILE_346611351 = ControlProfile(
         "system_camera" to setOf(
             "LX/0FR;->A01(Landroid/content/Context;Landroid/net/Uri;)Landroid/content/res/AssetFileDescriptor;",
             "LX/153;->A00(Landroid/content/Context;Landroid/net/Uri;)Ljava/lang/Boolean;",
+            "LX/5dL;->A01(Lcom/facebook/xapp/messaging/composer/camera/event/ActivateCameraEvent;LX/5Td;LX/6f7;)V",
             "LX/5lA;->A00(Landroid/content/Context;Landroid/os/Bundle;Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;LX/CaZ;)LX/6f7;",
             "LX/5u6;->C0W(Landroid/os/Bundle;)Z",
             "LX/7DT;->Dgz(Lcom/facebook/messaging/montage/composer/model/MontageComposerFragmentParams;Lcom/facebook/messaging/send/trigger/NavigationTrigger;)V",
@@ -418,9 +421,17 @@ internal val PROFILE_346611351 = ControlProfile(
 
 /** Each supported build's profile, by version code. Builds that share a mapping share a profile. */
 internal val controlProfiles: Map<Int, ControlProfile> = mapOf(
+    346611350 to PROFILE_346611351,
     346611351 to PROFILE_346611351,
+    346611353 to PROFILE_346611351,
     346611369 to BASE_PROFILE,
+    346611386 to BASE_PROFILE,
+    346611418 to BASE_PROFILE,
+    346611420 to BASE_PROFILE,
+    346611422 to BASE_PROFILE,
     346611423 to BASE_PROFILE,
+    346611435 to BASE_PROFILE,
+    346611436 to BASE_PROFILE,
     346611438 to BASE_PROFILE,
     346611439 to BASE_PROFILE,
     346611440 to BASE_PROFILE,
