@@ -8,6 +8,8 @@ import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class InstallBesideMetaAppsPatchTest {
     private val appCommunication = "com.facebook.permission.prod.FB_APP_COMMUNICATION"
@@ -27,7 +29,13 @@ class InstallBesideMetaAppsPatchTest {
     @Test
     fun rejectsAnotherBuildWithTheSameVersionName() {
         val failure = assertFailsWith<PatchException> { validateVersionCode("346611400") }
-        assertContains(failure.message.orEmpty(), "version code 346611400 is not supported")
+        // Manager prints another patch's name above this line, so the build comes first.
+        assertTrue(
+            failure.message.orEmpty().startsWith("This Messenger build (version code 346611400) isn't supported yet"),
+            failure.message,
+        )
+        assertFalse(failure.message.orEmpty().contains("Install beside Meta apps"), failure.message)
+        assertEquals(1, failure.message.orEmpty().lines().size)
         assertActionable(failure)
     }
 

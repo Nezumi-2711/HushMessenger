@@ -461,7 +461,8 @@ public final class Settings {
     }
     /** The chat reads a photo from another app back under its own request code, so the capture screen starts with that one. */
     public static int cameraRequestCode(android.content.Intent intent, int requestCode) {
-        return CameraActivity.isCapture(appContext, intent) ? CameraActivity.EXTERNAL_MEDIA_REQUEST : requestCode;
+        return GalleryPicker.isPick(appContext, intent) || CameraActivity.isCapture(appContext, intent)
+            ? CameraActivity.EXTERNAL_MEDIA_REQUEST : requestCode;
     }
     /** Set on the extras the chat screen copies into its camera launcher. Edit opens its editor through that launcher too. */
     static final String CHAT_CAMERA_MARK = "app.hushmessenger.chat_camera";
@@ -486,16 +487,60 @@ public final class Settings {
     public static android.content.Intent chatCamera(android.content.Intent intent) {
         try {
             if (intent == null) return null;
+            boolean gallery = intent.getBooleanExtra(CHAT_GALLERY_MARK, false);
             boolean capture = intent.getBooleanExtra(CHAT_CAMERA_MARK, false)
                 && intent.getBooleanExtra(CHAT_CAPTURE_MARK, false);
+            intent.removeExtra(CHAT_GALLERY_MARK);
             intent.removeExtra(CHAT_CAMERA_MARK);
             intent.removeExtra(CHAT_CAPTURE_MARK);
+            if (gallery) {
+                android.content.Intent pick = GalleryPicker.screenIntent(appContext);
+                if (pick != null) return pick;
+            }
             if (!capture) return intent;
         } catch (RuntimeException error) {
             hookFailed(CameraActivity.KEY, "Couldn't read the chat camera's launch", error);
             return intent;
         }
         return systemCamera(intent);
+    }
+    /** Set on the extras the gallery button hands the chat camera's launcher, so its start opens the phone's gallery app. */
+    static final String CHAT_GALLERY_MARK = "app.hushmessenger.chat_gallery";
+    /**
+     * The chat's gallery button asks this first. With the switch on and a gallery app on the phone, the button hands these
+     * extras to the chat camera's launcher, whose start then opens that app. Null leaves the button to Messenger.
+     */
+    public static android.os.Bundle chatGallery() {
+        try {
+            Context context = appContext;
+            if (context == null || !wouldUse(GalleryPicker.KEY) || GalleryPicker.screenIntent(context) == null ||
+                !enabled(GalleryPicker.KEY)) return null;
+            android.os.Bundle extras = new android.os.Bundle();
+            extras.putBoolean(CHAT_GALLERY_MARK, true);
+            return extras;
+        } catch (RuntimeException error) {
+            hookFailed(GalleryPicker.KEY, "Can't open your gallery app", error);
+            return null;
+        }
+    }
+    /**
+     * The chat hands every result here before it reads one. A photo from another app comes back under 1112, and the chat
+     * takes its type from the result and sends one without a type as a plain file. Gallery apps often hand back only the
+     * picked item, so with the switch on a missing type comes from the item itself.
+     */
+    public static void externalMediaResult(int requestCode, int resultCode, android.content.Intent data) {
+        try {
+            if (requestCode != CameraActivity.EXTERNAL_MEDIA_REQUEST || resultCode != android.app.Activity.RESULT_OK || data == null ||
+                data.getType() != null) return;
+            android.net.Uri picked = data.getData();
+            Context context = appContext;
+            if (picked == null || context == null || !"content".equals(picked.getScheme()) || !wouldUse(GalleryPicker.KEY) ||
+                !enabled(GalleryPicker.KEY)) return;
+            String type = context.getContentResolver().getType(picked);
+            if (type != null) data.setDataAndType(picked, type);
+        } catch (RuntimeException error) {
+            hookFailed(GalleryPicker.KEY, "Couldn't read what your gallery app picked", error);
+        }
     }
     /**
      * Messenger 582's chat asks this before it copies a picked photo, and only copies from apps outside Meta's. The capture
@@ -527,6 +572,11 @@ public final class Settings {
         if (CameraActivity.KEY.equals(key)) {
             Context context = appContext;
             return context == null || CameraActivity.captureIntent(context) != null;
+        }
+        // A Root Mount install keeps the stock manifest, with no pick screen and maybe no gallery app Messenger can see.
+        if (GalleryPicker.KEY.equals(key)) {
+            Context context = appContext;
+            return context == null || GalleryPicker.screenIntent(context) != null;
         }
         if (TextStyleActivity.KEY.equals(key)) {
             Context context = appContext;

@@ -80,6 +80,10 @@ hook emoji_search LX/7QX;->A8x(Landroid/text/Editable;Z)V
 hook emoji_typeface LX/1OE;->A00()Landroid/graphics/Typeface;
 hook event_prompts LX/HVB;->A08()Z
 hook event_prompts LX/HVB;->A09()Z
+hook external_gallery LX/5SC;->BkE(Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/5uL;LX/5WP;Lcom/facebook/xapp/messaging/composer/event/ComposerEvent;)V
+hook external_gallery LX/5ws;->C0d(Landroid/os/Bundle;)Z
+hook external_gallery LX/6CC;->BpW(LX/5IZ;Ljava/lang/String;)V
+hook external_gallery LX/7Om;->onActivityResult(IILandroid/content/Intent;)V
 hook facebook LX/2Q7;->A0D()Z
 hook facebook LX/3FS;->A00()Z
 hook facebook LX/3Gb;->A02()Z
@@ -136,6 +140,8 @@ hook mqtt_telemetry LX/0mE;->A0N(Ljava/lang/String;)V
 hook mqtt_telemetry LX/0mE;->A0R(LX/0rd;LX/0rI;Ljava/lang/Integer;Ljava/lang/String;Ljava/lang/String;[BIJ)LX/0qX;
 hook nearby_scans LX/1fX;->A03(Z)Ljava/util/ArrayList;
 hook nearby_scans Lcom/facebook/location/foreground/ForegroundLocationFrameworkController;->A04(Landroid/content/Context;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/location/foreground/ForegroundLocationFrameworkController;J)V
+hook original_photo Lcom/facebook/msys/mci/transcoder/DefaultMediaTranscoder;->decodeBitmap(Ljava/lang/String;DD)Landroid/graphics/Bitmap;
+hook original_photo Lcom/facebook/msys/mci/transcoder/DefaultMediaTranscoder;->getTranscodeConfig()Ljava/util/Map;
 hook original_photo Lcom/facebook/msys/mci/transcoder/DefaultMediaTranscoder;->transcodeImage(Ljava/lang/String;DDLjava/lang/String;Ljava/util/Map;)[B
 hook original_photo Lcom/facebook/msys/mci/transcoder/DefaultMediaTranscoder;->transcodeImageAsync(Ljava/lang/String;DDLjava/lang/String;Ljava/util/Map;Lcom/facebook/msys/mci/TranscodeImageCompletionCallback;)V
 hook original_video Lcom/facebook/msys/mci/transcoder/DefaultMediaTranscoder;->A05(Lcom/facebook/msys/mci/TranscodeVideoCompletionCallback;Lcom/facebook/msys/mci/VideoEdits;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;)V

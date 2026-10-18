@@ -34,6 +34,7 @@
         <meta-data android:name="hush.feature.xhe_audio" android:value="true" />
         <meta-data android:name="hush.feature.disappearing_swipe" android:value="true" />
         <meta-data android:name="hush.feature.system_camera" android:value="true" />
+        <meta-data android:name="hush.feature.external_gallery" android:value="true" />
         <meta-data android:name="hush.feature.text_style" android:value="true" />
         <meta-data android:name="hush.feature.external_browser" android:value="true" />
         <meta-data android:name="hush.feature.bubbles" android:value="true" />
@@ -59,6 +60,7 @@
         <activity android:name="app.hushmessenger.extension.SettingsActivity" android:icon="@android:drawable/ic_menu_preferences" android:exported="true" android:excludeFromRecents="true" />
         <provider android:name="app.hushmessenger.extension.CameraProvider" android:authorities="${applicationId}.hush.camera" android:exported="false" android:grantUriPermissions="true" />
         <activity android:name="app.hushmessenger.extension.CameraActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
+        <activity android:name="app.hushmessenger.extension.GalleryActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden" />
         <activity android:name="app.hushmessenger.extension.RestartActivity" android:exported="false" android:excludeFromRecents="true" android:noHistory="true" android:configChanges="orientation|screenSize|keyboardHidden" />
         <activity android:name="app.hushmessenger.extension.TextStyleActivity" android:exported="false" android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity-alias android:name="app.hushmessenger.extension.BoldText" android:targetActivity="app.hushmessenger.extension.TextStyleActivity" android:label="Bold" android:exported="false" android:enabled="false">

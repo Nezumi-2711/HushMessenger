@@ -318,10 +318,25 @@ internal fun Method.internalFileSite(): Int {
     return c + 2
 }
 
+/** Whether the launcher's start already sends its intents past the extension. The gallery switch hooks it the same way. */
+internal fun Method.chatStartRouted() = implementation?.instructions?.any { it.methodRef()?.toString() == CHAT_CAMERA_CALL } == true
+
+/** The launcher's start hands each intent and its request code to the extension right before it starts it. */
+internal fun MutableMethod.injectChatCameraStart(at: Int) {
+    val start = implementation!!.instructions.elementAt(at) as FiveRegisterInstruction
+    addInstructions(at, """
+        invoke-static {v${start.registerC}}, $CHAT_CAMERA_CALL
+        move-result-object v${start.registerC}
+        invoke-static {v${start.registerC}, v${start.registerE}}, $CAMERA_REQUEST_CALL
+        move-result v${start.registerE}
+    """.trimIndent())
+}
+
+/** The index to hook at, or -1 for a launcher start the gallery switch already hooked. */
 internal fun MutableMethod.validateSystemCamera(): Int = when {
     isChatCapture() -> chatCaptureMarkSite()
     isChatCameraFactory() -> chatCameraMarkSite()
-    isLauncherStart() -> chatCameraLaunchSite()
+    isLauncherStart() -> if (chatStartRouted()) -1 else chatCameraLaunchSite()
     // The URI is the last parameter, and the hook passes it to a plain invoke.
     isThirdPartyUriCheck() -> 0.also {
         validateScratch()
@@ -343,6 +358,7 @@ internal fun MutableMethod.validateSystemCamera(): Int = when {
  */
 internal fun MutableMethod.injectSystemCamera() {
     val at = validateSystemCamera()
+    if (at < 0) return
     if (isChatCapture()) {
         val extras = (implementation!!.instructions.elementAt(at - 1) as OneRegisterInstruction).registerA
         addInstructions(at, "invoke-static {v$extras}, $CHAT_CAPTURE_MARK_CALL")
@@ -372,15 +388,16 @@ internal fun MutableMethod.injectSystemCamera() {
         addInstructions(at, "invoke-static {v$extras}, $CHAT_CAMERA_MARK_CALL")
         return
     }
-    val chat = isLauncherStart()
+    if (isLauncherStart()) {
+        injectChatCameraStart(at)
+        return
+    }
     val launch = site as FiveRegisterInstruction
-    val intent = if (chat) launch.registerC else launch.registerD
-    val request = if (chat) launch.registerE else launch.registerF
     addInstructions(at, """
-        invoke-static {v$intent}, ${if (chat) CHAT_CAMERA_CALL else CAMERA_INTENT_CALL}
-        move-result-object v$intent
-        invoke-static {v$intent, v$request}, $CAMERA_REQUEST_CALL
-        move-result v$request
+        invoke-static {v${launch.registerD}}, $CAMERA_INTENT_CALL
+        move-result-object v${launch.registerD}
+        invoke-static {v${launch.registerD}, v${launch.registerF}}, $CAMERA_REQUEST_CALL
+        move-result v${launch.registerF}
     """.trimIndent())
 }
 

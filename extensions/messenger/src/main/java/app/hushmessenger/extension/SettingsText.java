@@ -145,6 +145,7 @@ final class SettingsText {
         ENGLISH.put("clear", "Clear filters");
         ENGLISH.put("unavailable", "Not available on this version of Android. Your choice is saved.");
         ENGLISH.put("camera_unsupported", "This install has no screen for opening the phone's camera app, so the chat camera stays Messenger's own. Root Mount installs can't add one. Your choice is saved.");
+        ENGLISH.put("gallery_unsupported", "No app on this phone can pick a photo for Messenger, so the chat gallery stays Messenger's own. Your choice is saved.");
         ENGLISH.put("text_style_unsupported", "This install has no Bold and Italic entries for the text menu. Root Mount installs can't add them. Your choice is saved.");
         ENGLISH.put("text_style_read_only", "Bold and Italic only work on text you're typing.");
         ENGLISH.put("text_style_bold_none", "Bold only changes the letters A to Z (accents are fine) and digits. Letters from other alphabets stay as they are.");
@@ -296,6 +297,8 @@ final class SettingsText {
         ENGLISH.put("camera_missing", "No camera app is installed that can take a photo for Messenger.");
         ENGLISH.put("camera_failed", "Can't open your camera app. Try again, or turn off Use the phone's camera app.");
         ENGLISH.put("camera_permission", "Messenger needs camera permission to open your camera app. You can allow it in Android's app settings.");
+        ENGLISH.put("gallery_missing", "No gallery app is installed that can pick a photo for Messenger.");
+        ENGLISH.put("gallery_failed", "Can't open your gallery app. Try again, or turn off Open your gallery app.");
         ENGLISH.put("message_log_clear", "Clear log");
         ENGLISH.put("message_log_close", "Close");
         ENGLISH.put("message_log_title", "Message log");

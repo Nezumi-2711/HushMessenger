@@ -26,6 +26,7 @@ import com.android.tools.smali.dexlib2.iface.instruction.WideLiteralInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.SwitchPayload
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference as DexMethodReference
@@ -84,6 +85,12 @@ internal const val MEDIA_TRANSCODER = "Lcom/facebook/msys/mci/transcoder/Default
 internal const val TRANSCODE_IMAGE = "$MEDIA_TRANSCODER->transcodeImage(Ljava/lang/String;DDLjava/lang/String;Ljava/util/Map;)[B"
 internal const val TRANSCODE_IMAGE_ASYNC = "$MEDIA_TRANSCODER->transcodeImageAsync(" +
     "Ljava/lang/String;DDLjava/lang/String;Ljava/util/Map;Lcom/facebook/msys/mci/TranscodeImageCompletionCallback;)V"
+/** The config map that picks msys's native photo transcoder, and the Java one's decode; native code calls both by name. */
+internal const val TRANSCODE_CONFIG = "$MEDIA_TRANSCODER->getTranscodeConfig()Ljava/util/Map;"
+internal const val DECODE_BITMAP = "$MEDIA_TRANSCODER->decodeBitmap(Ljava/lang/String;DD)Landroid/graphics/Bitmap;"
+internal val ORIGINAL_PHOTO_HOOKS = setOf(TRANSCODE_IMAGE, TRANSCODE_IMAGE_ASYNC, TRANSCODE_CONFIG, DECODE_BITMAP)
+private const val DECODE_FILE = "Landroid/graphics/BitmapFactory;->decodeFile(Ljava/lang/String;)Landroid/graphics/Bitmap;"
+private const val SCALE_BITMAP = "Landroid/graphics/Bitmap;->createScaledBitmap(Landroid/graphics/Bitmap;IIZ)Landroid/graphics/Bitmap;"
 private const val ORIGINAL_PHOTO = "Lapp/hushmessenger/extension/OriginalPhoto;"
 private const val FLAG_SECURE = 0x2000
 
@@ -270,7 +277,7 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
                 !AccessFlags.STATIC.isSet(method.accessFlags) &&
                 instructions.any { (it as? NarrowLiteralInstruction)?.narrowLiteral == FLAG_SECURE } &&
                 refs.any { it.toString() == "Landroid/view/Window;->addFlags(I)V" }) add("allow_screenshot")
-            if (cls.type == MEDIA_TRANSCODER && method.hookId().let { it == TRANSCODE_IMAGE || it == TRANSCODE_IMAGE_ASYNC }) add("original_photo")
+            if (cls.type == MEDIA_TRANSCODER && method.hookId() in ORIGINAL_PHOTO_HOOKS) add("original_photo")
             if (method.isVideoTranscode(strings)) {
                 add(ORIGINAL_VIDEO)
                 if (method.parsesTranscodeSource()) add(XHE_TRANSCODE)
@@ -394,6 +401,7 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     found.getValue(MARK_READ_BAR).addAll(markReadBar)
     found.getValue(MARK_READ_CLICK).addAll(markReadClick)
     found.getValue(SYSTEM_CAMERA).addAll(findSystemCamera(classes))
+    found.getValue(EXTERNAL_GALLERY).addAll(findExternalGallery(classes))
     for ((hook, methods) in findCustomFont(classes)) found.getValue(hook).addAll(methods)
     return found
 }
@@ -588,14 +596,73 @@ internal fun MutableMethod.validateSwitch() {
 
 internal fun MutableMethod.validateOriginalPhoto() {
     validateScratch()
-    if (AccessFlags.STATIC.isSet(accessFlags) || (hookId() != TRANSCODE_IMAGE && hookId() != TRANSCODE_IMAGE_ASYNC)) {
+    if (AccessFlags.STATIC.isSet(accessFlags) || hookId() !in ORIGINAL_PHOTO_HOOKS) {
         throw PatchException("Messenger controls: unexpected photo transcoder ${hookId()}")
+    }
+    when (hookId()) {
+        TRANSCODE_CONFIG -> transcodeConfigReturn()
+        DECODE_BITMAP -> decodeFileCall()
     }
 }
 
-/** Hands an HD photo back as its own file; OriginalPhoto returns null or false to let the stock transcode run. */
+/** getTranscodeConfig's one return, of the map it filled with the native transcoder's switch among the rest. */
+private fun Method.transcodeConfigReturn(): Int {
+    val code = implementation!!.instructions.toList()
+    val returns = code.indices.filter { code[it].opcode == Opcode.RETURN_OBJECT }
+    if (returns.size != 1 || code.none { ((it as? ReferenceInstruction)?.reference as? StringReference)?.string == "ENABLE_UIT_TRANSCODING" }) {
+        throw PatchException("Messenger controls: the photo transcoder's config changed in ${hookId()}")
+    }
+    return returns.single()
+}
+
+/** decodeBitmap's one whole-file decode, ahead of the shrink to its limits, which its new prologue has to reach first. */
+private fun Method.decodeFileCall(): Int {
+    val code = implementation!!.instructions.toList()
+    val calls = code.indices.filter { (code[it] as? ReferenceInstruction)?.reference?.toString() == DECODE_FILE }
+    val call = calls.singleOrNull()?.let(code::get)
+    val scale = code.indexOfFirst { (it as? ReferenceInstruction)?.reference?.toString() == SCALE_BITMAP }
+    if (call == null || call.opcode !in setOf(Opcode.INVOKE_STATIC, Opcode.INVOKE_STATIC_RANGE) || call.registerList().size != 1 ||
+        scale < calls.single() || 0 in jumpTargets()) {
+        throw PatchException("Messenger controls: the photo transcoder's decode changed in ${hookId()}")
+    }
+    return calls.single()
+}
+
+private fun Instruction.registerList(): List<Int> = when (this) {
+    is RegisterRangeInstruction -> (startRegister until startRegister + registerCount).toList()
+    is FiveRegisterInstruction -> listOf(registerC, registerD, registerE, registerF, registerG).take(registerCount)
+    else -> emptyList()
+}
+
+/**
+ * Hands an HD photo back as its own file; OriginalPhoto returns null or false to let the stock transcode run. On 583's
+ * route it picks the Java transcoder and lets decodeBitmap keep an HD photo's size, decoding no larger than it needs.
+ */
 internal fun MutableMethod.injectOriginalPhoto() {
     validateOriginalPhoto()
+    when (hookId()) {
+        TRANSCODE_CONFIG -> {
+            val at = transcodeConfigReturn()
+            val config = (getInstruction(at) as OneRegisterInstruction).registerA
+            // The return's own slot becomes the call, so anything that jumps to the return runs it too.
+            replaceInstruction(at, "invoke-static/range {v$config .. v$config}, $ORIGINAL_PHOTO->transcodeConfig(Ljava/util/Map;)V")
+            addInstructions(at + 1, "return-object v$config")
+            return
+        }
+        DECODE_BITMAP -> {
+            val at = decodeFileCall()
+            val path = getInstruction(at).registerList().single()
+            replaceInstruction(at, "invoke-static/range {v$path .. v$path}, $ORIGINAL_PHOTO->decodeFile(Ljava/lang/String;)Landroid/graphics/Bitmap;")
+            // The URL is p1 and the width and height limits p2-p3 and p4-p5, which Messenger reads only after this.
+            addInstructions(0, """
+                invoke-static/range {p1 .. p5}, $ORIGINAL_PHOTO->decodeWidth(Ljava/lang/String;DD)D
+                move-result-wide p2
+                invoke-static/range {p1 .. p5}, $ORIGINAL_PHOTO->decodeHeight(Ljava/lang/String;DD)D
+                move-result-wide p4
+            """.trimIndent())
+            return
+        }
+    }
     // The URL, target width and height, options, extras and (async) callback sit in one run of parameter registers.
     val call = if (returnType == "[B") """
         invoke-static/range {p1 .. p7}, $ORIGINAL_PHOTO->sync(Ljava/lang/String;DDLjava/lang/String;Ljava/util/Map;)[B

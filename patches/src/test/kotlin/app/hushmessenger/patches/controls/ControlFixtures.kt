@@ -45,6 +45,33 @@ internal fun fixtureClass(
         interfaces, null, emptySet(), fields, methods))
 }
 
+/** getTranscodeConfig cut down to the native transcoder's switch going into the map it returns. */
+internal val TRANSCODE_CONFIG_BODY = """
+    new-instance v2, Ljava/util/HashMap;
+    invoke-direct {v2}, Ljava/util/HashMap;-><init>()V
+    sget-object v1, Ljava/lang/Boolean;->TRUE:Ljava/lang/Boolean;
+    const-string v0, "ENABLE_UIT_TRANSCODING"
+    if-eqz v1, :done
+    invoke-virtual {v2, v0, v1}, Ljava/util/AbstractMap;->put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+    :done
+    return-object v2
+""".trimIndent()
+
+/** decodeBitmap (22 registers, so p1 is v17) cut down to its whole-file decode of v11 and the shrink to its limits. */
+internal val DECODE_BITMAP_BODY = """
+    move-object/from16 v11, p1
+    invoke-static {v11}, Landroid/graphics/BitmapFactory;->decodeFile(Ljava/lang/String;)Landroid/graphics/Bitmap;
+    move-result-object v1
+    move-wide/from16 v2, p2
+    double-to-int v2, v2
+    move-wide/from16 v4, p4
+    double-to-int v4, v4
+    const/4 v5, 0x1
+    invoke-static {v1, v2, v4, v5}, Landroid/graphics/Bitmap;->createScaledBitmap(Landroid/graphics/Bitmap;IIZ)Landroid/graphics/Bitmap;
+    move-result-object v1
+    return-object v1
+""".trimIndent()
+
 /** The stock app component factory's two entry points, cut down to the shape the screen-host hooks check. */
 internal fun factoryActivity(registers: Int = 12, id: String = INSTANTIATE_ACTIVITY) = fixtureMethod(id, """
     const/4 v0, 0x0

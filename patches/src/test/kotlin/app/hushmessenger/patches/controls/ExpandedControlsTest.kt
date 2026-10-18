@@ -408,6 +408,55 @@ class ExpandedControlsTest {
         }
     }
 
+    @Test fun originalPhotoPicksTheJavaTranscoderAndSizesItsDecode() {
+        val config = fixtureMethod(TRANSCODE_CONFIG, TRANSCODE_CONFIG_BODY, registers = 16)
+        val stockConfig = config.implementation!!.instructions.toList()
+        config.injectOriginalPhoto()
+        val configCode = config.implementation!!.instructions.toList()
+        val pick = configCode[configCode.size - 2] as RegisterRangeInstruction
+        assertEquals("Lapp/hushmessenger/extension/OriginalPhoto;->transcodeConfig(Ljava/util/Map;)V", (pick as ReferenceInstruction).reference.toString())
+        assertEquals(2, pick.startRegister)
+        assertEquals(1, pick.registerCount)
+        assertEquals(Opcode.RETURN_OBJECT, configCode.last().opcode)
+        assertEquals(2, (configCode.last() as OneRegisterInstruction).registerA)
+        assertEquals(stockConfig.dropLast(1), configCode.dropLast(2))
+        // The branch that skipped the put still lands on the call, which took over the return's place.
+        assertTrue(configCode.size - 2 in config.jumpTargets())
+
+        val decode = fixtureMethod(DECODE_BITMAP, DECODE_BITMAP_BODY, registers = 22)
+        val stockDecode = decode.implementation!!.instructions.toList()
+        decode.injectOriginalPhoto()
+        val decodeCode = decode.implementation!!.instructions.toList()
+        // p1 to p5, the URL and the two limits, are v17 to v21; each new limit lands back in its own pair.
+        for ((at, name) in listOf(0 to "decodeWidth", 2 to "decodeHeight")) {
+            val call = decodeCode[at] as RegisterRangeInstruction
+            assertEquals("Lapp/hushmessenger/extension/OriginalPhoto;->$name(Ljava/lang/String;DD)D", (call as ReferenceInstruction).reference.toString())
+            assertEquals(17, call.startRegister)
+            assertEquals(5, call.registerCount)
+            assertEquals(Opcode.MOVE_RESULT_WIDE, decodeCode[at + 1].opcode)
+            assertEquals(if (at == 0) 18 else 20, (decodeCode[at + 1] as OneRegisterInstruction).registerA)
+        }
+        val swapped = decodeCode[5] as RegisterRangeInstruction
+        assertEquals("Lapp/hushmessenger/extension/OriginalPhoto;->decodeFile(Ljava/lang/String;)Landroid/graphics/Bitmap;",
+            (swapped as ReferenceInstruction).reference.toString())
+        assertEquals(11, swapped.startRegister)
+        assertEquals(1, swapped.registerCount)
+        assertEquals(stockDecode.filterIndexed { i, _ -> i != 1 }, decodeCode.drop(4).filterIndexed { i, _ -> i != 1 })
+
+        val refused = listOf(
+            TRANSCODE_CONFIG to TRANSCODE_CONFIG_BODY.replace("ENABLE_UIT_TRANSCODING", "ENABLE_UIT_V2"),
+            TRANSCODE_CONFIG to TRANSCODE_CONFIG_BODY.replace("return-object v2", "if-eqz v1, :again\nreturn-object v2\n:again\nreturn-object v2"),
+            DECODE_BITMAP to DECODE_BITMAP_BODY.replace("move-result-object v1\nmove-wide",
+                "move-result-object v1\ninvoke-static {v11}, Landroid/graphics/BitmapFactory;->decodeFile(Ljava/lang/String;)Landroid/graphics/Bitmap;\nmove-wide"),
+            DECODE_BITMAP to DECODE_BITMAP_BODY.replace("invoke-static {v1, v2, v4, v5}, Landroid/graphics/Bitmap;->createScaledBitmap", "invoke-static {v1, v2, v4, v5}, LX/Fixture;->scale"),
+            DECODE_BITMAP to ":top\n" + DECODE_BITMAP_BODY.replace("return-object v1", "if-eqz v1, :top\nreturn-object v1"),
+        )
+        for ((id, body) in refused) assertFailsWith<PatchException>(body) { fixtureMethod(id, body, registers = 22).injectOriginalPhoto() }
+        assertFailsWith<PatchException> {
+            fixtureMethod(DECODE_BITMAP, DECODE_BITMAP_BODY, registers = 22, flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value).injectOriginalPhoto()
+        }
+    }
+
     @Test fun featureMetadataIsSpecificAndDuplicateSelectionIsRejected() {
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(ByteArrayInputStream(
             """<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application /></manifest>""".toByteArray(),

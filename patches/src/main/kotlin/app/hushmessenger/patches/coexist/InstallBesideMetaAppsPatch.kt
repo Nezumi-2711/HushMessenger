@@ -137,9 +137,18 @@ private fun renamed(name: String): String =
 private fun unsupportedApk(reason: String, versions: Map<String, List<Int>> = MessengerTarget.VERSIONS) =
     PatchException("$PATCH_NAME: $reason. Use an unmodified arm64 Messenger ${MessengerTarget.supportedApks(versions)}.")
 
+/**
+ * Every patch that touches Messenger runs this first, and Manager shows whichever dependent patch
+ * failed first ("Failed patch: Allow chat bubbles"). So the message opens with the build, not a
+ * patch name, for the line people read and paste.
+ */
 internal fun validateVersionCode(versionCode: String, versions: Map<String, List<Int>> = MessengerTarget.VERSIONS) {
     if (versions.values.none { versionCode.toIntOrNull() in it }) {
-        throw unsupportedApk("version code $versionCode is not supported", versions)
+        throw PatchException(
+            "This Messenger build (version code $versionCode) isn't supported yet, so nothing was patched. " +
+                "Use an unmodified arm64 Messenger ${MessengerTarget.supportedApks(versions)}. " +
+                "APKMirror lists the version code of every download.",
+        )
     }
 }
 

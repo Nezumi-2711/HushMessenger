@@ -66,6 +66,7 @@ private fun mirrored(classes: Iterable<ClassDef>, skip: Set<String>, find: (List
             val savedLog = messageLogContract
             val savedThreads = readReceiptThreadFields
             val savedRecipe = markReadRecipe
+            val savedGallery = galleryRoute
             try {
                 val starvedFound = find(starved)
                 val starvedDiffer = disagreements(starved, starvedFound, CompatMirror.controls(starved).filterKeys { it !in skip }, proved)
@@ -77,6 +78,7 @@ private fun mirrored(classes: Iterable<ClassDef>, skip: Set<String>, find: (List
                 messageLogContract = savedLog
                 readReceiptThreadFields = savedThreads
                 markReadRecipe = savedRecipe
+                galleryRoute = savedGallery
             }
         }
     }

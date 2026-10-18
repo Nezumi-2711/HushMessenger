@@ -104,7 +104,7 @@ private val INTERNAL_FILE_OPEN_BODY = """
 """.trimIndent()
 
 /** The chat fragment's result reader, cut down to what discovery checks. */
-private fun composerResultBody(chatCamera: Boolean = true) = listOfNotNull(
+internal fun composerResultBody(chatCamera: Boolean = true) = listOfNotNull(
     "const/16 v0, $CAMERA_REQUEST",
     "const/16 v0, $CHAT_CAMERA_REQUEST".takeIf { chatCamera },
     "const/16 v0, $EXTERNAL_MEDIA_REQUEST",
@@ -166,7 +166,7 @@ internal fun systemCameraFixture(chatCamera: Boolean = true): List<MutableClass>
     fixtureClass("LX/7Jp;", listOf(fixtureMethod(LAUNCH, CAMERA_LAUNCH_BODY, registers = 7))),
     fixtureClass("LX/7Rm;", listOf(fixtureMethod("LX/7Rm;->onActivityResult(IILandroid/content/Intent;)V", composerResultBody(chatCamera)))),
     fixtureClass("LX/5qL;", listOf(fixtureMethod(CHAT_CAMERA_FACTORY, chatCameraFactoryBody(), flags = STATIC))),
-    fixtureClass("LX/5xZ;", listOf(fixtureMethod(CHAT_CAMERA_START, CHAT_CAMERA_START_BODY, registers = 6))),
+    fixtureClass("LX/5xZ;", listOf(fixtureMethod(CHAT_CAMERA_START, CHAT_CAMERA_START_BODY, registers = 6)), interfaces = listOf("LX/6iH;")),
     fixtureClass("LX/5g7;", listOf(fixtureMethod(CHAT_CAPTURE, CHAT_CAPTURE_BODY, registers = 7, flags = STATIC))),
     fixtureClass("LX/0gQ;", listOf(fixtureMethod(THIRD_PARTY_URI_CHECK, THIRD_PARTY_URI_BODY, registers = 9))),
     fixtureClass("LX/0FQ;", listOf(fixtureMethod(INTERNAL_FILE_OPEN, INTERNAL_FILE_OPEN_BODY, registers = 5, flags = STATIC))),

@@ -31,7 +31,7 @@ public class SettingsNavigationTest {
             View root = screen.get().getWindow().getDecorView();
             TextView count = root.findViewWithTag("search_status");
             root.findViewWithTag("category_chats").performClick();
-            assertEquals(ExpectedTotals.shown(18), count.getText().toString());
+            assertEquals(ExpectedTotals.shown(19), count.getText().toString());
             assertEquals(View.GONE, ((View) root.findViewWithTag("people").getParent()).getVisibility());
             ((EditText) root.findViewWithTag("find_control")).setText("People You");
             assertEquals(View.VISIBLE, root.findViewWithTag("empty_state").getVisibility());
@@ -73,7 +73,7 @@ public class SettingsNavigationTest {
             clear.performClick();
             assertEquals("", search.getText().toString());
             assertTrue(root.findViewWithTag("category_chats").isSelected());
-            assertEquals(ExpectedTotals.shown(18), ((TextView) root.findViewWithTag("search_status")).getText().toString());
+            assertEquals(ExpectedTotals.shown(19), ((TextView) root.findViewWithTag("search_status")).getText().toString());
             assertTrue(search.hasFocus());
             assertEquals(View.GONE, clear.getVisibility());
         }
