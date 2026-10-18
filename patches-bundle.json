@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-10-14T22:47:03",
-  "description": "HushMessenger v0.24.0 for Messenger 583.0.0.29.95, all 6 arm64 builds. 58 patches. This release moves HushMessenger to Messenger 583.0.0.29.95, all six arm64 builds of it. 582 isn't accepted anymore, so update Messenger before you patch. It also adds new switches, among them Pin more chats, Bold and italic text, Hide People tab and Stop nearby scans, and settings get a restart button, Quick setups and a Report a problem row. Built by GitHub Actions from commit 151441c87a41, with build provenance attested. The patches weren't applied to a Messenger APK in CI. The .mpp is a patch bundle, not a Messenger APK. Source updates don't change installed apps. Keep the manager's existing signing key when updating.",
-  "download_url": "https://github.com/Nezumi-2711/HushMessenger/releases/download/v0.24.0/patches-0.24.0.mpp",
+  "created_at": "2026-10-18T22:47:36",
+  "description": "HushMessenger v0.25.0 for Messenger 583.0.0.29.95, all 14 arm64 builds. 61 patches. Built by GitHub Actions from commit 619fd4328b24, with build provenance attested. The patches weren't applied to a Messenger APK in CI. The .mpp is a patch bundle, not a Messenger APK. Source updates don't change installed apps. Keep the manager's existing signing key when updating.",
+  "download_url": "https://github.com/Nezumi-2711/HushMessenger/releases/download/v0.25.0/patches-0.25.0.mpp",
   "signature_download_url": "",
-  "version": "0.24.0"
+  "version": "0.25.0"
 }
