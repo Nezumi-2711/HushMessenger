@@ -46,18 +46,26 @@ private val CAMERA_LAUNCH_BODY = """
 
 internal const val CHAT_CAMERA_FACTORY = "LX/5qL;->A00(Landroid/content/Context;Landroid/os/Bundle;${ANDROIDX_FRAGMENT}" +
     "Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;LX/HJ6;)LX/6iH;"
-internal const val CHAT_CAMERA_START = "LX/5xZ;->BxF(Landroid/os/Bundle;)Z"
-internal const val CHAT_CAPTURE = "LX/5g7;->A01(${ACTIVATE_CAMERA}LX/5WP;LX/6iH;)V"
+internal const val CHAT_CAMERA_START = "LX/5xZ;->BxF(Landroid/os/Bundle;LX/6NI;)Z"
+internal const val CHAT_CAPTURE = "LX/99A;->BkO(Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/AZV;LX/6NI;" +
+    "Lcom/facebook/xapp/messaging/composer/event/ComposerEvent;)V"
+/** Messenger 584's inlined capture handler, after the dispatcher's own branch on the event type. Parameters start at v4. */
 private val CHAT_CAPTURE_BODY = """
-    invoke-static {}, LX/17v;->A0E()Landroid/os/Bundle;
+    instance-of v0, p4, $ACTIVATE_CAMERA
+    if-eqz v0, :other
+    iget-object v3, p0, LX/99A;->A08:LX/6iH;
+    check-cast p4, $ACTIVATE_CAMERA
+    invoke-static {}, LX/001;->A06()Landroid/os/Bundle;
     move-result-object v1
-    iget-boolean v0, p0, $ACTIVATE_CAMERA->A00:Z
+    iget-boolean v0, p4, $ACTIVATE_CAMERA->A00:Z
     if-eqz v0, :launch
     const-string v0, "camera_force_back_facing"
     const/4 v2, 0x1
     invoke-virtual {v1, v0, v2}, Landroid/os/BaseBundle;->putBoolean(Ljava/lang/String;Z)V
     :launch
-    invoke-interface {p2, v1}, LX/6iH;->C0d(Landroid/os/Bundle;)Z
+    invoke-interface {v3, v1, p3}, LX/6iH;->C0w(Landroid/os/Bundle;LX/6NI;)Z
+    return-void
+    :other
     return-void
 """.trimIndent()
 internal const val THIRD_PARTY_URI_CHECK = "LX/0gQ;->A00(Landroid/content/Context;Landroid/net/Uri;)Ljava/lang/Boolean;"
@@ -166,8 +174,8 @@ internal fun systemCameraFixture(chatCamera: Boolean = true): List<MutableClass>
     fixtureClass("LX/7Jp;", listOf(fixtureMethod(LAUNCH, CAMERA_LAUNCH_BODY, registers = 7))),
     fixtureClass("LX/7Rm;", listOf(fixtureMethod("LX/7Rm;->onActivityResult(IILandroid/content/Intent;)V", composerResultBody(chatCamera)))),
     fixtureClass("LX/5qL;", listOf(fixtureMethod(CHAT_CAMERA_FACTORY, chatCameraFactoryBody(), flags = STATIC))),
-    fixtureClass("LX/5xZ;", listOf(fixtureMethod(CHAT_CAMERA_START, CHAT_CAMERA_START_BODY, registers = 6)), interfaces = listOf("LX/6iH;")),
-    fixtureClass("LX/5g7;", listOf(fixtureMethod(CHAT_CAPTURE, CHAT_CAPTURE_BODY, registers = 7, flags = STATIC))),
+    fixtureClass("LX/5xZ;", listOf(fixtureMethod(CHAT_CAMERA_START, CHAT_CAMERA_START_BODY, registers = 7)), interfaces = listOf("LX/6iH;")),
+    fixtureClass("LX/99A;", listOf(fixtureMethod(CHAT_CAPTURE, CHAT_CAPTURE_BODY, registers = 9))),
     fixtureClass("LX/0gQ;", listOf(fixtureMethod(THIRD_PARTY_URI_CHECK, THIRD_PARTY_URI_BODY, registers = 9))),
     fixtureClass("LX/0FQ;", listOf(fixtureMethod(INTERNAL_FILE_OPEN, INTERNAL_FILE_OPEN_BODY, registers = 5, flags = STATIC))),
     // A story reply's launcher factory: same camera screen and request code, but not built from the chat's extras.
@@ -274,17 +282,20 @@ class SystemCameraTest {
         for (body in listOf(
             CHAT_CAPTURE_BODY.replace("move-result-object v1", "move-result-object v0"),
             CHAT_CAPTURE_BODY.replace("iget-boolean v0", "const/4 v1, 0x0\niget-boolean v0"),
+            // A branch from before the extras that lands between them and the launch skips the mark.
             "if-eqz p0, :launch\n$CHAT_CAPTURE_BODY",
+            // Two launches leave nothing to say which one is the capture.
+            CHAT_CAPTURE_BODY.replace("return-void\n:other", "invoke-interface {v3, v1, p3}, LX/6iH;->C0w(Landroid/os/Bundle;LX/6NI;)Z\nreturn-void\n:other"),
         )) {
-            val method = fixtureMethod(CHAT_CAPTURE, body, registers = 7, flags = STATIC)
+            val method = fixtureMethod(CHAT_CAPTURE, body, registers = 9)
             val before = method.code()
             assertFailsWith<PatchException> { method.injectSystemCamera() }
             assertEquals(before, method.code())
         }
-        val missing = systemCameraFixture().filterNot { it.type == "LX/5g7;" }
+        val missing = systemCameraFixture().filterNot { it.type == "LX/99A;" }
         assertFailsWith<PatchException> { validateControls(mapOf(SYSTEM_CAMERA to findSystemCamera(missing)), setOf(SYSTEM_CAMERA)) }
-        val duplicate = systemCameraFixture() + fixtureClass("LX/5g8;", listOf(fixtureMethod(
-            CHAT_CAPTURE.replace("LX/5g7;", "LX/5g8;"), CHAT_CAPTURE_BODY, registers = 7, flags = STATIC)))
+        val duplicate = systemCameraFixture() + fixtureClass("LX/99B;", listOf(fixtureMethod(
+            CHAT_CAPTURE.replace("LX/99A;", "LX/99B;"), CHAT_CAPTURE_BODY, registers = 9)))
         assertFailsWith<PatchException> { validateControls(mapOf(SYSTEM_CAMERA to findSystemCamera(duplicate)), setOf(SYSTEM_CAMERA)) }
     }
 
@@ -315,7 +326,7 @@ class SystemCameraTest {
             .replace("iget v0, p0, LX/5xZ;->A00:I\n", "iget v0, p0, LX/5xZ;->A00:I\n:again\n")
             .replace("move-result v3\nreturn v3", "move-result v3\nif-eqz v3, :again\nreturn v3")
         assertTrue(":again" in looped && "if-eqz v3, :again" in looped)
-        val start = fixtureMethod(CHAT_CAMERA_START, looped, registers = 6)
+        val start = fixtureMethod(CHAT_CAMERA_START, looped, registers = 7)
         assertTrue(start.isLauncherStart())
         assertFailsWith<PatchException> { start.validateSystemCamera() }
     }
@@ -368,8 +379,9 @@ class SystemCameraTest {
             val dex = DexFileFactory.loadDexContainer(apk.toFile(), Opcodes.forApi(35))
             val launches = findSystemCamera(dex.dexEntryNames.flatMap { dex.getEntry(it)!!.dexFile.classes })
             validateControls(mapOf(SYSTEM_CAMERA to launches), setOf(SYSTEM_CAMERA))
-            // The older listener, the chat screen's camera factory, its launcher's start and the photo's two checks.
-            assertEquals(6, launches.size, code)
+            // The older listener, the chat screen's camera factory, its launcher's start, the two composer dispatchers 584
+            // inlines the capture handler into, and the photo's two checks.
+            assertEquals(7, launches.size, code)
             for (method in launches) injectAndCheck(MutableMethod(method), "$code ${method.hookId()}")
         }
     }

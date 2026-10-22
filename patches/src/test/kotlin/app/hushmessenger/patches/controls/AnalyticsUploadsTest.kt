@@ -235,6 +235,13 @@ class AnalyticsUploadsTest {
         }
     }
 
+    @Test fun a584TaskIsFoundByItsStaleBuildMessage() {
+        // 584 reads the no build ID message from a string table, which leaves the stale build ID one as the mark.
+        val classes = analyticsUploadFixture(tasks = listOf(taskBase(), taskRunner(run = inlinedTask(mark = OLD_BUILD_UPLOAD_MARK))))
+        assertTrue("$TASK_RUNNER->run()V" in found(classes))
+        assertEquals(11, found(classes).size)
+    }
+
     @Test fun anInlinedTaskReportsSuccessOnceAndLeavesCompatTasksStock() {
         val method = inlinedTask()
         val before = method.code()

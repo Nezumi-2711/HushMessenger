@@ -123,6 +123,8 @@ public final class SettingsActivity extends Activity {
     private Button saveChoicesFile, readChoicesFile;
     private Button cancelChoicesFile;
     private TextView documentStatus;
+    /** The whole restore result. The toast holds only its first part, since Android 12+ cuts a toast after two lines. */
+    private TextView restoreStatus;
     private DocumentJob documentJob;
     static int documentTimeoutMillis = 30_000;
     private static final java.util.concurrent.Semaphore documentSlots = new java.util.concurrent.Semaphore(2);
@@ -130,9 +132,8 @@ public final class SettingsActivity extends Activity {
     private static Toast toast;
     static final String SUPPORT_PAGE = "https://ko-fi.com/X8K126YVER";
     /** Switches whose effect hasn't been confirmed on a phone. Each shows the Experimental badge. */
-    static final Set<String> EXPERIMENTAL = Set.of("ads", "pinned_chats", "nearby_scans", "phone_id_sync", "mark_read_button", "story_hold");
+    static final Set<String> EXPERIMENTAL = Set.of("pinned_chats", "nearby_scans", "phone_id_sync", "mark_read_button", "story_hold");
     static final String[][] CONTROLS = {
-        {"ads", "Hide inbox ads", "Hides ad cards in your chat list. Meta stopped selling these ads in November 2025, so this only matters if they come back.", "inbox"},
         {"people", "Hide People You May Know", "Hides suggested people in chats, search and stories, and on the People and Notifications tabs. Good if you only want people you know.", "inbox"},
         {"friend_requests", "Hide friend request cards", "Hides friend request cards in your chat list. It doesn't accept or decline anyone.", "inbox"},
         {"community_inbox", "Hide joined community chats", "Hides joined community chats from your main chat list. Search and community folders still show them. The list updates the next time it refreshes.", "inbox"},
@@ -165,6 +166,7 @@ public final class SettingsActivity extends Activity {
         {"original_video", "Send videos without re-encoding", "Sends a video as the original file when Messenger allows it, instead of a recompressed copy. Videos over 25 MB and edited videos are still compressed.", "conversations"},
         {"xhe_audio", "Fix videos that won't send", "Videos whose only sound is xHE-AAC and some Samsung screen recordings fail with \"Unable to send\", even in stock Messenger. Whether you share one into Messenger or pick it in a chat, the sound is converted to regular AAC, or the tag Samsung's recorder adds is dropped, before it's sent. The picture isn't touched.", "conversations"},
         {"disappearing_swipe", "Turn off the swipe up for disappearing messages", "Swiping up at the bottom of a chat no longer turns on disappearing messages. Scrolling works as usual, and you can still set them in the chat's settings.", "conversations"},
+        {"recent_media", "Hide the recent photo card", "Opening a chat right after you take a screenshot, photo or video no longer shows a card above the message box offering to send it. You can still pick it from the gallery.", "conversations"},
         {"auto_reply", "Auto reply", "Answers a message with a reply you write below when it has words you pick, or any message if you leave the words empty. Replies go out through Messenger's own notification reply, encrypted chats too, at most once every five minutes per chat. One-to-one chats only unless you allow groups. A chat with disappearing messages on gets no notification reply from Messenger, so it isn't answered.", "conversations"},
         {"system_camera", "Use the phone's camera app", "The camera button in a chat opens your phone's camera app. The photo opens in Messenger's editor, ready to send. Photos only.", "conversations"},
         {"external_gallery", "Open your gallery app", "The gallery button in a chat opens your phone's own gallery app. What you pick opens in Messenger's editor for that chat, ready to send.", "conversations"},
@@ -389,7 +391,8 @@ public final class SettingsActivity extends Activity {
         view.setOnLongClickListener(held -> {
             Settings.preferences.edit().putBoolean(HIDE_QUICK_SETUPS, true).apply();
             showQuickSetups();
-            feedback(text.get("quick_setups_hidden", text.format("app")), Toast.LENGTH_LONG);
+            // The section is hidden from the App tab, so the toast names the button on this tab that brings it back.
+            feedback(text.get("quick_setups_hidden", text.format("quick_setups_home"), text.format("choices")), Toast.LENGTH_LONG);
             return true;
         });
     }
@@ -685,6 +688,11 @@ public final class SettingsActivity extends Activity {
                 groupBody = ui.column();
                 groupBody.setPadding(ui.dp(16), ui.dp(4), ui.dp(16), ui.dp(4));
                 groupBody.setBackground(ui.shape(ui.surface, ui.line, 12));
+                // Lines only between shown controls: none above the first, none over the card's own border under the last.
+                android.graphics.drawable.GradientDrawable divider = ui.shape(ui.line, 0, 0);
+                divider.setSize(1, ui.dp(1));
+                groupBody.setDividerDrawable(divider);
+                groupBody.setShowDividers(LinearLayout.SHOW_DIVIDER_MIDDLE);
                 ui.add(group, groupBody, 10);
                 ui.add(content, group, 24);
                 groups.add(group);
@@ -1118,7 +1126,9 @@ public final class SettingsActivity extends Activity {
                     if (wrote) OwnFont.restore(prefs, OwnFont.NAME_KEY, before);
                 }
             });
-            return words.get("font_file_set", name);
+            // With the switch off a restart changes nothing, so the toast names the switch instead. The status line
+            // under it names the file, which can be too long for a toast.
+            return words.get(prefs.getBoolean(OwnFont.KEY, false) ? "font_file_set" : "font_file_set_off");
         } catch (FontFile.Refused refused) {
             android.util.Log.i("HushMessenger", "Font file refused: " + refused.reason);
             switch (refused.reason) {
@@ -1330,12 +1340,8 @@ public final class SettingsActivity extends Activity {
                 return super.performAccessibilityAction(host, action, arguments);
             }
         });
+        // A group draws the lines between its controls, so a control's own buttons sit above the line, not below it.
         row.setBackground(ui.interactive(ui.surface, 0, 0));
-        if (divided) {
-            row.setBackground(new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[] {
-                ui.shape(ui.line, 0, 0), new android.graphics.drawable.InsetDrawable(ui.interactive(ui.surface, 0, 0), 0, 0, 0, ui.dp(1))
-            }));
-        } else row.setBackground(ui.interactive(ui.surface, 0, 0));
         row.setPadding(0, ui.dp(divided ? 16 : 0), 0, ui.dp(divided ? 16 : 0));
         return row;
     }
@@ -1505,6 +1511,11 @@ public final class SettingsActivity extends Activity {
         documentStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         documentStatus.setVisibility(View.GONE);
         ui.add(choices, documentStatus, 8);
+        restoreStatus = ui.text("", 13, ui.muted, false);
+        restoreStatus.setTag("choices_restore_status");
+        restoreStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        restoreStatus.setVisibility(View.GONE);
+        ui.add(choices, restoreStatus, 8);
         cancelChoicesFile = ui.button(text.get("cancel_choices_file"));
         cancelChoicesFile.setTag("cancel_choices_file");
         cancelChoicesFile.setVisibility(View.GONE);
@@ -2385,6 +2396,7 @@ public final class SettingsActivity extends Activity {
 
     private void importChoices() {
         documentGeneration++;
+        restoreStatus.setVisibility(View.GONE);
         try {
             ClipboardManager clipboard = getSystemService(ClipboardManager.class);
             if (clipboard == null || !clipboard.hasPrimaryClip()) {
@@ -2427,16 +2439,27 @@ public final class SettingsActivity extends Activity {
         if (autoReplyLeftOff) supported.remove(AutoReply.KEY);
         String autoReply = autoReplyLeftOff ? " " + text.get("import_auto_reply_off") : "";
         if (supported.isEmpty()) {
-            feedback((autoReplyLeftOff ? text.get("import_auto_reply_off") : text.get("import_no_choices")) + skipped, Toast.LENGTH_LONG);
+            restoreResult(autoReplyLeftOff ? text.get("import_auto_reply_off") : text.get("import_no_choices"), skipped);
             return;
         }
         SharedPreferences.Editor editor = Settings.preferences.edit();
         for (Map.Entry<String, Boolean> choice : supported.entrySet()) editor.putBoolean(choice.getKey(), choice.getValue());
         editor.apply();
         refreshChoices();
-        // A backup can carry the pause, and a restored pause is easy to miss.
+        // A backup can carry the pause, and a restored pause is easy to miss, so it stays in the toast.
         String paused = Boolean.TRUE.equals(supported.get("paused")) ? " " + text.get("changes_paused") + "." : "";
-        feedback(text.count("imported", supported.size()) + paused + autoReply + skipped, Toast.LENGTH_LONG);
+        restoreResult(text.count("imported", supported.size()) + paused, autoReply + skipped);
+    }
+
+    /**
+     * The headline goes in the toast. With notes after it, the whole result also stays on the card under the buttons.
+     * Both parts are whole SettingsText sentences, already translated, so joining them adds no untranslated text.
+     */
+    @android.annotation.SuppressLint("SetTextI18n")
+    private void restoreResult(String headline, String notes) {
+        feedback(headline, Toast.LENGTH_LONG);
+        restoreStatus.setText(headline + notes);
+        restoreStatus.setVisibility(notes.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
@@ -2470,6 +2493,7 @@ public final class SettingsActivity extends Activity {
         DocumentJob job = new DocumentJob(this, uri, request, export);
         documentJob = job;
         documentBusy = true;
+        restoreStatus.setVisibility(View.GONE);
         saveChoicesFile.setEnabled(false);
         readChoicesFile.setEnabled(false);
         cancelChoicesFile.setVisibility(View.VISIBLE);
@@ -2542,12 +2566,14 @@ public final class SettingsActivity extends Activity {
             this.export = export;
             savedMessage = screen.text.get("choices_file_saved");
             failedMessage = screen.text.get("export_failed");
-            timeoutMessage = screen.text.get("choices_file_timeout");
+            // A read that runs out of time changes nothing. Only a save can leave a cut-off file behind.
+            String timeout = request == READ_CHOICES ? "choices_file_timeout_read" : "choices_file_timeout";
+            timeoutMessage = screen.text.get(timeout);
             generation = screen.documentGeneration;
             before = ChoiceCodec.encode(Settings.preferences, Settings.installed);
             deadline = () -> {
                 SettingsActivity current = owner.get();
-                if (current != null && current.documentJob == this) current.cancelDocumentJob("choices_file_timeout");
+                if (current != null && current.documentJob == this) current.cancelDocumentJob(timeout);
                 else if (!canceled) {
                     cancel();
                     Toast.makeText(context, timeoutMessage, Toast.LENGTH_LONG).show();

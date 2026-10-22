@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Reported issues
+
+- [#85](https://github.com/SysAdminDoc/HushMessenger/issues/85) New **Hide the recent photo card** switch under Conversations. Take a screenshot or a photo and Messenger puts a card above the message box offering to send it. With this on, the card doesn't show up. Anything you took is still in the gallery button when you want to send it. It starts off.
+
+### Changed and fixed
+
+- HushMessenger now patches Messenger 584.0.0.49.98 (version code 346814894) and no longer takes 583.0.0.29.95. That's the one arm64 build of 584 on [APKMirror](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-0-0-49-98-release/) so far. Every switch was checked against it again, so update Messenger to 584 before you repatch.
+- **Hide inbox ads** is gone. Meta stopped selling Messenger inbox ads in November 2025, and Messenger 584 took out the ad cards the switch used to filter, so there's nothing left for it to hide. If you pick patches by hand in Morphe, it just won't be in the list anymore.
+- In Morphe's patch list, the six photo and video patches now have their own **Photos and videos** group: original quality photos and videos, **Fix videos that won't send**, the camera and gallery app switches, and **Hide the recent photo card**. Conversations had grown too long to scan.
+- Hiding Quick setups with a long press now names the button that brings it back, **Quick setups section** under Your choices. The old message sent you to the App tab you were already on, and the button talked about a home page that doesn't exist.
+- A video picked in a chat whose access ran out before or during the send no longer gets **Fix videos that won't send** marked as failing in settings. It goes out the way Messenger would send it anyway.
+- If the phone's sound encoder won't start while a video's sound is being fixed, it's let go right away instead of staying held until Messenger closes.
+- Android 12 and newer show only two lines of a pop-up message and cut the rest with "...", which hid the useful part of 27 of HushMessenger's. They're shorter now and fit, from the font file and backup messages to the camera, gallery and restart ones.
+- Restoring your choices pops up how many came back, plus "Changes paused" when the backup paused them. Skipped choices and Auto reply staying off used to run past the end of that message. Now the whole result stays written under the backup buttons.
+- When reading a choices file takes too long, the message says your choices didn't change. It used to warn that a saved file may be cut off, which is only true when saving one.
+- If settings can't open from the side menu or the Messenger logo, two short messages now say so and then name the other way in. One message was too long and lost its second half.
+- Picking a font file while **Use your own font** is off now says to turn the switch on, instead of telling you to restart Messenger. The file's name stays on the line under the button, where a long one can't push the rest off the message.
+- In the settings cards, the line between switches now sits below a switch's own buttons (Keep the Profile button, the bubble choices, the font file, message log and auto reply buttons) instead of between the switch and them. The last switch in a card no longer draws a second line just above the card's edge.
+
+### Docs
+
+- The README's troubleshooting list now covers a cloned Messenger showing the settings icon again, chats and calls notifying twice because of the Facebook app, and restoring chats with a PIN when the Google Drive restore errors out.
+
+### Checks
+
+- A release can't go public until the whole app has been walked with that exact bundle on a release phone or an emulator. The publish stage now takes the walk's receipt as `-Walk` and stops before the tag or GitHub if the walk wasn't a full pass, saw a Messenger crash, ran on some other device, or patched with a different bundle.
+- The development release check, the one a held build goes through, fails when the source has no bundle timestamp. Before, a bundle and a source both missing one counted as a match there. The full release check already refused it, and now it says why.
+
 ## 0.25.0 (2026-10-18)
 
 ### Reported issues

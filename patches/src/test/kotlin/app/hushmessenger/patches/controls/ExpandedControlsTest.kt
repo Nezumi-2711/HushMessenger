@@ -8,7 +8,6 @@ import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction
@@ -247,34 +246,6 @@ class ExpandedControlsTest {
             body.replace("iget-object v1, p0, Lfixture/Gate;->cache", "iget-object v1, p0, Lfixture/Gate;->other"),
             body.replace("iget-object v0, p0", "iget-object v2, p0"),
         )) assertEquals(false to false, takenBy(changed), changed)
-    }
-
-    @Test fun adExitsCoverIncomingBranchesAndEachKeepTheirOwnResultRegister() {
-        val body = "goto/16 :first_exit\n" + "nop\n".repeat(1452) + ":first_exit\nreturn-object v7\n" +
-            "nop\n".repeat(8) + "return-object v2\n" + "nop\n".repeat(3)
-        val method = method("LX/2I2;", "D5T", 24, IMMUTABLE_LIST, body)
-        method.injectAdFilter()
-        val code = method.implementation!!.instructions
-        val addresses = code.runningFold(0) { address, instruction -> address + instruction.codeUnits }
-        // The branch to the first exit lands on its filter call, not on the return after it.
-        val target = code[addresses.indexOf((code[0] as OffsetInstruction).codeOffset)]
-        assertEquals(Opcode.INVOKE_STATIC, target.opcode)
-        assertEquals("$SETTINGS->filterInboxAds(Ljava/util/List;)Ljava/util/List;", (target as ReferenceInstruction).reference.toString())
-        val filters = code.filter { (it as? ReferenceInstruction)?.reference.toString().contains("->filterInboxAds(") }
-        assertEquals(listOf(7, 2), filters.map { (it as FiveRegisterInstruction).registerC })
-        val kept = code.indices.filter { code[it].opcode == Opcode.IF_EQZ }.map { index ->
-            code[addresses.indexOf(addresses[index] + (code[index] as OffsetInstruction).codeOffset)]
-        }
-        assertEquals(listOf(Opcode.RETURN_OBJECT, Opcode.RETURN_OBJECT), kept.map { it.opcode })
-        assertEquals(listOf(7, 2), kept.map { (it as com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction).registerA })
-        for (changed in listOf(
-            body.replace("return-object v2", "return-object v7"),
-            body.replace("return-object v7", "return-object v5"),
-            // An older release's v5 from both exits.
-            body.replace("return-object v7", "return-object v5").replace("return-object v2", "return-object v5"),
-        )) {
-            assertFailsWith<PatchException> { method("LX/2I2;", "D5T", 24, IMMUTABLE_LIST, changed).injectAdFilter() }
-        }
     }
 
     // Modelled on the drawer case of Messenger's merged click listener, where the row lands in a high register.

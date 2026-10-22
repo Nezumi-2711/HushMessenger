@@ -51,7 +51,6 @@ private const val LIST_BUILD = "Lcom/google/common/collect/ImmutableList\$Builde
 private const val LIST_COPY = "$IMMUTABLE_LIST->copyOf(Ljava/util/Collection;)$IMMUTABLE_LIST"
 /** What the newer bar's factory may declare it returns: the list it builds, or any type above it. */
 private val FACTORY_RETURNS = setOf("Ljava/lang/Object;", "Ljava/lang/Iterable;", "Ljava/util/Collection;", "Ljava/util/List;", IMMUTABLE_LIST)
-private const val RESOURCES = "Landroid/content/res/Resources;"
 private const val CONTEXT = "Landroid/content/Context;"
 
 /**
@@ -210,26 +209,25 @@ internal fun resolveMarkReadRecipe(classes: Iterable<ClassDef>): MarkReadRecipe?
     val block = (plugin..add).map { it to c[it] }
     val qr = byType[QR_BUTTON] ?: return null
 
-    // The builder comes from a static (Resources, I) factory; the rest of the block fills it in.
-    val factory = block.map { it.second }.firstOrNull { it.opcode == Opcode.INVOKE_STATIC && (it.markRef() as? MethodReference)?.params() == listOf(RESOURCES, "I") }
-    val builder = (factory?.markRef() as? MethodReference)?.returnType ?: return null
+    // The button's builder is the one class the block constructs from a label String; the rest of the block fills it in.
+    val builder = block.map { it.second }.mapNotNull { insn ->
+        (insn.markRef() as? MethodReference)?.takeIf { insn.opcode == Opcode.INVOKE_DIRECT && it.name == "<init>" && it.params() == listOf("Ljava/lang/String;") }?.definingClass
+    }.distinct().singleOrNull() ?: return null
+    val flow = try { ReadFlow(bar) } catch (_: PatchException) { return null }
     var mig: String? = null
     var builderScheme: String? = null
     var tagField: String? = null
     var listenerField: String? = null
     var iconProvider: String? = null
-    var iconSetter: String? = null
     var iconRead: FieldReference? = null
     var listener: String? = null
     var listenerCase: Int? = null
     var spec: String? = null
-    val consts = mutableMapOf<Int, Int>()
     val strings = mutableMapOf<Int, String>()
     var listenerRegister = -1
     for ((i, insn) in block) {
         val ref = insn.markRef()
         when {
-            insn is NarrowLiteralInstruction && insn.opcode in setOf(Opcode.CONST_4, Opcode.CONST_16) -> consts[(insn as OneRegisterInstruction).registerA] = insn.narrowLiteral
             ref is StringReference && insn is OneRegisterInstruction -> strings[insn.registerA] = ref.string
             insn.opcode == Opcode.IGET_OBJECT && ref is FieldReference -> {
                 if (ref.definingClass == THREAD_SCHEME && ref.type == MIG_SCHEME) mig = ref.id()
@@ -241,7 +239,6 @@ internal fun resolveMarkReadRecipe(classes: Iterable<ClassDef>): MarkReadRecipe?
                 val read = c[i - 1] as? TwoRegisterInstruction
                 if (c[i - 1].opcode == Opcode.IGET_OBJECT && read?.registerA == insn.markArgs().first()) iconProvider = ref.toString()
             }
-            insn.opcode == Opcode.INVOKE_STATIC && ref is MethodReference && ref.returnType == "V" && ref.params().size == 3 && ref.params()[2] == builder -> iconSetter = ref.toString()
             insn.opcode == Opcode.IPUT_OBJECT && ref is FieldReference && ref.definingClass == builder -> {
                 val value = (insn as TwoRegisterInstruction).registerA
                 when {
@@ -254,7 +251,10 @@ internal fun resolveMarkReadRecipe(classes: Iterable<ClassDef>): MarkReadRecipe?
                 val args = insn.markArgs()
                 if (ref.params() == listOf("Ljava/lang/Object;", "I") && args.getOrNull(1) == pluginRead.registerA) {
                     listener = ref.definingClass
-                    listenerCase = consts[args[2]]
+                    // The case is a constant set wherever the method keeps it, so it's the one definition that reaches the call.
+                    listenerCase = flow.definitionsAt(i, args[2]).singleOrNull()?.takeIf { it >= 0 }?.let { def ->
+                        (c[def] as? NarrowLiteralInstruction)?.takeIf { c[def].opcode == Opcode.CONST_4 || c[def].opcode == Opcode.CONST_16 }?.narrowLiteral
+                    }
                     listenerRegister = args[0]
                 } else if (ref.params() == listOf(builder)) spec = ref.definingClass
             }
@@ -273,8 +273,25 @@ internal fun resolveMarkReadRecipe(classes: Iterable<ClassDef>): MarkReadRecipe?
                 ic[k - 2].opcode == Opcode.INVOKE_STATIC && source != null && source.parameterTypes.isEmpty() && source.returnType == iconField.type) source.toString() else null
         }
     }.distinct().singleOrNull() ?: return null
-    val setter = iconSetter ?: return null
-    val iconType = setter.substringAfter('(').let { Regex("^\\[*(L[^;]+;)").find(it)?.groupValues?.get(1) } ?: return null
+    val provider = iconProvider ?: return null
+    val providerType = provider.substringAfter(')')
+    // The builder keeps its icon in an int field, which one public static helper on it fills from the provider's result.
+    val setters = byType[builder]?.methods?.filter { m ->
+        AccessFlags.STATIC.isSet(m.accessFlags) && AccessFlags.PUBLIC.isSet(m.accessFlags) && m.returnType == "V" &&
+            m.parameterTypes.map(CharSequence::toString).let { it.size == 3 && it[1] == providerType && it[2] == builder }
+    }.orEmpty()
+    val setterMethod = setters.singleOrNull() ?: return null
+    val setter = setterMethod.hookId()
+    val iconType = setterMethod.parameterTypes[0].toString()
+    val setterCode = setterMethod.markCode()
+    val resolve = setterCode.getOrNull(0)?.markRef() as? MethodReference
+    val store = setterCode.getOrNull(2)?.markRef() as? FieldReference
+    if (setterCode.map { it.opcode } != listOf(Opcode.INVOKE_VIRTUAL, Opcode.MOVE_RESULT, Opcode.IPUT, Opcode.RETURN_VOID) ||
+        resolve == null || resolve.definingClass != providerType || resolve.params() != listOf(iconType) || resolve.returnType != "I" ||
+        store == null || store.definingClass != builder || store.type != "I") return null
+    // The QR block does the same two steps inline, so the helper is the button's own way of setting an icon.
+    if (block.none { it.second.markRef()?.toString() == resolve.toString() } ||
+        block.none { it.second.opcode == Opcode.IPUT && it.second.markRef()?.toString() == store.toString() }) return null
     // Messenger's Mark as read icon, by its enum name.
     val icon = byType[iconType]?.methods?.singleOrNull { it.name == "<clinit>" }?.markCode()?.let { ic ->
         ic.indices.filter { (ic[it].markRef() as? StringReference)?.string == MARK_READ_ICON }.flatMap { k ->
@@ -307,7 +324,7 @@ internal fun resolveMarkReadRecipe(classes: Iterable<ClassDef>): MarkReadRecipe?
     if (builderClass.methods.none { it.name == "<init>" && it.parameterTypes.map(CharSequence::toString) == listOf("Ljava/lang/String;") }) return null
     // Every class the generated button names is public, since it lives in the extension's package.
     if (listOf(socketClass, builderClass, specClass, listenerClass).any { !it.isPublic() }) return null
-    if (listOf(iconSource, iconProvider ?: return null, setter).any { ref ->
+    if (listOf(iconSource, provider, setter).any { ref ->
             val owner = byType[ref.substringBefore("->")] ?: return null
             val method = owner.methods.singleOrNull { it.hookId() == ref } ?: return null
             !owner.isPublic() || !AccessFlags.PUBLIC.isSet(method.accessFlags) || !AccessFlags.STATIC.isSet(method.accessFlags)
@@ -334,7 +351,7 @@ internal fun resolveMarkReadRecipe(classes: Iterable<ClassDef>): MarkReadRecipe?
     // Its list goes back through ImmutableList.copyOf, since the bar casts what the factory returns.
     if (byType[IMMUTABLE_LIST]?.methods?.none { it.hookId() == LIST_COPY && AccessFlags.STATIC.isSet(it.accessFlags) && AccessFlags.PUBLIC.isSet(it.accessFlags) } != false) return null
     return MarkReadRecipe(bar, click, socketType, session, thread, scheme, mig ?: return null, builder, builderScheme ?: return null,
-        tag, listenerField ?: return null, iconSource, iconProvider!!, setter, icon, listenerType,
+        tag, listenerField ?: return null, iconSource, provider, setter, icon, listenerType,
         listenerCase ?: return null, target, specType, site, list, pluginRead.registerB, titleBar, titleBarSite)
 }
 

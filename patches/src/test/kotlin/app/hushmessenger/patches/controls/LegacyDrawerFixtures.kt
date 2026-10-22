@@ -13,15 +13,13 @@ internal data class DrawerFixtureMapping(
     val dispatcher: String, val iconBase: String, val icon: String, val glyph: String, val enums: String,
     /** The Settings icon is built in place instead of coming from the icon's static factory, a 582 form that's refused. */
     val inlineIcon: Boolean = false,
-    /** 583 builds its QR code row after Settings, from the same row class and its own folder key. */
+    /** 584 builds its QR code row after Settings, from the same row class and its own folder key. */
     val qrRow: Boolean = false,
 )
 
 private fun drawerMapping(refreshOwner: String) = when (refreshOwner) {
     "LX/9rv;" -> DrawerFixtureMapping("LX/CTJ;", "Ax4", "LX/HRf;", "LX/HRe;", "LX/Cfq;", "LX/Imx;", "LX/HNS;", "LX/1hJ;", "LX/0R2;")
-    "LX/9vp;" -> DrawerFixtureMapping("LX/Cgk;", "B08", "LX/HVv;", "LX/HVy;", "LX/CqN;", "LX/Izq;", "LX/HVn;", "LX/1hx;", "LX/0Qp;",
-        qrRow = true)
-    "LX/9sA;" -> DrawerFixtureMapping("LX/CcU;", "B08", "LX/HSN;", "LX/HSQ;", "LX/CmI;", "LX/IwW;", "LX/HSE;", "LX/1hx;", "LX/0Qp;",
+    "LX/8Yj;" -> DrawerFixtureMapping("LX/BgF;", "B0B", "LX/GKf;", "LX/GKz;", "LX/GJL;", "LX/H1A;", "LX/GNd;", "LX/1jJ;", "LX/0OS;",
         qrRow = true)
     else -> error("Unrecorded drawer mapping: $refreshOwner")
 }
@@ -59,7 +57,7 @@ private fun drawerConstructor(owner: String, params: List<String>, names: List<S
         append("return-void")
     }, registers = params.size + 2, flags = PUBLIC_CONSTRUCTOR)
 
-/** The Settings icon from the icon's static factory, as 583 gets it, or built in place the way 582 did. */
+/** The Settings icon from the icon's static factory, as 584 gets it, or built in place the way 582 did. */
 private fun settingsIcon(model: DrawerFixtureMapping, broken: String): String {
     val glyph = "${model.glyph}->${if (broken == "glyph") "A64" else "A65"}:${model.glyph}"
     return (if (model.inlineIcon) listOf(

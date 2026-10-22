@@ -133,12 +133,12 @@ val restoreTrustPatch = bytecodePatch(
         val threads = ThreadsLinkLauncherFingerprint.method
         val instagram = InstagramLinkLauncherFingerprint.method
         // Both launchers are checked before either changes.
-        val sites = listOf(threads.linkLaunchSite("Threads"), instagram.linkLaunchSite("Instagram"))
+        val sites = listOf(threads.linkLaunchSites("Threads"), instagram.linkLaunchSites("Instagram"))
 
         method.answerOriginalSigners(packageInfo, signers)
         FbnsPackageCheckFingerprint.method.routeFbnsSigners()
-        threads.reportLinkLaunch(sites[0])
-        instagram.reportLinkLaunch(sites[1])
+        threads.reportLinkLaunches(sites[0])
+        instagram.reportLinkLaunches(sites[1])
     }
 }
 
@@ -146,15 +146,16 @@ val restoreTrustPatch = bytecodePatch(
 internal class LinkLaunchSite(val index: Int, val launcher: Int, val context: Int, val intent: Int)
 
 /**
- * The one call in a Threads or Instagram link launcher that hands the view intent to Meta's family
- * launcher: an instance `(Context, Intent)Z` call whose answer is dropped by the return-void straight
- * after it. The context is the launcher's own Context parameter and the intent is the one the
- * method built from the link with a static `(Uri)Intent` call, not written again before the launch,
- * and nothing after the launch jumps back to it. The launcher
+ * The calls in a Threads or Instagram link launcher that hand the view intent to Meta's family
+ * launcher: instance `(Context, Intent)Z` calls whose answer is dropped by the return-void straight
+ * after each. Since 584 Instagram's has two, one for when an Instagram is installed and one for
+ * when none is. The context is the launcher's own Context parameter and the intent is the one the
+ * method built from the link with a static `(Uri)Intent` call, not written again before a launch,
+ * and nothing after a launch jumps back to it. The launcher
  * register is dead after the call, so it can take the answer. `invoke-static` names 4-bit
  * registers, so all three must be v15 or lower. Anything else stops the patch before any edit.
  */
-internal fun MutableMethod.linkLaunchSite(app: String): LinkLaunchSite {
+internal fun MutableMethod.linkLaunchSites(app: String): List<LinkLaunchSite> {
     fun refuse(why: String): Nothing = throw PatchException("Restore screens on re-signed builds: $app's link launcher $why")
     if (AccessFlags.STATIC.isSet(accessFlags)) refuse("is static")
     val code = implementation!!.instructions.toList()
@@ -164,32 +165,35 @@ internal fun MutableMethod.linkLaunchSite(app: String): LinkLaunchSite {
             it.returnType == "Z" && it.parameterTypes.map(CharSequence::toString) == listOf(CONTEXT, INTENT)
         } == true
     }
-    val (index, launch) = launches.singleOrNull() ?: refuse("has ${launches.size} launches, expected 1")
-    if (code.getOrNull(index + 1)?.opcode != Opcode.RETURN_VOID) refuse("uses its launch's answer")
-    if (index + 1 in jumpTargets()) refuse("jumps to the return after its launch")
-    val call = launch as FiveRegisterInstruction
-    val site = LinkLaunchSite(index, call.registerC, call.registerD, call.registerE)
-    if (setOf(site.launcher, site.context, site.intent).size != 3 || maxOf(site.launcher, site.context, site.intent) > 15) {
-        refuse("launches with v${site.launcher}, v${site.context} and v${site.intent}, which the call can't name")
-    }
-    if (site.context != implementation!!.registerCount - 2) refuse("launches with a Context other than its own")
+    if (launches.isEmpty()) refuse("has no launches")
     val builds = code.withIndex().filter { (_, instruction) ->
         instruction.opcode == Opcode.INVOKE_STATIC && instruction.method()?.let {
             it.returnType == INTENT && it.parameterTypes.map(CharSequence::toString) == listOf(URI)
         } == true
     }
     val build = builds.singleOrNull()?.index ?: refuse("builds ${builds.size} intents from its link, expected 1")
-    val result = code.getOrNull(build + 1)
-    if (build > index || result?.opcode != Opcode.MOVE_RESULT_OBJECT || (result as OneRegisterInstruction).registerA != site.intent) {
-        refuse("launches an intent other than the one it built from the link")
+    val targets = jumpTargets()
+    return launches.map { (index, launch) ->
+        if (code.getOrNull(index + 1)?.opcode != Opcode.RETURN_VOID) refuse("uses its launch's answer")
+        if (index + 1 in targets) refuse("jumps to the return after its launch")
+        val call = launch as FiveRegisterInstruction
+        val site = LinkLaunchSite(index, call.registerC, call.registerD, call.registerE)
+        if (setOf(site.launcher, site.context, site.intent).size != 3 || maxOf(site.launcher, site.context, site.intent) > 15) {
+            refuse("launches with v${site.launcher}, v${site.context} and v${site.intent}, which the call can't name")
+        }
+        if (site.context != implementation!!.registerCount - 2) refuse("launches with a Context other than its own")
+        val result = code.getOrNull(build + 1)
+        if (build > index || result?.opcode != Opcode.MOVE_RESULT_OBJECT || (result as OneRegisterInstruction).registerA != site.intent) {
+            refuse("launches an intent other than the one it built from the link")
+        }
+        // The catch block after the return reuses the register for its log message, which can't reach the launch.
+        val rewrites = (build + 2 until index).count { i ->
+            code[i].opcode.setsRegister() && (code[i] as? OneRegisterInstruction)?.registerA == site.intent
+        }
+        if (rewrites != 0) refuse("writes its intent's register again before its launch")
+        if (backJumps(code, index)) refuse("jumps back to its launch from after it")
+        site
     }
-    // The catch block after the return reuses the register for its log message, which can't reach the launch.
-    val rewrites = (build + 2 until index).count { i ->
-        code[i].opcode.setsRegister() && (code[i] as? OneRegisterInstruction)?.registerA == site.intent
-    }
-    if (rewrites != 0) refuse("writes its intent's register again before its launch")
-    if (backJumps(code, index)) refuse("jumps back to its launch from after it")
-    return site
 }
 
 /** Whether a branch or switch case after [index] lands at or before it. */
@@ -210,15 +214,20 @@ private fun backJumps(code: List<Instruction>, index: Int): Boolean {
     }
 }
 
-/** Hands the family launcher's dropped answer, with the context and intent it got, to the extension. */
-internal fun MutableMethod.reportLinkLaunch(site: LinkLaunchSite) {
-    addInstructions(
-        site.index + 1,
-        """
-            move-result v${site.launcher}
-            invoke-static { v${site.launcher}, v${site.context}, v${site.intent} }, $FAMILY_LINK_LAUNCHED
-        """,
-    )
+/**
+ * Hands each family launch's dropped answer, with the context and intent it got, to the extension.
+ * The last site goes first so the earlier indices still point at their launches.
+ */
+internal fun MutableMethod.reportLinkLaunches(sites: List<LinkLaunchSite>) {
+    for (site in sites.sortedByDescending { it.index }) {
+        addInstructions(
+            site.index + 1,
+            """
+                move-result v${site.launcher}
+                invoke-static { v${site.launcher}, v${site.context}, v${site.intent} }, $FAMILY_LINK_LAUNCHED
+            """,
+        )
+    }
 }
 
 /**

@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 
 internal const val SYNTHETIC_SEARCH_BAR = "LX/28Z;->A00(LX/1SO;LX/1vn;Lcom/facebook/mig/scheme/interfaces/MigColorScheme;Z)LX/1GG;"
 
-private const val CHECK = "invoke-virtual {v4, v9}, LX/2Sx;->A09(Lcom/facebook/auth/usersession/FbUserSession;)Z"
+private const val CHECK = "invoke-interface {v4, v9}, LX/Ik1;->BqJ(Lcom/facebook/auth/usersession/FbUserSession;)Z"
 
 /** The search bar builder as Messenger writes it: the Meta AI check, then the plain hint unless the check passed. */
 private fun searchBar(check: String = CHECK, branch: String = "if-eqz v8, :pick", jump: String = "", id: String = SYNTHETIC_SEARCH_BAR) =
@@ -73,6 +73,8 @@ class AiSearchHintTest {
         validateControls(found, setOf(AI_SEARCH_HINT))
         val before = method.code()
         val result = method.searchHintSite()!!
+        // An invoke-virtual check (583) is read the same way.
+        assertEquals(result, searchBar(check = CHECK.replace("invoke-interface", "invoke-virtual")).searchHintSite())
         injectControl(AI_SEARCH_HINT, mapOf(AI_SEARCH_HINT to listOf(method)))
         assertHintHook(before, method.code(), result, "builder")
         // Two builders that look alike are ambiguous, so neither is hooked.
@@ -83,7 +85,8 @@ class AiSearchHintTest {
     @Test fun aShapeThatMovedIsntFoundOrStopsBeforeAnyEdit() {
         // Discovery skips a builder whose hint isn't picked by a session check right before getString.
         val moved = mapOf(
-            "check takes no session" to searchBar(check = "invoke-virtual {v4}, LX/2Sx;->A09()Z"),
+            "check takes no session" to searchBar(check = "invoke-interface {v4}, LX/Ik1;->BqJ()Z"),
+            "check is a static call" to searchBar(check = CHECK.replace("invoke-interface", "invoke-static")),
             "check answers a number" to searchBar(check = CHECK.replace(")Z", ")I")),
             "plain hint on not-equal" to searchBar(branch = "if-nez v8, :pick"),
             "branch tests another register" to searchBar(branch = "if-eqz v2, :pick"),

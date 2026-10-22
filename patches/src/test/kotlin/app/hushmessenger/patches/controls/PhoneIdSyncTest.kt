@@ -95,11 +95,11 @@ class PhoneIdSyncTest {
         validateControls(mirroredControls(phoneIdFixture()), setOf(PHONE_ID_SYNC))
     }
 
-    @Test fun everyProfileHooksTheSameTwoMethods() {
-        // All six 583 builds keep the requester's names, so the synthetic labels are the real ones.
-        for (profile in listOf(SYNTHETIC_PROFILE, BASE_PROFILE, PROFILE_346611351)) {
-            assertEquals(setOf(SYNTHETIC_PHONE_ID_LIST, SYNTHETIC_PHONE_ID_SYNC), profile.hooks.getValue(PHONE_ID_SYNC))
-        }
+    @Test fun eachProfileHooksOneRequestersListAndSync() {
+        assertEquals(setOf(SYNTHETIC_PHONE_ID_LIST, SYNTHETIC_PHONE_ID_SYNC), SYNTHETIC_PROFILE.hooks.getValue(PHONE_ID_SYNC))
+        // 584 renames the requester.
+        assertEquals(setOf("LX/1HB;->A03(LX/1HB;)Ljava/util/ArrayList;", "LX/1HB;->A06(Ljava/lang/String;)V"),
+            BASE_PROFILE.hooks.getValue(PHONE_ID_SYNC))
     }
 
     // The switch says Messenger stops reading the app list and asking Meta's apps for their ID. A build that asks some

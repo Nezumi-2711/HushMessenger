@@ -17,8 +17,7 @@ internal object MessengerTarget {
 
     /** Each supported version name and the version codes of its checked arm64 builds. */
     val VERSIONS: Map<String, List<Int>> = mapOf(
-        "583.0.0.29.95" to listOf(346611350, 346611351, 346611353, 346611369, 346611386, 346611418, 346611420, 346611422,
-            346611423, 346611435, 346611436, 346611438, 346611439, 346611440),
+        "584.0.0.49.98" to listOf(346814894),
     )
     val VERSION_CODES = VERSIONS.values.flatten()
 
@@ -27,7 +26,7 @@ internal object MessengerTarget {
     private const val META_SIGNER =
         "911d604446084ca7f4760b775bfc160fa8702441240a7258645d7a72c4312d27"
 
-    /** "583.0.0.29.95 APK (version code 346611351 or 346611369)", joined with " or " across version names. */
+    /** "584.0.0.49.98 APK (version code 346814894)", joined with " or " across version names. */
     fun supportedApks(versions: Map<String, List<Int>> = VERSIONS): String =
         versions.entries.joinToString(" or ") { (name, codes) -> "$name APK (version code ${codes.joinToString(" or ")})" }
 

@@ -280,7 +280,7 @@ internal fun prepareLegacyDrawer(
         drawerChanged("settings row receiver changed")
     val iconResult = add.drawerOrigin(rowCallAt, rowArgs[3])
     val addCode = add.drawerCode()
-    // The factory below rebuilds the Settings icon the same way the native builder does: every 583 build calls the
+    // The factory below rebuilds the Settings icon the same way the native builder does: 584 calls the
     // icon's static factory with the glyph. An icon constructed in place in the builder is refused.
     val icon = addCode.getOrNull(iconResult - 1)?.drawerRef() as? MethodReference ?: drawerChanged("settings icon factory changed")
     if (addCode[iconResult].opcode != Opcode.MOVE_RESULT_OBJECT || addCode[iconResult - 1].opcode != Opcode.INVOKE_STATIC ||

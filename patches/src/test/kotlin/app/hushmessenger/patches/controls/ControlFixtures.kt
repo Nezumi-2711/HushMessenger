@@ -6,6 +6,7 @@ import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.iface.Field
 import com.android.tools.smali.dexlib2.iface.Method
+import com.android.tools.smali.dexlib2.iface.ClassDef
 import com.android.tools.smali.dexlib2.immutable.ImmutableClassDef
 import com.android.tools.smali.dexlib2.immutable.ImmutableField
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
@@ -313,23 +314,23 @@ internal fun peopleStoryMethod(
 
 /**
  * Instructions 0-20 match the supported APKs; one instruction stands in for the list reset. The suggestions logger
- * comes first, so the owner is p1, and false lives in v3 of eight registers, with the [logger] load in v4. The older
+ * comes first, so the owner is p1, and false lives in v5 of ten registers, with the [logger] load in v3. The older
  * shapes are only there to be refused: with [inlinedReset] one call replaces the two at 14-15, so the server flag moves
  * from 17 to 16, and without [logged] the reader takes only its owner and keeps false in v4 of six registers.
  */
 internal fun peopleJewelMethod(
     key: String = "LX/JTx;->A01:LX/1BL;",
     resultRegister: String = "v0",
-    serverFlag: String = "72344188615735036L",
+    serverFlag: String = "72344171435866083L",
     serverTarget: String = ":shown",
     flags: Int = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value,
     inlinedReset: Boolean = false,
     extraFlag: Boolean = false,
     extraFlagValue: String = serverFlag,
     logged: Boolean = true,
-    default: String = if (logged) "v3" else "v4",
-    registers: Int = if (logged) 8 else 6,
-    logger: String = if (logged) "v4" else "v3",
+    default: String = if (logged) "v5" else "v4",
+    registers: Int = if (logged) 10 else 6,
+    logger: String = "v3",
 ) = fixtureMethod(if (logged) PEOPLE_JEWEL_HOOK else PEOPLE_JEWEL_HOOK.replace("(LX/3nt;", "("), """
     iget-object v0, ${if (logged) "p1" else "p0"}, LX/HAR;->A07:LX/17Z;
     invoke-static {v0}, LX/17Z;->A0F(LX/17Z;)Ljava/lang/Object;
@@ -577,4 +578,30 @@ internal fun storyPreviewClass(
         (0 until cards).map { ImmutableField(MONTAGE_BUCKET_PREVIEW, "A0${5 + it}", MONTAGE_CARD, final, null, null, null) }
     val methods = listOf(fixtureMethod(STORY_PREVIEW_INIT, init, registers = 23), fixtureMethod(STORY_PREVIEW_RING, ring, registers = 5)) + extraMethods
     return MutableClass(ImmutableClassDef(MONTAGE_BUCKET_PREVIEW, final, "Ljava/lang/Object;", emptyList(), null, emptySet(), fields, methods))
+}
+
+/** 584's shape: the observer callback only forwards its list to a static supplier method that holds the count logic. */
+internal fun inboxForwardedClasses(
+    forwardTarget: String = "A06",
+    callsite: String = "invoke-static {v0, p1}, $INBOX_SUPPLIER->$forwardTarget($INBOX_SUPPLIER" + "Ljava/util/List;)V",
+    guard: String = "if-eqz p1, :end",
+): List<ClassDef> {
+    val logic = fixtureMethod("$INBOX_SUPPLIER->A06($INBOX_SUPPLIER" + "Ljava/util/List;)V", listOf(
+        "invoke-interface {p1}, Ljava/util/List;->size()I",
+        "move-result v4",
+        "iget v3, p0, $INBOX_SUPPLIER->A02:I",
+        "iput v4, p0, $INBOX_SUPPLIER->A03:I",
+        "const/4 v2, 0x5",
+        "if-lt v4, v3, :listed",
+        "const/4 v2, 0x1",
+        ":listed",
+        "iput v2, p0, $INBOX_SUPPLIER->A00:I",
+        "return-void",
+    ).joinToString("\n"), 7, AccessFlags.PUBLIC.value or AccessFlags.STATIC.value)
+    val observer = fixtureClass(INBOX_OBSERVER, listOf(
+        fixtureMethod("$INBOX_OBSERVER-><init>($INBOX_SUPPLIER)V", "invoke-direct {p0}, Ljava/lang/Object;-><init>()V\nreturn-void", 2),
+        fixtureMethod("$INBOX_OBSERVER->CjP(Ljava/util/List;)V", listOf(
+            "iget-object v0, p0, $INBOX_OBSERVER->A00:$INBOX_SUPPLIER", guard, callsite, ":end", "return-void").joinToString("\n"), 3),
+    ), flags = AccessFlags.PUBLIC.value or AccessFlags.FINAL.value)
+    return listOf(inboxSupplierClass(subscribe = listOf(inboxSubscribeMethod(), logic)), observer)
 }

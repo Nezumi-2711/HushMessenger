@@ -407,6 +407,8 @@ public final class Settings {
     }
     /** Asked each time a chat's swipe up for disappearing messages could start; true keeps the gesture from starting. */
     public static boolean blockDisappearingSwipe() { return enabled("disappearing_swipe"); }
+    /** Asked each time a chat looks for a photo or video taken just before it opened; true shows no card for it. */
+    public static boolean hideRecentMedia() { return enabled("recent_media"); }
     /** Messenger's own original-upload check allows 25 MB, so a bigger video keeps its re-encode. */
     static final long ORIGINAL_VIDEO_MAX_BYTES = 25L * 1024 * 1024;
     /**
@@ -1159,22 +1161,6 @@ public final class Settings {
         view.setTypeface(chosen, style);
     }
 
-    /** Null means return the exact original list. Only typed ad rows are removed. */
-    public static List<?> filterInboxAds(List<?> items) {
-        if (!enabled("ads") || items == null || items.isEmpty()) return null;
-        List<Object> filtered = null;
-        for (int index = 0; index < items.size(); index++) {
-            Object item = items.get(index);
-            boolean ad = false;
-            for (Class<?> type = item == null ? null : item.getClass(); type != null; type = type.getSuperclass()) {
-                if ("com.facebook.messaging.business.inboxads.common.InboxAdsItem".equals(type.getName())) { ad = true; break; }
-            }
-            if (ad && filtered == null) filtered = new ArrayList<>(items.subList(0, index));
-            if (!ad && filtered != null) filtered.add(item);
-        }
-        return filtered;
-    }
-
     /** Only the section renderer receives a copy. The captured native snapshot is never changed. */
     public static List<?> filterJoinedCommunityInboxRows(List<?> items, Object callback, Object filter) {
         return filterJoinedCommunityInboxRows(items, () -> isAllChatsFilter(filter) && HostScreens.isMainInboxScope(callback, filter),
@@ -1420,8 +1406,7 @@ public final class Settings {
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
             hookFailedPrivately("menu_row", "Opening the drawer entry failed", error);
             if (recognized) try {
-                android.widget.Toast.makeText(context, new SettingsText(context).get("settings_open_failed"),
-                        android.widget.Toast.LENGTH_LONG).show();
+                showOpenFailed(context);
             } catch (RuntimeException | LinkageError feedbackError) {
                 hookFailedPrivately("menu_row", "Drawer entry feedback unavailable", feedbackError);
             }
@@ -1525,7 +1510,7 @@ public final class Settings {
      * handling of that press. The patch calls this just before each title's long press handler returns, with the
      * toolbar's context. Messenger hands the press to a title shortcut plugin that only its internal builds have, so for
      * everyone else it did nothing but vibrate. Like the Menu rows, this doesn't ask Pause or safe mode first: it's a way back into settings to undo
-     * either. A launch Android refuses gets the same toast as the side menu row, pointing at the launcher shortcut.
+     * either. A launch Android refuses gets the same toasts as the side menu row, pointing at the launcher shortcut.
      */
     public static void logoLongPressed(Context context) {
         if (context == null) return;
@@ -1534,12 +1519,18 @@ public final class Settings {
         } catch (RuntimeException | LinkageError error) {
             hookFailed("menu_row", "Opening settings from a tab title failed", error);
             try {
-                android.widget.Toast.makeText(context, new SettingsText(context).get("settings_open_failed"),
-                        android.widget.Toast.LENGTH_LONG).show();
+                showOpenFailed(context);
             } catch (RuntimeException | LinkageError feedbackError) {
                 hookFailedPrivately("menu_row", "Tab title feedback unavailable", feedbackError);
             }
         }
+    }
+
+    /** Android 12 and later show two lines of a toast, so one says settings didn't open and the next names the way in. */
+    private static void showOpenFailed(Context context) {
+        SettingsText words = new SettingsText(context);
+        android.widget.Toast.makeText(context, words.get("settings_open_failed"), android.widget.Toast.LENGTH_SHORT).show();
+        android.widget.Toast.makeText(context, words.get("settings_open_instead"), android.widget.Toast.LENGTH_LONG).show();
     }
 
     private static final java.util.concurrent.atomic.AtomicBoolean MENU_LISTENER_LOGGED = new java.util.concurrent.atomic.AtomicBoolean();

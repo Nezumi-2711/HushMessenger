@@ -36,6 +36,9 @@ internal const val RUN = "run()V"
 /** GooglePlayUploadService's own task code logs this when a task carries no build ID, in every build family. */
 internal const val BOUND_UPLOAD_MARK = "Job with no build ID, cancelling job"
 
+/** And this when its build ID is stale. 584 moved the first message into a string table, so either one marks it. */
+internal const val OLD_BUILD_UPLOAD_MARK = "Job with old build ID: %d, cancelling job, expected: %d"
+
 /**
  * The components Messenger's analytics logger uploads through, and the methods Android calls to start each one. They
  * keep their names in every build because the manifest starts them by name.
@@ -78,7 +81,9 @@ internal fun findAnalyticsUploads(classes: Iterable<ClassDef>): List<Method> {
 private fun Method.references() =
     implementation?.instructions?.mapNotNull { (it as? ReferenceInstruction)?.reference }.orEmpty()
 
-private fun Method.holdsBoundUploadMark() = references().any { (it as? StringReference)?.string == BOUND_UPLOAD_MARK }
+private fun Method.holdsBoundUploadMark() = references().any {
+    (it as? StringReference)?.string.let { mark -> mark == BOUND_UPLOAD_MARK || mark == OLD_BUILD_UPLOAD_MARK }
+}
 
 private fun Method.typeChecks(opcode: Opcode) = implementation?.instructions
     ?.filter { it.opcode == opcode }?.map { (it as ReferenceInstruction).reference.toString() }.orEmpty()
@@ -113,7 +118,7 @@ internal fun Method.isInlinedUploadTask() =
 /**
  * Google Play can also bind GooglePlayUploadService and hand it a task through the binder its obfuscated GcmTaskService
  * base returns from onBind, so the task never passes onStartCommand. The base runs each task on a Runnable that reports
- * the result and frees the tag. Every 583 build inlines the upload into that Runnable's run(), which is the hook.
+ * the result and frees the tag. 584 inlines the upload into that Runnable's run(), which is the hook.
  * Unrelated GcmTaskServiceCompat tasks share the Runnable and stay stock.
  */
 internal fun findBoundUploadTasks(classes: Iterable<ClassDef>): List<Method> {

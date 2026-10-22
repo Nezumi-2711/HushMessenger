@@ -1,7 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application android:label="HushMessenger UI preview" android:allowBackup="false" android:supportsRtl="true" android:theme="@android:style/Theme.Material.NoActionBar">
         <meta-data android:name="hush.preview" android:value="true" />
-        <meta-data android:name="hush.feature.ads" android:value="true" />
         <meta-data android:name="hush.feature.people" android:value="true" />
         <meta-data android:name="hush.feature.friend_requests" android:value="true" />
         <meta-data android:name="hush.feature.community_inbox" android:value="true" />
@@ -33,6 +32,7 @@
         <meta-data android:name="hush.feature.original_video" android:value="true" />
         <meta-data android:name="hush.feature.xhe_audio" android:value="true" />
         <meta-data android:name="hush.feature.disappearing_swipe" android:value="true" />
+        <meta-data android:name="hush.feature.recent_media" android:value="true" />
         <meta-data android:name="hush.feature.system_camera" android:value="true" />
         <meta-data android:name="hush.feature.external_gallery" android:value="true" />
         <meta-data android:name="hush.feature.text_style" android:value="true" />

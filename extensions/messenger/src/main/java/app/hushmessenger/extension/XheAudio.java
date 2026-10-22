@@ -275,7 +275,14 @@ public final class XheAudio {
         long claimed = 0;
         try {
             String name;
-            try (InputStream in = input != null ? new FileInputStream(input) : context.getContentResolver().openInputStream(uri)) {
+            InputStream opened;
+            try {
+                opened = input != null ? new FileInputStream(input) : context.getContentResolver().openInputStream(uri);
+            } catch (SecurityException lapsed) {
+                // The grant can run out between the first look and this copy, and then Messenger can't read it either.
+                return null;
+            }
+            try (InputStream in = opened) {
                 if (in == null) throw new IOException("the picked video could not be opened");
                 name = copyAndName(in, copied, limits, work);
             }
@@ -525,7 +532,7 @@ public final class XheAudio {
         return needsFix(source -> source.setDataSource(context, uri, null));
     }
 
-    private interface Opener {
+    interface Opener {
         void open(MediaExtractor source) throws IOException;
     }
 
@@ -569,7 +576,7 @@ public final class XheAudio {
             try {
                 try {
                     opener.open(source);
-                } catch (IOException | IllegalArgumentException unreadable) {
+                } catch (IOException | IllegalArgumentException | SecurityException unreadable) {
                     return null;
                 }
                 Tracks tracks = new Tracks();
@@ -605,7 +612,10 @@ public final class XheAudio {
         }
     }
 
-    /** [hasSamsungBox] for a content Uri. A provider that only streams can't be read that way, so it has none. */
+    /**
+     * [hasSamsungBox] for a content Uri. A provider that only streams can't be read that way, so it has none, and
+     * neither has one whose read grant has lapsed.
+     */
     static boolean hasSamsungBox(Context context, Uri uri) {
         try {
             ParcelFileDescriptor descriptor = context.getContentResolver().openFileDescriptor(uri, "r");
@@ -614,7 +624,7 @@ public final class XheAudio {
             try (FileInputStream in = new ParcelFileDescriptor.AutoCloseInputStream(descriptor)) {
                 return !samsungBoxes(in.getChannel()).isEmpty();
             }
-        } catch (IOException unreadable) {
+        } catch (IOException | SecurityException unreadable) {
             return false;
         }
     }
@@ -1016,7 +1026,7 @@ public final class XheAudio {
         if (rate != sampleRate || 2 * channels != frameBytes) throw new IOException("the decoder changed its sound format");
     }
 
-    private static MediaCodec startEncoder(int sampleRate, int channels) throws IOException {
+    static MediaCodec startEncoder(int sampleRate, int channels) throws IOException {
         MediaFormat format = MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channels);
         format.setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC);
         format.setInteger(MediaFormat.KEY_BIT_RATE, BIT_RATE);
@@ -1024,9 +1034,28 @@ public final class XheAudio {
         MediaCodec encoder = name != null
             ? MediaCodec.createByCodecName(name)
             : MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
-        encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-        encoder.start();
-        return encoder;
+        return startedOrReleased(encoder, () -> {
+            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            encoder.start();
+        }, encoder::release);
+    }
+
+    /**
+     * Hands back [codec] once [setUp] ran, else runs [release] and rethrows. The caller only gets the codec on a normal
+     * return, so a configure or start that throws would leave it held with nothing left to release it.
+     */
+    static <T> T startedOrReleased(T codec, Runnable setUp, Runnable release) {
+        try {
+            setUp.run();
+            return codec;
+        } catch (RuntimeException failed) {
+            try {
+                release.run();
+            } catch (RuntimeException alsoFailed) {
+                failed.addSuppressed(alsoFailed);
+            }
+            throw failed;
+        }
     }
 
     private static void stalled(long lastWork, int idle, String what) throws IOException {

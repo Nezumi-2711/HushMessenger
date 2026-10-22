@@ -231,8 +231,8 @@ class RestoreTrustShapesTest {
     fun `a link launcher's dropped answer reaches the extension and nothing stock moves`() {
         val method = threadsLauncher()
         val before = method.body()
-        val site = method.linkLaunchSite("Threads")
-        method.reportLinkLaunch(site)
+        val site = method.linkLaunchSites("Threads").single()
+        method.reportLinkLaunches(listOf(site))
         val after = method.body()
         assertEquals(before.size + 2, after.size)
         assertEquals(before, after.filterIndexed { i, _ -> i != site.index + 1 && i != site.index + 2 })
@@ -245,12 +245,59 @@ class RestoreTrustShapesTest {
         assertEquals(Opcode.RETURN_VOID, after[site.index + 3].opcode)
     }
 
+    /**
+     * Instagram's link launcher since 584, cut down: an installed Instagram gets the link's intent with its
+     * package set through one launcher, and without one the intent goes through another. Both drop the answer.
+     */
+    private fun instagramLauncher(second: String = "invoke-virtual {v0, p1, v1}, $FAMILY_LAUNCH") = fixtureMethod(
+        "LX/KUx;->A00(Landroid/content/Context;Landroid/net/Uri;)V",
+        """
+            const-string v0, "com.instagram.android"
+            invoke-static {p2}, $INTENT_FROM_LINK
+            move-result-object v1
+            if-eqz v0, :none
+            invoke-virtual {v1, v0}, Landroid/content/Intent;->setPackage(Ljava/lang/String;)Landroid/content/Intent;
+            iget-object v0, p0, LX/KUx;->A01:LX/0Ho;
+            invoke-virtual {v0, p1, v1}, $FAMILY_LAUNCH
+            return-void
+            :none
+            iget-object v0, p0, LX/KUx;->A01:LX/0Ho;
+            $second
+            return-void
+            const-string v0, "InstagramLinkLauncher"
+            return-void
+        """.trimIndent(),
+        registers = 7,
+        flags = AccessFlags.PUBLIC.value or AccessFlags.FINAL.value,
+    )
+
+    @Test
+    fun `both of a link launcher's launches reach the extension`() {
+        val method = instagramLauncher()
+        val before = method.body()
+        val sites = method.linkLaunchSites("Instagram")
+        assertEquals(2, sites.size)
+        method.reportLinkLaunches(sites)
+        val after = method.body()
+        assertEquals(before.size + 4, after.size)
+        val calls = after.withIndex().filter { (it.value as? ReferenceInstruction)?.reference?.toString() == FAMILY_LINK_LAUNCHED }
+        assertEquals(2, calls.size)
+        for ((i, call) in calls) {
+            assertEquals(FAMILY_LAUNCH, (after[i - 2] as ReferenceInstruction).reference.toString(), "each call follows a launch")
+            assertEquals(Opcode.MOVE_RESULT, after[i - 1].opcode)
+            assertEquals(listOf(3, 0, 5, 1), (call as FiveRegisterInstruction).let { listOf(it.registerCount, it.registerC, it.registerD, it.registerE) })
+            assertEquals(Opcode.RETURN_VOID, after[i + 1].opcode)
+        }
+        assertEquals(before, after.filterIndexed { i, _ -> calls.none { (c, _) -> i == c || i == c - 1 } })
+    }
+
     @Test
     fun `a link launcher the call can't be placed in stops the patch before any edit`() {
-        val cases = mapOf(
+        val cases = listOf(
             "uses its launch's answer" to threadsLauncher(after = "move-result v0"),
-            "has 2 launches" to threadsLauncher(before = "invoke-virtual {v0, p1, v1}, $FAMILY_LAUNCH"),
-            "has 0 launches" to threadsLauncher(launch = "invoke-virtual {v0, p1, v1}, LX/0RU;->A0B(Landroid/content/Context;Landroid/content/Intent;)V"),
+            "uses its launch's answer" to threadsLauncher(before = "invoke-virtual {v0, p1, v1}, $FAMILY_LAUNCH"),
+            "other than its own" to instagramLauncher(second = "invoke-virtual {v0, v2, v1}, $FAMILY_LAUNCH"),
+            "has no launches" to threadsLauncher(launch = "invoke-virtual {v0, p1, v1}, LX/0RU;->A0B(Landroid/content/Context;Landroid/content/Intent;)V"),
             "jumps to the return" to threadsLauncher(before = "if-eqz v2, :done"),
             "other than its own" to threadsLauncher(launch = "invoke-virtual {v0, v2, v1}, $FAMILY_LAUNCH"),
             "can't name" to threadsLauncher(launch = "invoke-virtual {v0, p1, v0}, $FAMILY_LAUNCH"),
@@ -267,7 +314,7 @@ class RestoreTrustShapesTest {
         )
         for ((message, method) in cases) {
             val before = method.body()
-            val failure = assertThrows(PatchException::class.java) { method.linkLaunchSite("Threads") }
+            val failure = assertThrows(PatchException::class.java) { method.linkLaunchSites("Threads") }
             assertEquals(true, failure.message.orEmpty().contains(message), "$message: ${failure.message}")
             assertEquals(before, method.body(), message)
         }
@@ -296,9 +343,12 @@ class RestoreTrustShapesTest {
                 assertEquals(1, launchers.size, "$code $tag")
                 val method = MutableMethod(launchers.single())
                 val before = method.body()
-                val site = method.linkLaunchSite(tag)
-                method.reportLinkLaunch(site)
-                assertEquals(before, method.body().filterIndexed { i, _ -> i != site.index + 1 && i != site.index + 2 }, "$code $tag")
+                val sites = method.linkLaunchSites(tag)
+                method.reportLinkLaunches(sites)
+                val after = method.body()
+                val calls = after.indices.filter { (after[it] as? ReferenceInstruction)?.reference?.toString() == FAMILY_LINK_LAUNCHED }
+                assertEquals(sites.size, calls.size, "$code $tag")
+                assertEquals(before, after.filterIndexed { i, _ -> calls.none { c -> i == c || i == c - 1 } }, "$code $tag")
             }
         }
     }

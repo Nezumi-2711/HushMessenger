@@ -27,7 +27,7 @@ private fun hintChanged(detail: String): Nothing =
 /**
  * Index of the move-result that holds the Meta AI search check. The search bar builder picks its hint like this:
  *
- *     invoke-virtual {vC, vSession}, <check>(FbUserSession)Z
+ *     invoke-interface {vC, vSession}, <check>(FbUserSession)Z   (invoke-virtual on 583)
  *     move-result vH                                   <- true: "Ask Meta AI or search"
  *     invoke-virtual {vX}, <context>()Resources
  *     move-result-object vRes
@@ -51,7 +51,7 @@ internal fun Method.searchHintSite(): Int? {
         val plain = code[pick - 3]
         val branch = code[pick - 2]
         val aiHint = code[pick - 1]
-        if (code[pick - 7].opcode != Opcode.INVOKE_VIRTUAL || check.returnType != "Z" ||
+        if ((code[pick - 7].opcode != Opcode.INVOKE_VIRTUAL && code[pick - 7].opcode != Opcode.INVOKE_INTERFACE) || check.returnType != "Z" ||
             check.parameterTypes.map { it.toString() } != listOf(FB_USER_SESSION) || code[result].opcode != Opcode.MOVE_RESULT ||
             resources?.returnType != "Landroid/content/res/Resources;" || code[pick - 4].opcode != Opcode.MOVE_RESULT_OBJECT ||
             (code[pick - 4] as OneRegisterInstruction).registerA != get.registerC ||

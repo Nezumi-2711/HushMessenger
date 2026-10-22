@@ -30,7 +30,7 @@ class ControlDiscoveryTest {
     )
 
     private fun completeFixture(): List<MutableClass> {
-        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS, XHE_AUDIO, XHE_TRANSCODE, DISAPPEARING_SWIPE, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, PINNED_CHATS, NEARBY_SCANS, WIFI_IDENTITY, PHONE_ID_SYNC, STORY_HOLD, MARK_READ_BAR, MARK_READ_CLICK, TEXT_STYLE, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, EXTERNAL_GALLERY, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
+        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS, XHE_AUDIO, XHE_TRANSCODE, DISAPPEARING_SWIPE, RECENT_MEDIA, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, PINNED_CHATS, NEARBY_SCANS, WIFI_IDENTITY, PHONE_ID_SYNC, STORY_HOLD, MARK_READ_BAR, MARK_READ_CLICK, TEXT_STYLE, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, EXTERNAL_GALLERY, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
             ids.map { id ->
                 if (key == "people_jewel") return@map peopleJewelMethod()
                 if (key == "people_tab") return@map peopleTabMethod()
@@ -76,7 +76,8 @@ class ControlDiscoveryTest {
                         new-instance v1, Ljava/util/ArrayList;
                         invoke-static {}, $IMMUTABLE_LIST->builder()$LIST_BUILDER
                         move-result-object v2
-                        invoke-static {v2, v1}, LX/34B;->A0l(${LIST_BUILDER}Ljava/lang/Iterable;)$IMMUTABLE_LIST
+                        invoke-virtual {v2, v1}, $LIST_BUILDER->addAll(Ljava/lang/Iterable;)$LIST_BUILDER
+                        invoke-static {v2}, LX/32c;->A00($LIST_BUILDER)$IMMUTABLE_LIST
                         move-result-object v3
                         return-void
                     """.trimIndent()
@@ -99,16 +100,9 @@ class ControlDiscoveryTest {
                         else -> "const-string v0, \"Unknown ViewHolder\"\nreturn-void"
                     }
                     "browser" -> "const/4 v0, 0x0\nreturn v0"
-                    "ads" -> """
-                        const-string v0, "messaging.inbox.itemlistprocessor.ItemListProcessorInterfaceSpec"
-                        const-string v0, "processItems"
-                        const-string v0, "new_friend_bump_threads"
-                        const/4 v0, 0x0
-                        return-object v0
-                    """.trimIndent()
                     else -> error("Missing synthetic resolver fixture for $key")
                 }
-                val staticGate = (key in pluginGates || key == "ai_search" || key == "growth_story_card" || key == APP_ICONS || key == "keep_unsent") &&
+                val staticGate = (key in pluginGates || key == "ai_search" || key == "growth_story_card" || key == APP_ICONS) &&
                     !id.substringAfter('(').startsWith(')')
                 fixtureMethod(id, body, registers = when (key) { "original_photo" -> 22; ORIGINAL_VIDEO -> 24;"chat_animation", "chat_legacy" -> 5; else -> 8 }, flags = AccessFlags.PUBLIC.value or
                     if (staticGate) AccessFlags.STATIC.value else 0)
@@ -124,11 +118,11 @@ class ControlDiscoveryTest {
             }
             fixtureClass(type, grouped + extra, originals[type],
                 if (type == "LX/8xp;") listOf(SCREEN_CAPTURE_CALLBACK) else emptyList())
-        } + listOf(fixtureClass(AD_ITEM), fixtureClass(IMMUTABLE_LIST, listOf(
+        } + listOf(fixtureClass(IMMUTABLE_LIST, listOf(
             fixtureMethod("$IMMUTABLE_LIST->copyOf(Ljava/util/Collection;)$IMMUTABLE_LIST",
                 "const/4 v0, 0x0\nreturn-object v0", flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value),
         )), peopleJewelKeyHolder(), storyCardKeyHolder(), debugDumperFixture(), messageWrapperFixture(type = "LX/K1Y;"), searchFieldFixture()) +
-            aiStickerCellFixture() + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + aiMentionsFixture() + searchBarFixture() + aiMentionRowsFixture() + shareCopyFixture() + disappearingSwipeFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + pinnedChatLimitFixture() + nearbyScansFixture() + phoneIdFixture() + storyHoldFixture() + markReadFixture(immutableList = false) + textFieldFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + externalGalleryFixture() + customFontFixture() +
+            aiStickerCellFixture() + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + aiMentionsFixture() + searchBarFixture() + aiMentionRowsFixture() + shareCopyFixture() + disappearingSwipeFixture() + recentMediaFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + pinnedChatLimitFixture() + nearbyScansFixture() + phoneIdFixture() + storyHoldFixture() + markReadFixture(immutableList = false) + textFieldFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + externalGalleryFixture() + customFontFixture() +
             syntheticHooks.getValue("screenshot_viewers").map { screenshotViewerFixture(it) }
                 .groupBy { it.definingClass }.map { (type, group) -> fixtureClass(type, group) })
         .let { classes ->
@@ -269,17 +263,6 @@ class ControlDiscoveryTest {
         val missing = mirroredControls(fixture.filter { it !== peopleClass })
         assertFailsWith<PatchException> { validateControls(missing, setOf("people")) }
         validateControls(missing, setOf("moments"))
-    }
-
-    @Test fun adResolutionRequiresTheHostTypeAndThePublicStaticCopyMethod() {
-        for (missing in listOf(AD_ITEM, IMMUTABLE_LIST)) {
-            val found = mirroredControls(completeFixture().filter { it.type != missing })
-            assertFailsWith<PatchException> { validateControls(found, setOf("ads")) }
-            validateControls(found, setOf("people"))
-        }
-        val fixture = completeFixture()
-        fixture.single { it.type == IMMUTABLE_LIST }.methods.single().setAccessFlags(AccessFlags.PUBLIC.value)
-        assertTrue(mirroredControls(fixture).getValue("ads").isEmpty())
     }
 
     @Test fun misleadingPluginSignaturesAndChangedRunnableNamesDoNotMatch() {

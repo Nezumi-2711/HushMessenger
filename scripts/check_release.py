@@ -133,8 +133,13 @@ def verify(root, bundle=None, evidence=None, release_tag=None, checksums=None):
         attributes.get("Version") == version,
         "Bundle manifest version differs from source",
     )
+    # Two missing values are equal, so a source without its timestamp would compare nothing.
     require(
-        attributes.get("Timestamp") == properties.get("bundleTimestampMillis"),
+        re.fullmatch(r"\d+", properties.get("bundleTimestampMillis", "")),
+        "Source has no bundle timestamp",
+    )
+    require(
+        attributes.get("Timestamp") == properties["bundleTimestampMillis"],
         "Bundle timestamp differs from source",
     )
 
@@ -304,8 +309,13 @@ def verify_development(root, bundle, evidence, held_index_sha256, checksums=None
             line.split(": ", 1) for line in manifest.splitlines() if ": " in line
         )
     require(attributes.get("Version") == version, "Bundle version differs from source")
+    # Two missing values are equal, so a source without its timestamp would compare nothing.
     require(
-        attributes.get("Timestamp") == properties.get("bundleTimestampMillis"),
+        re.fullmatch(r"\d+", properties.get("bundleTimestampMillis", "")),
+        "Source has no bundle timestamp",
+    )
+    require(
+        attributes.get("Timestamp") == properties["bundleTimestampMillis"],
         "Bundle timestamp differs from source",
     )
     fresh = read_json(evidence)

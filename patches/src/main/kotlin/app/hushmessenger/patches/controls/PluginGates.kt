@@ -5,6 +5,7 @@ import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.ClassDef
 import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
@@ -131,7 +132,7 @@ internal val pluginGates = mapOf(
 
 /**
  * Redex's string tables: static (I)String methods that switch on the key straight to a constant, by method and key.
- * 583 keeps some kill switch names in one, so a gate loads its anchor with `const/16 key` and a lookup, not a literal.
+ * 583 kept some kill switch names in one, so a gate loads its anchor with `const/16 key` and a lookup, not a literal.
  */
 internal fun redexStringTables(classes: Iterable<ClassDef>): Map<String, Map<Int, String>> = buildMap {
     for (method in classes.asSequence().flatMap { it.methods }) {
@@ -155,15 +156,27 @@ internal fun redexStringTables(classes: Iterable<ClassDef>): Map<String, Map<Int
     }
 }
 
+/** The tables of the APK being patched, kept for validators that follow a lookup instead of a literal. */
+internal var activeStringTables: Map<String, Map<Int, String>> = emptyMap()
+
+/** The string the call at [at] looks up in a [redexStringTables] table by a constant key loaded right before it, if it is one. */
+internal fun List<Instruction>.tableLookupAt(at: Int, tables: Map<String, Map<Int, String>>): String? {
+    val call = getOrNull(at) as? FiveRegisterInstruction ?: return null
+    val table = tables[(call as? ReferenceInstruction)?.reference?.toString()] ?: return null
+    val key = getOrNull(at - 1) ?: return null
+    return if (call.opcode != Opcode.INVOKE_STATIC || call.registerCount != 1 ||
+        key.opcode !in setOf(Opcode.CONST_4, Opcode.CONST_16, Opcode.CONST) || (key as? OneRegisterInstruction)?.registerA != call.registerC) null
+    else table[(key as? NarrowLiteralInstruction)?.narrowLiteral]
+}
+
+/** The index of the instruction that loads [value]: its literal, or the call that looks it up in a string table. */
+internal fun List<Instruction>.indexOfAnchor(value: String, tables: Map<String, Map<Int, String>> = activeStringTables): Int =
+    indices.indexOfFirst { at ->
+        ((this[at] as? ReferenceInstruction)?.reference as? StringReference)?.string == value || tableLookupAt(at, tables) == value
+    }
+
 /** The strings [this] looks up in a [redexStringTables] table by a constant key loaded right before the call. */
 internal fun Method.tableStrings(tables: Map<String, Map<Int, String>>): Set<String> {
     val code = implementation?.instructions?.toList() ?: return emptySet()
-    return (1 until code.size).mapNotNull { at ->
-        val call = code[at] as? FiveRegisterInstruction ?: return@mapNotNull null
-        val table = tables[(call as? ReferenceInstruction)?.reference?.toString()] ?: return@mapNotNull null
-        val key = code[at - 1]
-        if (call.opcode != Opcode.INVOKE_STATIC || call.registerCount != 1 ||
-            key.opcode !in setOf(Opcode.CONST_4, Opcode.CONST_16, Opcode.CONST) || (key as? OneRegisterInstruction)?.registerA != call.registerC) null
-        else table[(key as? NarrowLiteralInstruction)?.narrowLiteral]
-    }.toSet()
+    return code.indices.mapNotNull { code.tableLookupAt(it, tables) }.toSet()
 }

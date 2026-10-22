@@ -23,7 +23,7 @@ internal const val NEARBY_SCANS = "nearby_scans"
 
 /**
  * Messenger's foreground location loop. While the app is in front it queues one task over and over that asks for a
- * location, starts a Wi-Fi scan and starts a Bluetooth scan. It keeps this name on every 583 build.
+ * location, starts a Wi-Fi scan and starts a Bluetooth scan. It keeps this name in 584.
  */
 internal const val FOREGROUND_LOCATION = "Lcom/facebook/location/foreground/ForegroundLocationFrameworkController;"
 

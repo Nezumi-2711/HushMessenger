@@ -186,8 +186,8 @@ class SpoofSelfReadsTest {
         assertTrue(spoofSelfReadsPatch in spoofPackageVersionPatch.dependencies)
     }
 
-    /** Every supported stock build has the same 13 own reads, AppComponentManager's mismatch check among them. */
-    @Test fun everyStockBuildHasThirteenOwnVersionReads() {
+    /** Every supported stock build has the same 15 own reads, AppComponentManager's mismatch check among them. */
+    @Test fun everyStockBuildHasFifteenOwnVersionReads() {
         val root = System.getenv("HUSH_NATIVE_FIXTURES")
         assumeTrue(root != null, "Set HUSH_NATIVE_FIXTURES to the exact stock fixture directory")
         val apks = Files.list(Path.of(root!!)).use { it.filter { p -> p.toString().endsWith(".apk") }.sorted().toList() }
@@ -196,9 +196,10 @@ class SpoofSelfReadsTest {
             val dex = DexFileFactory.loadDexContainer(apk.toFile(), Opcodes.forApi(35))
             val methods = dex.dexEntryNames.flatMap { dex.getEntry(it)!!.dexFile.classes.flatMap { it.methods } }
             val found = planSelfVersionReads(methods)
-            for (anchor in listOf("LX/03O;->A03(", "Lcom/facebook/appcomponentmanager/AppComponentManagerService;->A06(",
-                "Lcom/facebook/acra/CrashTimeDataCollector;->getPackageManagerVersionCode(", "LX/015;->logOnTraceEnd(",
-                "Lcom/mapbox/mapboxsdk/http/HttpIdentifier;->getIdentifier(")) {
+            for (anchor in listOf("LX/037;->A03(", "Lcom/facebook/appcomponentmanager/AppComponentManagerService;->A06(",
+                "Lcom/facebook/acra/CrashTimeDataCollector;->getPackageManagerVersionCode(", "LX/010;->logOnTraceEnd(",
+                "Lcom/mapbox/mapboxsdk/http/HttpIdentifier;->getIdentifier(",
+                "Lcom/meta/hatch/ui/settings/bugreport/data/HatchBugReportSender\$send\$1;->invokeSuspend(")) {
                 assertTrue(found.any { it.startsWith(anchor) }, "$apk $anchor")
             }
             // Android's ART, Google Play services and WebView keep what Android reports.

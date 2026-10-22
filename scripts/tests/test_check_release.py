@@ -366,6 +366,43 @@ class ReleaseChecks(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "v1.2.2 is missing"):
             check(held)
 
+    def test_a_bundle_and_source_both_without_a_timestamp_fail(self):
+        evidence = self.root / "patches/build/reports/catalog-evidence.json"
+
+        def rebuild(stamp):
+            """Rebuilds the bundle, its evidence and the source with [stamp] on both sides, or none on either."""
+            line = f"Timestamp: {stamp}\r\n" if stamp else ""
+            with zipfile.ZipFile(self.bundle, "w") as archive:
+                archive.writestr("META-INF/MANIFEST.MF", f"Manifest-Version: 1.0\r\nVersion: 1.2.3\r\n{line}\r\n")
+                archive.writestr("classes.dex", b"fixture")
+                archive.writestr("extensions/messenger.mpe", b"fixture")
+            digest = hashlib.sha256(self.bundle.read_bytes()).hexdigest()
+            evidence.write_text(
+                json.dumps({"bundle": self.bundle.name, "sha256": digest, "dexValidated": True, "catalog": self.catalog}),
+                encoding="utf-8",
+            )
+            self.write("gradle.properties", "version=1.2.3\n" + (f"bundleTimestampMillis={stamp}\n" if stamp else ""))
+            return digest
+
+        def released(stamp):
+            digest = rebuild(stamp)
+            self.write("README.md", f"https://img.shields.io/badge/version-1.2.3-blue\n{digest}  patches-1.2.3.mpp\n")
+            return release.verify(self.root)
+
+        # Each check passes the rebuilt tree while the timestamps match, so dropping them is the only change below.
+        self.assertIn("Release metadata passed", released("1790552148000"))
+        # The release check also compares the index's created_at, so it refused this before too. It now says why.
+        with self.assertRaisesRegex(ValueError, "Source has no bundle timestamp"):
+            released(None)
+
+        held = self.hold()
+        rebuild("1790552148000")
+        self.assertIn("held public v1.2.2", release.verify_development(self.root, self.bundle, evidence, held))
+        rebuild(None)
+        # Missing on both sides is no match. The development check used to compare nothing with nothing and pass.
+        with self.assertRaisesRegex(ValueError, "Source has no bundle timestamp"):
+            release.verify_development(self.root, self.bundle, evidence, held)
+
     @unittest.skipIf(GIT is None, "git isn't installed")
     def test_tagged_feed_is_read_from_the_release_tag_with_git(self):
         repository = self.root / "repository"

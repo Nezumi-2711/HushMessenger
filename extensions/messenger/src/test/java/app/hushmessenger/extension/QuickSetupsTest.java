@@ -71,9 +71,9 @@ public class QuickSetupsTest {
 
     @Test public void onlyControlsItMaySetAndThatAreSavedAsSomethingElseChange() {
         SharedPreferences prefs = Settings.preferences;
-        prefs.edit().putBoolean("ads", true).commit();
+        prefs.edit().putBoolean("growth", true).commit();
         Map<String, Boolean> changes = QuickSetups.changes(QuickSetups.values("quiet"), prefs, key -> !"people".equals(key));
-        assertFalse(changes.containsKey("ads"));
+        assertFalse(changes.containsKey("growth"));
         assertFalse(changes.containsKey("people"));
         assertEquals(QuickSetups.QUIET.size() - 2, changes.size());
         assertFalse(changes.containsValue(false));
@@ -127,12 +127,12 @@ public class QuickSetupsTest {
     }
 
     @Test public void aChoiceWithNoneOfItsSwitchesInTheBundleSaysSoInsteadOfAlreadySet() throws Exception {
-        installedFeatures("ads", "bubbles");
+        installedFeatures("growth", "bubbles");
         try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
             View root = screen.get().getWindow().getDecorView();
             root.findViewWithTag("tab_app").performClick();
             root.findViewWithTag("quick_privacy").performClick();
-            assertEquals("Those switches aren't in this bundle, so nothing changed.", ShadowToast.getTextOfLatestToast());
+            assertEquals("Those switches aren't installed. Nothing changed.", ShadowToast.getTextOfLatestToast());
             root.findViewWithTag("quick_quiet").performClick();
             assertEquals("Changed 1 setting", ShadowToast.getTextOfLatestToast());
             root.findViewWithTag("quick_quiet").performClick();
@@ -145,7 +145,7 @@ public class QuickSetupsTest {
      * file, still goes off with the rest.
      */
     @Test public void backToDefaultsAlsoTurnsOffAControlThisPhoneCantRun() throws Exception {
-        installedFeatures("ads", "bubbles");
+        installedFeatures("growth", "bubbles");
         Settings.preferences.edit().putBoolean("bubbles", true).commit();
         try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
             View root = screen.get().getWindow().getDecorView();
@@ -176,7 +176,11 @@ public class QuickSetupsTest {
             assertTrue(root.findViewWithTag("quick_privacy").performLongClick());
             assertTrue(Settings.preferences.getBoolean("hide_quick_setups", false));
             assertFalse(root.findViewWithTag("quick_setups").isShown());
-            assertEquals("Quick setups hidden. Bring it back from App.", ShadowToast.getTextOfLatestToast());
+            // The long press happens on the App tab, so the toast has to name the button there, not send you to App.
+            TextView restore = root.findViewWithTag("quick_setups_home");
+            assertTrue(restore.isShown());
+            assertEquals("Hidden. Tap " + restore.getText() + " under Your choices.",
+                ShadowToast.getTextOfLatestToast());
             assertEquals("Hidden. Tap to show it again.", status.getText().toString());
             root.findViewWithTag("quick_setups_home").performClick();
             assertFalse(Settings.preferences.getBoolean("hide_quick_setups", false));

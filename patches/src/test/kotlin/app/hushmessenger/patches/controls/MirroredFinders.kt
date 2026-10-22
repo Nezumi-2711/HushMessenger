@@ -28,7 +28,7 @@ private val PROVED_BY_VALIDATE_HOOK: Set<String> by lazy { controlHooks.filterKe
  * get a build recorded, since --save runs the real patch first.
  */
 private val PROVED_ONLY_BY_THE_PATCH: Map<String, String> =
-    (listOf("ads", "bubble_mode", "browser", "subtabs", "people_jewel") + pluginGates.keys)
+    (listOf("bubble_mode", "browser", "subtabs", "people_jewel") + pluginGates.keys)
         .associateWith { "CompatReport proves the body through a profile field, and FIELD_CONTROLS fails the control when it changes" } +
     listOf(HIDE_READ_RECEIPTS, REPLY_READ).associateWith { "the patch proves the account's identity dataflow, CompatReport only the seen handler's and dispatcher's outline" }
 

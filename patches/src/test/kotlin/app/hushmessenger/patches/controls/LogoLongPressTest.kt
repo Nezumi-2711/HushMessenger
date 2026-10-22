@@ -36,14 +36,9 @@ internal const val SYNTHETIC_LOGO_LONG_PRESS = "$CHATS_TITLE->CY1(Landroid/conte
 internal const val SYNTHETIC_MENU_TITLE_LONG_PRESS = "$MORE_TITLE->CY1(Landroid/content/Context;)V"
 private val FINAL_PUBLIC = AccessFlags.PUBLIC.value or AccessFlags.FINAL.value
 
-/**
- * Where the Chats and Menu titles' long press handlers live in the real builds: 2R3.Ccw and 3Df.Ccw in five, 2R3.Ccn
- * and 3DZ.Ccn in 346611351.
- */
-private const val NATIVE_LOGO_LONG_PRESS = "LX/2R3;->Ccw(Landroid/content/Context;)V"
-private const val NATIVE_LOGO_LONG_PRESS_351 = "LX/2R3;->Ccn(Landroid/content/Context;)V"
-private const val NATIVE_MENU_TITLE_LONG_PRESS = "LX/3Df;->Ccw(Landroid/content/Context;)V"
-private const val NATIVE_MENU_TITLE_LONG_PRESS_351 = "LX/3DZ;->Ccn(Landroid/content/Context;)V"
+/** Where the Chats and Menu titles' long press handlers live in 584. */
+private const val NATIVE_LOGO_LONG_PRESS = "LX/2Rg;->CdZ(Landroid/content/Context;)V"
+private const val NATIVE_MENU_TITLE_LONG_PRESS = "LX/3FY;->CdZ(Landroid/content/Context;)V"
 
 /**
  * The Chats title's long press handler as Messenger writes it: a null check, then the TitleShortcut plugin lookup with the
@@ -221,12 +216,11 @@ class LogoLongPressTest {
         assertEquals(controlProfiles.size, apks.size)
         for (apk in apks) {
             val code = apk.fileName.toString().substringBeforeLast(".apk").substringAfterLast('-')
-            val in351 = controlProfileFor(code) === PROFILE_346611351
             val dex = DexFileFactory.loadDexContainer(apk.toFile(), Opcodes.forApi(35))
             val classes = dex.dexEntryNames.flatMap { dex.getEntry(it)!!.dexFile.classes }
             for ((title, expected) in listOf(
-                CHATS_TAB_TITLE to if (in351) NATIVE_LOGO_LONG_PRESS_351 else NATIVE_LOGO_LONG_PRESS,
-                MENU_TAB_TITLE to if (in351) NATIVE_MENU_TITLE_LONG_PRESS_351 else NATIVE_MENU_TITLE_LONG_PRESS,
+                CHATS_TAB_TITLE to NATIVE_LOGO_LONG_PRESS,
+                MENU_TAB_TITLE to NATIVE_MENU_TITLE_LONG_PRESS,
             )) {
                 val sites = findLogoLongPress(classes, title)
                 assertEquals(listOf(expected), sites.map { it.hookId() }, "$code ${title.handler}")

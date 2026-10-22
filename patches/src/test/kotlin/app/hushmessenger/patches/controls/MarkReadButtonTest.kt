@@ -31,12 +31,12 @@ private const val CLICK = "LX/MrClick;"
 private const val BUILDER = "LX/MrBuilder;"
 private const val SPEC = "LX/MrSpec;"
 private const val ICON = "LX/MrIcon;"
-private const val ICONS = "LX/MrIcons;"
 private const val FACTORY = "LX/MrFactory;"
 private const val LAZY = "LX/MrLazy;"
 private const val LAZIES = "LX/MrLazies;"
 private const val PROVIDER = "LX/MrProvider;"
 private const val LISTENER = "LX/MrListener;"
+private const val ICON_SETTER = "$BUILDER->A01($ICON$PROVIDER$BUILDER)V"
 private const val DETAILS = "LX/MrDetails;"
 private const val TITLE_BAR = "LX/MrTitleBar;"
 private const val LIST_BUILDER = "Lcom/google/common/collect/ImmutableList\$Builder;"
@@ -63,14 +63,13 @@ private val BAR_BODY = """
     move v8, v9
     invoke-direct {v1, v8}, Ljava/util/ArrayList;-><init>(I)V
     move-object v2, p0
+    const/4 v13, 0x4
     const-string v8, "$QR_BUTTON_NAME"
     iget-object v12, v2, $SOCKET->A05:$QR_BUTTON
     iget-object v8, v12, $QR_BUTTON->A00:Landroid/content/Context;
-    invoke-virtual {v8}, Landroid/content/Context;->getResources()Landroid/content/res/Resources;
-    move-result-object v10
-    const v8, 0x7f1443e8
-    invoke-static {v10, v8}, $FACTORY->A0S(Landroid/content/res/Resources;I)$BUILDER
-    move-result-object v11
+    new-instance v11, $BUILDER
+    const-string v8, "QR code"
+    invoke-direct {v11, v8}, $BUILDER-><init>(Ljava/lang/String;)V
     iget-object v8, v12, $QR_BUTTON->A05:$THREAD_SCHEME
     iget-object v8, v8, $THREAD_SCHEME->A0G:$MIG_SCHEME
     iput-object v8, v11, $BUILDER->A08:$MIG_SCHEME
@@ -78,12 +77,13 @@ private val BAR_BODY = """
     invoke-static {v8}, $FACTORY->A0M($LAZY)$PROVIDER
     move-result-object v10
     sget-object v8, $ICON->A5v:$ICON
-    invoke-static {v8, v10, v11}, $ICONS->A1G($ICON$PROVIDER$BUILDER)V
+    invoke-virtual {v10, v8}, $PROVIDER->A05($ICON)I
+    move-result v8
+    iput v8, v11, $BUILDER->A00:I
     const-string v8, "$QR_BUTTON_TAG"
     iput-object v8, v11, $BUILDER->A0A:Ljava/lang/String;
-    const/4 v10, 0x4
     new-instance v8, $CLICK
-    invoke-direct {v8, v12, v10}, $CLICK-><init>(Ljava/lang/Object;I)V
+    invoke-direct {v8, v12, v13}, $CLICK-><init>(Ljava/lang/Object;I)V
     iput-object v8, v11, $BUILDER->A06:$LISTENER
     new-instance v8, $SPEC
     invoke-direct {v8, v11}, $SPEC-><init>($BUILDER)V
@@ -210,11 +210,13 @@ internal fun markReadFixture(
         iput p2, p0, $CLICK->A01:I
         return-void
     """.trimIndent(), 3, CONSTRUCTOR), clickMethod), extraFields = listOf(field(CLICK, "A00", "Ljava/lang/Object;"), field(CLICK, "A01", "I"))),
-    fixtureClass(BUILDER, listOf(fixtureMethod("$BUILDER-><init>(Ljava/lang/String;)V", "return-void", 2, CONSTRUCTOR)), flags = builderFlags),
+    fixtureClass(BUILDER, listOf(fixtureMethod("$BUILDER-><init>(Ljava/lang/String;)V", "return-void", 2, CONSTRUCTOR),
+        // 584 sets the icon through the provider's resolver into an int field; this helper is the same two steps.
+        fixtureMethod(ICON_SETTER, "invoke-virtual {p1, p0}, $PROVIDER->A05($ICON)I\nmove-result v0\niput v0, p2, $BUILDER->A00:I\nreturn-void", 4, STATIC)),
+        flags = builderFlags),
     fixtureClass(SPEC, listOf(fixtureMethod("$SPEC-><init>($BUILDER)V", "return-void", 2, CONSTRUCTOR))),
-    fixtureClass(FACTORY, listOf(helper("$FACTORY->A0S(Landroid/content/res/Resources;I)$BUILDER"), helper("$FACTORY->A0M($LAZY)$PROVIDER"))),
+    fixtureClass(FACTORY, listOf(helper("$FACTORY->A0M($LAZY)$PROVIDER"))),
     fixtureClass(LAZIES, listOf(helper("$LAZIES->A00()$LAZY"))),
-    fixtureClass(ICONS, listOf(fixtureMethod("$ICONS->A1G($ICON$PROVIDER$BUILDER)V", "return-void", 3, STATIC))),
     fixtureClass(ICON, listOf(fixtureMethod("$ICON-><clinit>()V", icons.joinToString("\n") { entry ->
         val (name, slot) = entry.split(":")
         "new-instance v0, $ICON\nconst-string v1, \"$name\"\ninvoke-direct {v0, v1}, $ICON-><init>(Ljava/lang/String;)V\nsput-object v0, $ICON->$slot:$ICON"
@@ -250,7 +252,7 @@ class MarkReadButtonTest {
         assertEquals("$BUILDER->A06:$LISTENER", recipe.listenerField)
         assertEquals("$LAZIES->A00()$LAZY", recipe.iconSource)
         assertEquals("$FACTORY->A0M($LAZY)$PROVIDER", recipe.iconProvider)
-        assertEquals("$ICONS->A1G($ICON$PROVIDER$BUILDER)V", recipe.iconSetter)
+        assertEquals("$ICON_SETTER", recipe.iconSetter)
         // Messenger's own Mark as read icon, not the QR code the block it copies uses.
         assertEquals("$ICON->A2i:$ICON", recipe.icon)
         assertEquals(CLICK, recipe.listener)
@@ -266,7 +268,7 @@ class MarkReadButtonTest {
     }
 
     @Test fun everyProfileNamesBothBarsAndOneListener() {
-        for (profile in listOf(SYNTHETIC_PROFILE, BASE_PROFILE, PROFILE_346611351)) {
+        for (profile in listOf(SYNTHETIC_PROFILE, BASE_PROFILE)) {
             assertEquals(2, profile.hooks.getValue(MARK_READ_BAR).size)
             assertEquals(1, profile.hooks.getValue(MARK_READ_CLICK).size)
         }
@@ -380,7 +382,7 @@ class MarkReadButtonTest {
         assertEquals(MARK_READ_TAG, code[0].ref())
         assertEquals(listOf(built.parameterRegister(0), built.parameterRegister(1)), code[0].args())
         for (expected in listOf(MIG_SCHEME, MARK_READ_LABEL, "$BUILDER-><init>(Ljava/lang/String;)V", "$BUILDER->A08:$MIG_SCHEME",
-            "$LAZIES->A00()$LAZY", "$FACTORY->A0M($LAZY)$PROVIDER", "$ICON->A2i:$ICON", "$ICONS->A1G($ICON$PROVIDER$BUILDER)V",
+            "$LAZIES->A00()$LAZY", "$FACTORY->A0M($LAZY)$PROVIDER", "$ICON->A2i:$ICON", "$ICON_SETTER",
             "$BUILDER->A0A:Ljava/lang/String;", "$CLICK-><init>(Ljava/lang/Object;I)V", "$BUILDER->A06:$LISTENER", "$SPEC-><init>($BUILDER)V"))
             assertTrue(expected in refs, expected)
         assertTrue("$ICON->A5v:$ICON" !in refs)

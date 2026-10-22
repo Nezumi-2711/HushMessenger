@@ -3,6 +3,7 @@ package app.hushmessenger.extension;
 import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.media.MediaCodec;
 import android.media.MediaFormat;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
@@ -30,6 +31,9 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
+import org.robolectric.shadows.ShadowMediaCodec;
 import org.robolectric.shadows.ShadowMediaExtractor;
 import org.robolectric.shadows.ShadowSystemClock;
 import org.robolectric.shadows.util.DataSource;
@@ -319,6 +323,118 @@ public class XheAudioTest {
         assertEquals("the same bytes again reuse their copy", second, fromTranscoder(uri));
         assertArrayEquals(after, Files.readAllBytes(Videos.served.toPath()));
         onlyFinishedCopies(2);
+    }
+
+    static final String LAPSED = "app.hushmessenger.test.lapsed";
+
+    /** Refuses every read, the way a gallery's Uri does once its grant has lapsed before the send starts. */
+    public static final class Lapsed extends ContentProvider {
+        @Override public boolean onCreate() { return true; }
+        @Override public ParcelFileDescriptor openFile(Uri uri, String mode) {
+            throw new SecurityException("Permission Denial: reading " + uri + " requires a grant");
+        }
+        @Override public String getType(Uri uri) { return "video/mp4"; }
+        @Override public Cursor query(Uri uri, String[] projection, String selection, String[] args, String order) { return null; }
+        @Override public Uri insert(Uri uri, ContentValues values) { return null; }
+        @Override public int delete(Uri uri, String selection, String[] args) { return 0; }
+        @Override public int update(Uri uri, ContentValues values, String selection, String[] args) { return 0; }
+    }
+
+    @Test public void aPickedVideoWhoseGrantLapsedIsSentAsItIsWithoutAHookFailure() throws Exception {
+        Robolectric.setupContentProvider(Lapsed.class, LAPSED);
+        Settings.preferences.edit().putBoolean(XheAudio.KEY, true).commit();
+        String uri = "content://" + LAPSED + "/video/9";
+        assertFalse(XheAudio.hasSamsungBox(RuntimeEnvironment.getApplication(), Uri.parse(uri)));
+        assertEquals(uri, fromTranscoder(uri));
+        assertEquals("a Uri we can't read is Messenger's to send, not a broken hook", 0, Settings.hookErrorAt(XheAudio.KEY));
+    }
+
+    static final String LAPSES = "app.hushmessenger.test.lapses";
+
+    /** Serves a Samsung recording to the first look, then refuses the copy, the way a grant runs out partway through. */
+    public static final class LapsesAtTheCopy extends ContentProvider {
+        static volatile File served;
+        static volatile int refused;
+
+        @Override public boolean onCreate() { return true; }
+        @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+            // The copy's scratch file is made right before the copy opens the Uri, so it being there marks the copy.
+            String[] scratch = pickedCache().list((dir, name) -> name.startsWith(XheAudio.SCRATCH) && name.endsWith(".source"));
+            if (scratch != null && scratch.length > 0) {
+                refused++;
+                throw new SecurityException("Permission Denial: the grant for " + uri + " ran out");
+            }
+            return ParcelFileDescriptor.open(served, ParcelFileDescriptor.MODE_READ_ONLY);
+        }
+        @Override public String getType(Uri uri) { return "video/mp4"; }
+        @Override public Cursor query(Uri uri, String[] projection, String selection, String[] args, String order) { return null; }
+        @Override public Uri insert(Uri uri, ContentValues values) { return null; }
+        @Override public int delete(Uri uri, String selection, String[] args) { return 0; }
+        @Override public int update(Uri uri, ContentValues values, String selection, String[] args) { return 0; }
+    }
+
+    @Test public void aPickedVideoWhoseGrantLapsesBeforeTheCopyIsSentAsItIsWithoutAHookFailure() throws Exception {
+        LapsesAtTheCopy.served = folder.newFile("gallery.mp4");
+        LapsesAtTheCopy.refused = 0;
+        Files.write(LapsesAtTheCopy.served.toPath(), samsungRecording(9));
+        Robolectric.setupContentProvider(LapsesAtTheCopy.class, LAPSES);
+        Settings.preferences.edit().putBoolean(XheAudio.KEY, true).commit();
+        String uri = "content://" + LAPSES + "/video/10";
+        assertEquals(uri, fromTranscoder(uri));
+        assertEquals("the first look found the Samsung box, so the copy was tried", 1, LapsesAtTheCopy.refused);
+        assertEquals("a grant that ran out partway is Messenger's to send, not a broken hook", 0, Settings.hookErrorAt(XheAudio.KEY));
+        onlyFinishedCopies(0);
+    }
+
+    /**
+     * Stock Android turns a refused grant into an IOException inside the extractor, but nothing promises every phone's
+     * does. A refusal that comes through as itself still reads as a video the platform can't open, not a broken hook.
+     */
+    @Test public void anExtractorThatPassesOnARefusedGrantReadsAsUnreadable() {
+        assertNull(XheAudio.Tracks.of(source -> { throw new SecurityException("Permission Denial"); }));
+        assertNull(XheAudio.Tracks.of(source -> { throw new IllegalArgumentException("no such file"); }));
+        assertNull(XheAudio.Tracks.of(source -> { throw new IOException("unreadable"); }));
+    }
+
+    /** An encoder that won't start, the way one does when it can't take the format, counting the releases it gets. */
+    @Implements(MediaCodec.class)
+    public static final class RefusingCodec extends ShadowMediaCodec {
+        static volatile int released;
+
+        @Implementation @Override protected void native_start() {
+            throw new IllegalStateException("start refused the format");
+        }
+
+        @Implementation protected void native_release() {
+            released++;
+        }
+    }
+
+    @Test @Config(shadows = RefusingCodec.class)
+    public void anEncoderThatWontStartIsReleasedBeforeTheConversionFails() throws Exception {
+        RefusingCodec.released = 0;
+        try {
+            XheAudio.startEncoder(44_100, 2);
+            fail("the encoder's failure has to reach the conversion");
+        } catch (IllegalStateException refused) {
+            assertEquals("start refused the format", refused.getMessage());
+        }
+        assertEquals("nothing else holds the encoder yet, so it's released here, once", 1, RefusingCodec.released);
+    }
+
+    @Test public void theStartHelperReleasesOnlyACodecThatFailedToStart() {
+        boolean[] released = new boolean[1];
+        IllegalStateException refused = new IllegalStateException("configure refused the format");
+        try {
+            XheAudio.startedOrReleased("encoder", () -> { throw refused; }, () -> released[0] = true);
+            fail("the failure has to reach the conversion");
+        } catch (IllegalStateException thrown) {
+            assertSame(refused, thrown);
+        }
+        assertTrue("nothing else holds the encoder yet, so it's released here", released[0]);
+        boolean[] untouched = new boolean[1];
+        assertEquals("encoder", XheAudio.startedOrReleased("encoder", () -> { }, () -> untouched[0] = true));
+        assertFalse("a started encoder stays open for the conversion", untouched[0]);
     }
 
     @Test public void conversionsRunningAtOnceEachKeepTheirOwnFiles() throws Exception {

@@ -20,6 +20,7 @@ import java.security.MessageDigest
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.jar.JarFile
+import java.util.jar.Manifest
 import java.util.zip.Adler32
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
@@ -199,6 +200,36 @@ object CatalogTool {
         val types = DexBackedDexFile.fromInputStream(null, patcherDex.inputStream()).classes.map { it.type }.toSet()
         val missing = jvmClasses.map { "L${it.removeSuffix(".class")};" }.filter { it !in types }.sorted()
         require(missing.isEmpty()) { "The patcher DEX lacks ${missing.size} patch classes, ${missing.first()} first" }
+    }
+
+    /** The bundle's manifest timestamp matches the source's, which has to be there: two missing ones would match. */
+    fun requireBundleTimestamp(bundle: String?, source: String?) {
+        require(source != null && source.matches(Regex("\\d+"))) { "Source has no bundle timestamp" }
+        require(bundle == source) { "Bundle timestamp differs from source" }
+    }
+
+    /** The bundle's manifest carries this source's build time and version, so the catalog can't describe a stale bundle. */
+    fun requireBundleMatchesSource(manifest: Manifest, properties: Properties): String {
+        requireBundleTimestamp(manifest.mainAttributes.getValue("Timestamp"), properties.getProperty("bundleTimestampMillis"))
+        val version = manifest.mainAttributes.getValue("Version")
+        require(version != null && version == properties.getProperty("version")) { "Bundle version differs from source" }
+        return version
+    }
+
+    /** What the catalog reads from a built bundle once the bundle proved it's this source's build. */
+    class BundleContents(val version: String, val patcherDex: ByteArray, val extensionDex: ByteArray, val patchClasses: List<String>)
+
+    /** Reads the bundle the catalog describes, refusing an incomplete one and one built from other source. */
+    fun readBundle(bundle: File, properties: Properties): BundleContents = JarFile(bundle).use { jar ->
+        require(jar.getEntry("classes.dex") != null && jar.getEntry("extensions/messenger.mpe") != null) { "Incomplete Android bundle" }
+        val names = jar.entries().asSequence().map { it.name }.toList()
+        require(names.size == names.toSet().size) { "Duplicate bundle entry" }
+        val patcherDex = jar.getInputStream(jar.getEntry("classes.dex")).use { it.readBytes() }
+        val extensionDex = jar.getInputStream(jar.getEntry("extensions/messenger.mpe")).use { it.readBytes() }
+        for (dex in listOf(patcherDex, extensionDex)) require(validateDex(dex) > 0) { "Bundle DEX contains no classes" }
+        val version = requireBundleMatchesSource(requireNotNull(jar.manifest) { "Bundle has no manifest" }, properties)
+        BundleContents(version, patcherDex, extensionDex,
+            names.filter { it.startsWith("app/hushmessenger/patches/") && it.endsWith(".class") })
     }
 
     fun validateDex(data: ByteArray): Int {
@@ -410,21 +441,8 @@ object CatalogTool {
             "Loose patch classes are on the tool classpath; refusing to bypass the built MPP"
         }
         val properties = Properties().apply { root.resolve("gradle.properties").reader().use(::load) }
-        lateinit var patcherDex: ByteArray
-        lateinit var extensionDex: ByteArray
-        lateinit var patchClasses: List<String>
-        val version = JarFile(bundle).use { jar ->
-            require(jar.getEntry("classes.dex") != null && jar.getEntry("extensions/messenger.mpe") != null) { "Incomplete Android bundle" }
-            val names = jar.entries().asSequence().map { it.name }.toList()
-            require(names.size == names.toSet().size) { "Duplicate bundle entry" }
-            patcherDex = jar.getInputStream(jar.getEntry("classes.dex")).use { it.readBytes() }
-            extensionDex = jar.getInputStream(jar.getEntry("extensions/messenger.mpe")).use { it.readBytes() }
-            for (dex in listOf(patcherDex, extensionDex)) require(validateDex(dex) > 0) { "Bundle DEX contains no classes" }
-            patchClasses = names.filter { it.startsWith("app/hushmessenger/patches/") && it.endsWith(".class") }
-            require(jar.manifest.mainAttributes.getValue("Timestamp") == properties.getProperty("bundleTimestampMillis")) { "Bundle timestamp differs from source" }
-            jar.manifest.mainAttributes.getValue("Version")
-        }
-        require(version == properties.getProperty("version")) { "Bundle version differs from source" }
+        val contents = readBundle(bundle, properties)
+        val version = contents.version
         val patches = loadPatchesFromJar(setOf(bundle))
         val patchNames = patches.map { requireNotNull(it.name) }.toSet()
         require(patches.size == patchNames.size) { "Duplicate visible patch names" }
@@ -433,8 +451,8 @@ object CatalogTool {
             root.resolve("extensions/messenger/src/main/java/app/hushmessenger/extension/SettingsActivity.java").readText(),
             root.resolve("extensions/messenger/src/main/AndroidManifest.xml").readText(), patchNames,
         )
-        validatePatcherClasses(patchClasses, patcherDex)
-        val references = validateExtensionContract(patcherDex, extensionDex, controls + RECORDED_CAPABILITIES)
+        validatePatcherClasses(contents.patchClasses, contents.patcherDex)
+        val references = validateExtensionContract(contents.patcherDex, contents.extensionDex, controls + RECORDED_CAPABILITIES)
         val document = catalog(version, patches)
         val output = Json { prettyPrint = true }.encodeToString(JsonObject.serializer(), document) + "\n"
         report.parentFile.mkdirs()

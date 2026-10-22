@@ -7,7 +7,6 @@ package app.hushmessenger.patches.coexist
 
 import app.hushmessenger.patches.MessengerTarget
 import app.hushmessenger.patches.controls.BASE_PROFILE
-import app.hushmessenger.patches.controls.PROFILE_346611351
 import app.hushmessenger.patches.controls.controlProfileFor
 import app.hushmessenger.patches.controls.hookId
 import app.hushmessenger.patches.controls.resolveShortcutsPath
@@ -303,10 +302,8 @@ private const val CLICK = "->onClick(Landroid/view/View;)V"
 internal fun expectedCloneSitesFor(versionCode: String): Set<String> {
     validateVersionCode(versionCode)
     return when (controlProfileFor(versionCode)) {
-        BASE_PROFILE -> setOf("LX/EIF;-><init>()V", "LX/4K8;$ATTACHMENT_CHECK", "LX/38o;$BROADCAST@1", "LX/T9J;${NOTIFICATION}LX/Uh6;@227",
-            "LX/T9J;${NOTIFICATION}LX/Uh6;@321", "LX/CBZ;$CLICK@79", "LX/JpW;$CLICK@176")
-        PROFILE_346611351 -> setOf("LX/EEi;-><init>()V", "LX/4HM;$ATTACHMENT_CHECK", "LX/38n;$BROADCAST@1", "LX/KRb;${NOTIFICATION}LX/Lpm;@231",
-            "LX/KRb;${NOTIFICATION}LX/Lpm;@328", "LX/C7O;$CLICK@79", "LX/JmU;$CLICK@108")
+        BASE_PROFILE -> setOf("LX/FQg;-><init>()V", "LX/4Su;$ATTACHMENT_CHECK", "LX/3A1;$BROADCAST@1", "LX/8Zu;${NOTIFICATION}LX/B12;@229",
+            "LX/8Zu;${NOTIFICATION}LX/B12;@329", "LX/BIQ;$CLICK@81", "LX/NZa;$CLICK@168")
         else -> fail("version code $versionCode has no checked clone sites")
     }
 }

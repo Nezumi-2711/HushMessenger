@@ -1,5 +1,6 @@
 package app.hushmessenger.patches.coexist
 
+import app.hushmessenger.patches.MessengerTarget
 import app.morphe.patcher.patch.PatchException
 import org.w3c.dom.Document
 import org.w3c.dom.Element
@@ -19,19 +20,15 @@ class InstallBesideMetaAppsPatchTest {
 
     @Test
     fun acceptsAllCheckedVersionCodes() {
-        validateVersionCode("346611369")
-        validateVersionCode("346611351")
-        validateVersionCode("346611440")
-        // The nodpi build Morphe Manager downloads.
-        validateVersionCode("346611435")
+        for (code in MessengerTarget.VERSION_CODES) validateVersionCode(code.toString())
     }
 
     @Test
     fun rejectsAnotherBuildWithTheSameVersionName() {
-        val failure = assertFailsWith<PatchException> { validateVersionCode("346611400") }
+        val failure = assertFailsWith<PatchException> { validateVersionCode("346814900") }
         // Manager prints another patch's name above this line, so the build comes first.
         assertTrue(
-            failure.message.orEmpty().startsWith("This Messenger build (version code 346611400) isn't supported yet"),
+            failure.message.orEmpty().startsWith("This Messenger build (version code 346814900) isn't supported yet"),
             failure.message,
         )
         assertFalse(failure.message.orEmpty().contains("Install beside Meta apps"), failure.message)
@@ -40,8 +37,7 @@ class InstallBesideMetaAppsPatchTest {
     }
 
     private fun assertActionable(failure: PatchException) {
-        assertContains(failure.message.orEmpty(), "Use an unmodified arm64 Messenger 583.0.0.29.95 APK")
-        assertContains(failure.message.orEmpty(), "version code 346611350 or 346611351 or 346611353 or 346611369")
+        assertContains(failure.message.orEmpty(), "Use an unmodified arm64 Messenger 584.0.0.49.98 APK (version code 346814894)")
     }
 
     private fun manifest(): Document {

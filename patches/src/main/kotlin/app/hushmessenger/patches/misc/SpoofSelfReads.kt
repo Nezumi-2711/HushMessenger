@@ -31,11 +31,12 @@ private val PACKAGE_LOOKUPS = setOf(
 )
 
 /**
- * Messenger's reads of its own version code in every supported build, the same 13 in both mappings: AppComponentManager's
- * check (which logs a mismatch with the APK's own code), its service, ACRA's crash-time data, Profilo's trace end, the int helper,
- * Mapbox's two identifiers and five more. A different count means the build changed, and nothing is rewritten.
+ * Messenger's reads of its own version code in every supported build, 15 in 584: AppComponentManager's check (which logs
+ * a mismatch with the APK's own code), its service, ACRA's crash-time data, Profilo's trace end, the int helper, Mapbox's
+ * two identifiers, the Hatch bug report's app_version, ML Kit's Clearcut logger and six more. A different count means the
+ * build changed, and nothing is rewritten.
  */
-internal const val SELF_VERSION_READS = 13
+internal const val SELF_VERSION_READS = 15
 
 private fun Instruction.reference() = (this as? ReferenceInstruction)?.reference?.toString()
 

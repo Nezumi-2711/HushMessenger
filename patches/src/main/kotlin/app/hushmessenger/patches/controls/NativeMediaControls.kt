@@ -15,10 +15,10 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 internal const val EPHEMERAL_VIEWER = "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;"
 internal const val QUICKSNAP_VIEWER = "Lcom/facebook/messaging/quicksnap/consumption/viewer/MsgrQuicksnapViewerFragment;"
-/** "Generate AI stickers" in Messenger 583's string pack. */
-internal const val GENERATE_AI_LABEL = 0x7f140560
-/** The viewer's onCreateDialog override, A1F in every 583 build. */
-internal const val EPHEMERAL_DIALOG = "A1F"
+/** "Generate AI stickers" in Messenger 584's string pack (0x7f140560 in 583). */
+internal const val GENERATE_AI_LABEL = 0x7f140559
+/** The viewer's onCreateDialog override, A1K in 584 (A1F in 583). */
+internal const val EPHEMERAL_DIALOG = "A1K"
 private const val WINDOW = "Landroid/view/Window;"
 private const val SET_FLAGS = "$WINDOW->setFlags(II)V"
 private const val ADD_FLAGS = "$WINDOW->addFlags(I)V"
@@ -83,8 +83,8 @@ internal fun Method.screenshotViewerSites(): List<Int> {
             parameterTypes.map { it.toString() } == listOf("Landroid/view/LayoutInflater;", "Landroid/view/ViewGroup;", "Landroid/os/Bundle;") &&
             returnType == "Landroid/view/View;" -> {
             sites = listOf(32); allowedJumps = emptySet()
-            // 583 runs it to 449, or 450 in 346611351.
-            implementation!!.registerCount == 23 && code.size in setOf(449, 450) &&
+            // 584 runs it to 451 instructions.
+            implementation!!.registerCount == 23 && code.size == 451 &&
                 result(26, "Landroid/app/Dialog;", 0) && nullCheck(27, 0, 33) && window(28, "Landroid/app/Dialog;", 0, 1, 33) &&
                 literal(31, 0) && call(32, ADD_FLAGS, listOf(1, 0))
         }
@@ -114,8 +114,8 @@ internal fun MutableMethod.injectScreenshotViewer() {
 }
 
 /**
- * The cell under each 583 naming, the label it shows, how many renders offer that label and how many instructions its own
- * render has (24 registers in both). Both offer the label from four renders; 346611351's render is one instruction shorter.
+ * The cell under 584's naming, the label it shows, how many renders offer that label and how many instructions its own
+ * render has (24 registers). Four renders offer the label.
  */
 internal data class AiCell(
     val type: String, val superclass: String, val scope: String, val component: String,
@@ -124,10 +124,9 @@ internal data class AiCell(
     val render = "$type->render($scope)$component"
 }
 internal val aiCells = listOf(
-    AiCell("LX/F0Y;", "LX/1NT;", "LX/2Cf;", "LX/1Gu;", size = 104),
-    AiCell("LX/F3k;", "LX/1NT;", "LX/2Cf;", "LX/1Gu;"),
+    AiCell("LX/CVr;", "LX/1Nj;", "LX/2DF;", "LX/1J7;"),
 )
-internal const val AI_CELL_SIZE = 105
+internal const val AI_CELL_SIZE = 107
 internal const val AI_CELL_REGISTERS = 24
 internal const val AI_CELL_SOURCES = 4
 

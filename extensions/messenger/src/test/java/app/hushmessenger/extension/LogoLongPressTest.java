@@ -91,8 +91,12 @@ public class LogoLongPressTest {
                 throw new ActivityNotFoundException("refused");
             }
         };
+        int before = ShadowToast.shownToastCount();
         Settings.logoLongPressed(refusing);
-        assertEquals(new SettingsText(app).get("settings_open_failed"), ShadowToast.getTextOfLatestToast());
+        // First that it didn't open, then where to go: one toast can't hold both in the two lines Android 12+ shows.
+        assertEquals(before + 2, ShadowToast.shownToastCount());
+        assertTrue(ShadowToast.showedToast("Couldn't open HushMessenger settings."));
+        assertEquals("Patch controls: long-press Messenger's home screen icon", ShadowToast.getTextOfLatestToast());
         assertNotNull(Settings.hookErrors.get("menu_row"));
     }
 

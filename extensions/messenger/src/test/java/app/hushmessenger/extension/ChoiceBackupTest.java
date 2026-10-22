@@ -12,6 +12,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.Bundle;
 import android.os.Looper;
 import android.view.View;
+import android.widget.TextView;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -200,12 +201,53 @@ public class ChoiceBackupTest {
             assertTrue(Settings.preferences.getBoolean("people", false));
             assertTrue(Settings.preferences.getBoolean("typing", false));
             assertFalse(Settings.preferences.contains("new_control"));
-            assertEquals("Restored 1 choice. Skipped 1 choice this version doesn't know. Skipped 1 choice whose patch isn't installed.", ShadowToast.getTextOfLatestToast());
+            // Android 12+ cuts a toast after two lines, so the skips go on the card instead of off the end of the toast.
+            assertEquals("Restored 1 choice.", ShadowToast.getTextOfLatestToast());
+            TextView result = screen.get().getWindow().getDecorView().findViewWithTag("choices_restore_status");
+            assertEquals(View.VISIBLE, result.getVisibility());
+            assertEquals("Restored 1 choice. Skipped 1 choice this version doesn't know. Skipped 1 choice whose patch isn't installed.", result.getText().toString());
             Map<String, ?> before = Settings.preferences.getAll();
             clipboard(ChoiceCodec.HEADER + "\nnew_control=false\n");
             screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
             assertEquals(before, Settings.preferences.getAll());
-            assertTrue(ShadowToast.getTextOfLatestToast().startsWith("Nothing to restore"));
+            assertEquals("Nothing to restore. None of those match your patches.", ShadowToast.getTextOfLatestToast());
+            assertEquals("Nothing to restore. None of those match your patches. Skipped 1 choice this version doesn't know.", result.getText().toString());
+            assertEquals(View.VISIBLE, result.getVisibility());
+            // A backup that can't be read leaves no earlier result standing under the buttons.
+            clipboard("not a backup");
+            screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
+            assertEquals(View.GONE, result.getVisibility());
+        }
+    }
+
+    /** With every note at once, the toast still fits the two lines Android 12+ shows, and the card holds the rest. */
+    @Test public void aRestoreWithEveryNoteKeepsItsToastToTwoLines() {
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            java.util.Set<String> installed = new HashSet<>(Set.of(AutoReply.KEY));
+            StringBuilder backup = new StringBuilder(ChoiceCodec.HEADER + "\npaused=true\nauto_reply=true\n");
+            // Eleven switches and the pause: a two-digit count, as long as a real backup's gets.
+            int restored = 0;
+            for (String[] control : SettingsActivity.CONTROLS) {
+                if (restored == 11 || control[0].equals(AutoReply.KEY)) continue;
+                installed.add(control[0]);
+                backup.append(control[0]).append("=false\n");
+                restored++;
+            }
+            backup.append("people_extra=true\nnew_control=true\n");
+            Settings.installed = installed;
+            String missing = java.util.Arrays.stream(SettingsActivity.CONTROLS).map(c -> c[0])
+                .filter(key -> !installed.contains(key)).findFirst().orElseThrow();
+            backup.append(missing).append("=true\n");
+            clipboard(backup.toString());
+            screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
+            String toast = ShadowToast.getTextOfLatestToast();
+            assertEquals("Restored 12 choices. Changes paused.", toast);
+            assertTrue(toast, ToastLengthTest.lines(toast) <= 2);
+            TextView result = screen.get().getWindow().getDecorView().findViewWithTag("choices_restore_status");
+            SettingsText words = new SettingsText(screen.get());
+            assertEquals(toast + " " + words.get("import_auto_reply_off") + " " + words.count("import_unknown", 2) + " " +
+                words.count("import_unavailable", 1), result.getText().toString());
+            assertTrue(result.getText().toString(), ToastLengthTest.lines(result.getText().toString()) > 2);
         }
     }
 
@@ -225,18 +267,24 @@ public class ChoiceBackupTest {
             assertFalse(Settings.preferences.getBoolean(AutoReply.KEY, false));
             assertEquals(rules, Settings.preferences.getString(AutoReply.RULES, null));
             assertTrue(Settings.preferences.getBoolean(AutoReply.GROUPS, false));
-            assertEquals("Restored 1 choice. " + notice, ShadowToast.getTextOfLatestToast());
+            assertEquals("Restored 1 choice.", ShadowToast.getTextOfLatestToast());
+            TextView result = screen.get().getWindow().getDecorView().findViewWithTag("choices_restore_status");
+            assertEquals(View.VISIBLE, result.getVisibility());
+            assertEquals("Restored 1 choice. " + notice, result.getText().toString());
 
             clipboard(ChoiceCodec.HEADER + "\nauto_reply=true\n");
             screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
             assertFalse(Settings.preferences.getBoolean(AutoReply.KEY, false));
             assertEquals(notice, ShadowToast.getTextOfLatestToast());
+            // The notice is the whole result, so the toast says all of it and the card line goes away.
+            assertEquals(View.GONE, result.getVisibility());
 
             Settings.preferences.edit().putBoolean(AutoReply.KEY, true).commit();
             clipboard(ChoiceCodec.HEADER + "\nauto_reply=false\n");
             screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
             assertFalse(Settings.preferences.getBoolean(AutoReply.KEY, false));
             assertEquals("Restored 1 choice.", ShadowToast.getTextOfLatestToast());
+            assertEquals(View.GONE, result.getVisibility());
             assertEquals(rules, Settings.preferences.getString(AutoReply.RULES, null));
         }
     }
@@ -653,7 +701,9 @@ public class ChoiceBackupTest {
             while (opens.get() == 0 && System.nanoTime() < until) Thread.sleep(10);
             assertEquals(1, opens.get());
             Shadows.shadowOf(Looper.getMainLooper()).idleFor(51, TimeUnit.MILLISECONDS);
-            assertTrue(((android.widget.TextView) root.findViewWithTag("choices_file_status")).getText().toString().contains("too long"));
+            // A read that ran out of time left the choices alone. Only a save can leave a cut-off file.
+            assertEquals("Took too long. Your choices didn't change. Try again.",
+                ((android.widget.TextView) root.findViewWithTag("choices_file_status")).getText().toString());
             assertTrue(root.findViewWithTag("read_choices_file").isEnabled());
             startFile(activity, false, uri);
             assertTrue(started.await(5, TimeUnit.SECONDS));
@@ -774,7 +824,7 @@ public class ChoiceBackupTest {
             Shadows.shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(101));
             assertTrue(canceled.await(5, TimeUnit.SECONDS));
             finishWorkers();
-            assertEquals("The file save or restore took too long. Try again. A save may leave an incomplete file.", ShadowToast.getTextOfLatestToast());
+            assertEquals("Took too long. A saved file may be cut off. Try again.", ShadowToast.getTextOfLatestToast());
         } finally { canceled.countDown(); finishWorkers(); SettingsActivity.documentTimeoutMillis = 30_000; }
     }
 

@@ -264,7 +264,7 @@ class CommunityInboxTest {
                 "helper_return" -> scope.replaceInstruction(1, "return v1")
                 "private_helper" -> scope.accessFlags = AccessFlags.PRIVATE.value or AccessFlags.STATIC.value
                 "renderer" -> render.replaceInstruction(render.communityReadSite(contract.capturedScope) + 11, "move-object/from16 v17, v0")
-                "profile" -> activeProfile = PROFILE_346611351
+                "profile" -> activeProfile = BASE_PROFILE
             }
             val before = listOf(render, joined, scope).map { body(it).map(::structural) }
             assertFailsWith<PatchException> { injectCommunityInbox(contract, render, joined, scope) }
