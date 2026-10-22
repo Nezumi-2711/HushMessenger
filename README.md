@@ -31,7 +31,7 @@ Every switch starts off, so a freshly patched Messenger behaves like stock until
 ## Install
 
 1. **Get the APK.** HushMessenger patches arm64 Messenger 583.0.0.29.95 only. Download one from [APKMirror's 583.0.0.29.95 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-583-0-0-29-95-release/). Any arm64 build on that page works, including the one Morphe Manager's download button opens. A 32-bit build shares the version name and won't work.
-2. **Add the source.** Open the link above on your phone with Morphe Manager (1.34.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **61 patches**. If it shows an older version, tap its refresh button.
+2. **Add the source.** Open the link above on your phone with Morphe Manager (2.0.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **61 patches**. If it shows an older version, tap its refresh button.
 3. **Patch Messenger.** The default selection includes every switch. Three patches start unselected because they change the app package itself: **Clone install under another package name**, **Spoof package version** and **Custom new-message sound**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
 4. **Keep one source.** Don't add the remote source and a local copy together, and don't mix in Messenger patches from other sources.
 
@@ -39,7 +39,7 @@ Prefer a local source? Download [`patches-0.25.0.mpp`](https://github.com/SysAdm
 
 ## Settings
 
-Long-press Messenger's icon on your home screen and tap **Patch controls**. The **HushMessenger** row in Messenger's Menu tab and side menu opens the same screen, and so does the **HushMessenger settings** icon in your app drawer. **App > Hide app drawer icon** hides that icon without touching Messenger. Inside Messenger, a long press on the Messenger logo at the top of Chats or on the Menu tab's title opens settings too, even while changes are paused. On a Root Mount install there's no drawer icon, and the long-press shortcuts appear once Messenger has started.
+Long-press Messenger's icon on your home screen and tap **Patch controls**. The **HushMessenger** row in Messenger's Menu tab and side menu opens the same screen, and so does the **HushMessenger settings** icon in your app drawer. **App > Hide app drawer icon** hides that icon without touching Messenger. Inside Messenger, a long press on the Messenger logo at the top of Chats or on the Menu tab's title opens settings too, even while changes are paused. The long-press shortcuts appear once Messenger has started, and a Root Mount install has no drawer icon. The App tab can switch off the Menu row, the icon shortcuts or the logo long press, but never the last way in that's still on.
 
 **Pause all changes** turns every switch off at once without forgetting your choices. Changes to the Meta AI and bottom tabs, bubbles, your font and **Restore old emoji drawer** need **Restart Messenger**. Inbox options show up with the next chat list Messenger builds. While a restart is waiting, a bar at the top of settings says how many and has the button, and after the restart settings open again on the page you left. The button is also on the App tab and in the icon's long-press menu. If Messenger crashes three times near startup, safe mode pauses the controls. Open settings and tap **Resume**.
 
@@ -67,6 +67,7 @@ The screenshots below show the settings in the current release, in the dark and 
 | Pin more chats | Raises Messenger's limit of three pinned chats to 20, so more of them can stay at the top of your chat list. Experimental, since Messenger's servers can still stop you sooner. |
 | Hide People tab | Hides the People tab in the bottom bar. Restart Messenger to see it go. |
 | Hide Notifications tab | Hides the Notifications tab in the bottom bar. Restart Messenger to see it go. |
+| Hide tab badges | Hides the red dots and counts on the bottom tabs and on the Facebook button at the top. The Keep switches under it bring back the ones you want. Takes effect after a restart. |
 | Hide Facebook shortcuts | Removes Facebook toolbar, profile and sharing shortcuts, and the "Also from Meta" and "Subscriptions" sections in the Menu tab. Keep the Profile button, right under it, leaves the chat details Profile button in place. |
 | Hide Meta AI | Hides the Meta AI button, tab and menu entries, the "Ask Meta AI" search button and the AI suggestions when you type @ in a chat. Existing AI chats stay. The tab changes after a restart. |
 | Hide Chat Moments | Removes Chat Moments from the menu. |
@@ -84,11 +85,12 @@ The screenshots below show the settings in the current release, in the dark and 
 | Stop analytics uploads | Blocks Messenger's analytics uploader. Events still get recorded on your phone and can upload once you turn this off. |
 | Stop ad attribution uploads | Stops the job that sends your advertising ID and ad tracking setting to Meta. |
 | Stop inbox and ad link logging | Stops the reports about which part of your chat list was on screen and which ad opened a chat. |
-| Stop MQTT logging | Drops the health reports and push logging Messenger's MQTT client sends. Messenger sends most of its traffic another way, so there's often little for it to drop. Messages and calls keep working. |
+| Stop live connection logging | Drops the health reports and push logging Messenger sends over its live connection (MQTT). Messenger sends most of its traffic another way, so there's often little for it to drop. Messages and calls keep working. |
 | Stop nearby scans | Stops Messenger from reading the list of Wi-Fi networks around you, and hides the name and hardware address of the one you're connected to, the way Android does when Messenger can't see your location. Also stops the timer it can run while it's open to check your location and scan for Wi-Fi networks and Bluetooth devices. Experimental, since Messenger hasn't started those scans on the test phones yet. |
 | Stop app list and device ID sharing | Stops Messenger from going through your installed apps to find other Meta apps, and from asking them for the device ID Meta uses to link its apps on one phone. Messenger keeps the ID it already has. Experimental. |
 | Keep a message log | Saves a copy of each message that raised a notification, encrypted chats included, so an unsend can't take it back. It stays on your phone, encrypted. **View log** and **Clear log** sit under the switch. |
 | Auto reply | Answers messages with a reply you write, for certain words or for any message. One reply per chat every five minutes, and group chats only when you allow it. |
+| Quiet incoming calls | Calls still come in, but Messenger doesn't ring, vibrate or pop the call up over your screen. It waits in the notification shade with Answer and Decline, and a call you miss still shows in the chat. If the Facebook app is on your phone, it can still ring for the same call. Experimental. |
 | Hide read receipts | Opening a chat no longer sends Seen. The chat stays unread on your phone until you reply or mark it read. Group chats haven't been checked. |
 | Mark as read button | Works with Hide read receipts. A chat's top bar gets Messenger's own Mark as read icon, and tapping it sends the Seen that opening the chat held back. When the bar is full it replaces the chat details button (tapping the chat's name opens the same page). Experimental. |
 | View stories anonymously | Opens other people's stories without adding you to their viewer list. |
@@ -100,18 +102,18 @@ The screenshots below show the settings in the current release, in the dark and 
 | Send videos without re-encoding | A video up to 25 MB goes out as it is. |
 | Fix videos that won't send | A video whose only sound is xHE-AAC gets that sound converted to regular AAC, and a Samsung screen recording loses the tag Samsung's recorder adds when Messenger's media check rejects it, so neither ends in "Unable to send". Works for videos shared in from another app and ones picked in a chat. |
 | Use the phone's camera app | A chat's camera button opens your own camera app. Photos only. |
-| Open your gallery app | A chat's gallery button opens your own gallery app, and what you pick opens in Messenger's editor. |
+| Open your gallery app | A chat's gallery button opens your own gallery app. One pick opens in Messenger's editor, and several open the Send to sheet with that chat at the top. |
 | Open web links externally | Opens http and https links in your default browser. |
 | Slide chats in and out | Slides a chat in from the side when you open it and back out when you leave. |
 | Hold stories at the end | A story stays on screen when it ends, photo or video, until you tap or swipe to the next one. The last one stays open until you close it. Experimental. |
-| Turn off the swipe up for disappearing messages | Swiping up at the bottom of a chat no longer turns on disappearing messages. |
+| Ignore the swipe up for disappearing messages | Swiping up at the bottom of a chat no longer turns on disappearing messages. |
 | Hide the recent photo card | The card above the message box that offers to send the screenshot, photo or video you just took doesn't show up. You can still send it from the gallery. |
-| Allow chat bubbles | **Stock**, **Chat Heads** or **Native Bubbles** (Android 11 and newer). See [Chat heads and bubbles](#chat-heads-and-bubbles). |
+| Allow chat bubbles | **Stock**, **Chat heads** or **Android bubbles** (Android 11 and newer). See [Chat heads and bubbles](#chat-heads-and-bubbles). |
 | Unlock app icons | Every icon in Messenger's App icon setting becomes selectable without a subscription. |
 | Material You theme | In dark mode on Android 12 and newer, Messenger takes the accent color from your wallpaper. A **Pure black dark mode** switch sits under Appearance. |
 | Use your own font | Replaces Meta's font with your phone's, or with a .ttf or .otf file you pick, with size and position adjustments. Restart Messenger after a change. |
 | Bold and italic text | Adds Bold and Italic to the text selection menu. They change the letters A to Z, accented ones included, and Bold changes digits too. Other alphabets stay as they are. On a Samsung phone, turn them on once under **Manage apps** in that menu. |
-| Open settings from menu | Adds the HushMessenger row to Messenger's Menu tab and side menu, and makes a long press on the Messenger logo at the top of Chats or the Menu tab's title open settings. Always on. |
+| Open settings from menu | Adds the HushMessenger row to Messenger's Menu tab and side menu, and makes a long press on the Messenger logo at the top of Chats or the Menu tab's title open settings. On by default. The App tab can turn off each way in, as long as one stays on. |
 
 ### Patches without a switch
 
@@ -125,7 +127,7 @@ The screenshots below show the settings in the current release, in the dark and 
 
 ### If something doesn't work
 
-- **Can't find the settings.** Long-press Messenger's home screen icon and tap **Patch controls**. If no way in shows up at all, refresh the source and patch again.
+- **Can't find the settings.** Long-press Messenger's home screen icon and tap **Patch controls**. Not there? You may have hidden the icon shortcuts, so use the **HushMessenger** row in the Menu tab or long-press the Messenger logo at the top of Chats. If no way in shows up at all, refresh the source and patch again.
 - **Switches do nothing.** The settings live inside the patched Messenger, and refreshing a source only downloads patches. Patch and install again. The Meta AI tab and the old emoji drawer only change after **Restart Messenger**. Inbox options wait for the next chat list Messenger builds, and a restart applies them right away.
 - **The source shows an old version or misses a patch.** Refresh it and check that it shows the version of the [latest release](https://github.com/SysAdminDoc/HushMessenger/releases/latest). A local source needs the new `.mpp` added by hand.
 - **APK rejected.** Use an unmodified arm64 Messenger 583.0.0.29.95 whose version code is in the [supported builds](#supported-messenger-builds). The error names the builds it checked. When the log says "This Messenger build (version code N) isn't supported yet", that's the whole problem, and the patch Manager names above it (often **Allow chat bubbles**) didn't fail on its own.
@@ -144,7 +146,7 @@ Messenger and Android handle this without a switch. In Messenger's app info, set
 
 ### Chat heads and bubbles
 
-**Allow chat bubbles** offers three modes. **Stock** leaves Messenger alone. **Chat Heads** uses Messenger's own overlay, so turn on Messenger's **Settings > Chat heads** and grant **Appear on top**. On a Samsung phone, chat heads needed **Unrestricted** battery use to arrive in the background. **Native Bubbles** uses Android's bubbles on Android 11 and newer, and the **Android bubble settings** link under the mode buttons takes you to the switch Android needs. Restart Messenger after changing modes.
+**Allow chat bubbles** offers three modes. **Stock** leaves Messenger alone. **Chat heads** uses Messenger's own overlay, so turn on Messenger's **Settings > Chat heads** and grant **Appear on top**. On a Samsung phone, chat heads needed **Unrestricted** battery use to arrive in the background. **Android bubbles** uses Android's own bubbles on Android 11 and newer, and the **Android bubble settings** link under the mode buttons takes you to the switch Android needs. Restart Messenger after changing modes.
 
 ### Read receipts
 

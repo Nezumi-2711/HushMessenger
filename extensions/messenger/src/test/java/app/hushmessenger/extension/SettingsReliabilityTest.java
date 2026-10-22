@@ -297,6 +297,48 @@ public class SettingsReliabilityTest {
         }
     }
 
+    @Test @Config(sdk = {28, 36}, qualifiers = "mdpi")
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void aFocusedAccentButtonsRingStandsOutFromTheButtonAndThePage() {
+        for (boolean light : new boolean[] {false, true}) {
+            SettingsUi ui = new SettingsUi(RuntimeEnvironment.getApplication(), light);
+            // The primary buttons, and the selected tab and category, are all accent fills.
+            for (android.graphics.drawable.Drawable background : new android.graphics.drawable.Drawable[] {
+                    ui.primaryButton("Save").getBackground(), ui.interactive(ui.accent, 0, 10)}) {
+                int[] focused = edge(ui, background, true), plain = edge(ui, background, false);
+                String theme = light ? "light" : "dark";
+                assertTrue(theme + " outer ring against the page", contrast(focused[0], ui.background) >= 3);
+                assertTrue(theme + " inner ring against the fill", contrast(focused[1], focused[2]) >= 3);
+                assertTrue(theme + " ring against the unfocused button", contrast(focused[1], plain[1]) >= 3);
+            }
+        }
+    }
+
+    /** The outer ring, inner ring and fill pixels on a background's left edge, drawn over the page at 1px per dp. */
+    private static int[] edge(SettingsUi ui, android.graphics.drawable.Drawable background, boolean focused) {
+        android.graphics.Bitmap pixels = android.graphics.Bitmap.createBitmap(120, 60, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(pixels);
+        canvas.drawColor(ui.background);
+        background.setBounds(10, 10, 110, 50);
+        background.setState(focused ? new int[] {android.R.attr.state_enabled, android.R.attr.state_focused}
+            : new int[] {android.R.attr.state_enabled});
+        background.jumpToCurrentState();
+        background.draw(canvas);
+        int[] edge = {pixels.getPixel(10, 30), pixels.getPixel(12, 30), pixels.getPixel(20, 30)};
+        pixels.recycle();
+        return edge;
+    }
+
+    private static double contrast(int first, int second) {
+        double[] luminance = new double[2], weights = {0.2126, 0.7152, 0.0722};
+        int[] colors = {first, second};
+        for (int color = 0; color < 2; color++) for (int channel = 0; channel < 3; channel++) {
+            double value = ((colors[color] >>> (16 - 8 * channel)) & 255) / 255.0;
+            luminance[color] += weights[channel] * (value <= 0.04045 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4));
+        }
+        return (Math.max(luminance[0], luminance[1]) + 0.05) / (Math.min(luminance[0], luminance[1]) + 0.05);
+    }
+
     @Test @Config(sdk = {28, 29}) public void savedUnsupportedBubblesAreNotCountedAsEffective() {
         Settings.preferences.edit().putBoolean("bubbles", true).commit();
         try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
@@ -323,7 +365,7 @@ public class SettingsReliabilityTest {
             assertFalse(Settings.enableBubbles());
             bubbles.performClick();
             Toast first = ShadowToast.getLatestToast();
-            assertEquals("Allow chat bubbles on", ShadowToast.getTextOfLatestToast());
+            assertEquals("Allow chat bubbles is on", ShadowToast.getTextOfLatestToast());
             assertTrue(Settings.enableBubbles());
             assertEquals("1 control enabled", ((TextView) root.findViewWithTag("enabled_count")).getText().toString());
             root.findViewWithTag("paused").performClick();

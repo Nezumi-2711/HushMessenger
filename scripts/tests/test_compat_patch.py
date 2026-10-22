@@ -23,6 +23,9 @@ class ProfilePatchChecks(unittest.TestCase):
     def test_record_gate_requires_complete_application_and_unchanged_inputs(self):
         cases = (
             "valid",
+            "step_results",
+            "step_results_failed_step",
+            "step_results_no_steps",
             "exit",
             "missing_report",
             "missing_apk",
@@ -114,6 +117,13 @@ class ProfilePatchChecks(unittest.TestCase):
                         report["patchingSteps"][1]["success"] = False
                     if case == "missing_rebuild":
                         report["patchingSteps"].pop()
+                    # Desktop 1.19.0 renamed patchingSteps to stepResults.
+                    if case == "step_results_failed_step":
+                        report["patchingSteps"][1]["success"] = False
+                    if case in ("step_results", "step_results_failed_step"):
+                        report["stepResults"] = report.pop("patchingSteps")
+                    if case == "step_results_no_steps":
+                        report.pop("patchingSteps")
                     if case != "missing_report":
                         result.write_text(
                             "{" if case == "bad_json" else json.dumps(report),
@@ -149,7 +159,7 @@ class ProfilePatchChecks(unittest.TestCase):
                         ),
                     ) as validate,
                 ):
-                    if case == "valid":
+                    if case in ("valid", "step_results"):
                         self.assertEqual(
                             "Desktop applied and rebuilt all 2 patches",
                             check.verify(
@@ -175,7 +185,7 @@ class ProfilePatchChecks(unittest.TestCase):
                                 check.digest(apk),
                                 Path("aapt2"),
                             )
-                    if case in ("valid", "malformed_apk"):
+                    if case in ("valid", "step_results", "malformed_apk"):
                         validate.assert_called_once_with(
                             scratch[0] / "patched.apk", Path("java"), Path("aapt2")
                         )

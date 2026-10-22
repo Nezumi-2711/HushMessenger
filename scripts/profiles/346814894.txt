@@ -19,11 +19,13 @@ hook ai_menu LX/GGI;->A00()Z
 hook ai_menu LX/GGI;->A01()Z
 hook ai_menu LX/I5w;->A00()Z
 hook ai_menu LX/I5w;->A01()Z
+hook ai_muse_tab LX/1n0;->A02(LX/1n0;)Z
 hook ai_search LX/9ig;->A0A(LX/9ig;)Z
 hook ai_search LX/9ig;->A0B(LX/9ig;)Z
 hook ai_search_chip LX/CDF;->render(LX/2DF;)LX/1J7;
 hook ai_search_hint LX/28z;->A00(LX/1S0;LX/1yn;Lcom/facebook/mig/scheme/interfaces/MigColorScheme;Z)LX/1J7;
 hook ai_sticker_cell LX/CVr;->render(LX/2DF;)LX/1J7;
+hook ai_sticker_grid LX/CZ2;->render(LX/2DF;)LX/1J7;
 hook ai_stickers LX/NPE;->A03(LX/NPE;)Z
 hook ai_stickers LX/NPj;->A07(LX/NPj;)Z
 hook ai_tab LX/1n0;->A03(LX/1n0;)Z
@@ -34,6 +36,7 @@ hook allow_screenshot LX/Znv;->run()V
 hook allow_screenshot Lcom/facebook/screenshot/ScreenshotContentObserver;->onChange(ZLandroid/net/Uri;)V
 hook analytics_uploads LX/0aV;->onStartCommand(Landroid/content/Intent;II)I
 hook analytics_uploads LX/0aV;->onStartJob(Landroid/app/job/JobParameters;)Z
+hook analytics_uploads LX/4ek;->A05(LX/5dJ;Ljava/lang/String;)V
 hook analytics_uploads LX/Zos;->run()V
 hook analytics_uploads LX/a1d;->run()V
 hook analytics_uploads Lcom/facebook/analytics2/logger/GooglePlayUploadService;->onStartCommand(Landroid/content/Intent;II)I
@@ -78,6 +81,7 @@ hook external_gallery LX/6MA;->onActivityResult(IILandroid/content/Intent;)V
 hook external_gallery LX/9DN;->BkO(Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/AZV;LX/6NI;Lcom/facebook/xapp/messaging/composer/event/ComposerEvent;)V
 hook external_gallery LX/AaX;->C0w(Landroid/os/Bundle;LX/6NI;)Z
 hook external_gallery LX/AwQ;->Bpf(LX/4Jq;Ljava/lang/String;)V
+hook external_gallery LX/B5V;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/6NI;)V
 hook facebook LX/2Qv;->A0C()Z
 hook facebook LX/3qo;->A00()Z
 hook facebook LX/3qp;->A00()Z
@@ -87,6 +91,7 @@ hook facebook LX/GM9;->A02()Z
 hook facebook LX/I5A;->A04()Z
 hook facebook LX/I5R;->A06()Z
 hook facebook LX/I5z;->A06()Z
+hook facebook_badge Lcom/facebook/messaging/inbox/tab/plugins/core/tabtoolbarbutton/facebookbutton/facebooktoolbarbutton/FacebookButtonTabButtonImplementation;->A02()LX/2RS;
 hook facebook_profile LX/I6L;->A00()Z
 hook facebook_profile LX/I6T;->A02()Z
 hook facebook_profile LX/I6U;->A01()Z
@@ -150,6 +155,8 @@ hook people_tab LX/FYa;->A01(LX/FYa;)V
 hook phone_id_sync LX/1HB;->A03(LX/1HB;)Ljava/util/ArrayList;
 hook phone_id_sync LX/1HB;->A06(Ljava/lang/String;)V
 hook pinned_chats LX/2qf;->A00(Lcom/facebook/auth/usersession/FbUserSession;)I
+hook quiet_call_notification Lcom/facebook/rtc/notification/RtcNotificationForegroundService;->A00(Landroid/app/Notification;Landroid/content/Context;LX/AZg;LX/Ahb;LX/AFu;LX/R8C;Ljava/lang/Integer;Ljava/lang/String;IZZZ)V
+hook quiet_call_ring LX/AES;->run()V
 hook recent_media LX/9eA;->A01(LX/6NI;Lkotlin/jvm/functions/Function0;)V
 hook reels_badge LX/4WJ;->A09(LX/4WJ;)Z
 hook reply_read LX/9Tt;->A01(Lcom/facebook/auth/usersession/FbUserSession;LX/8hs;LX/9BR;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/Bga;LX/99n;LX/9BQ;LX/Bdg;LX/AZV;LX/6NI;LX/97B;Lcom/facebook/xapp/messaging/composer/send/event/SendMessageEvent;Lcom/facebook/xapp/messaging/map/HeterogeneousMap;LX/5gq;Ljava/lang/String;)V
@@ -170,6 +177,8 @@ hook system_camera LX/98s;->A00(Landroid/content/Context;Landroid/os/Bundle;Land
 hook system_camera LX/99A;->BkO(Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/AZV;LX/6NI;Lcom/facebook/xapp/messaging/composer/event/ComposerEvent;)V
 hook system_camera LX/AaX;->C0w(Landroid/os/Bundle;LX/6NI;)Z
 hook system_camera LX/AwA;->Bpf(LX/4Jq;Ljava/lang/String;)V
+hook tab_badges LX/1n1;->A00(Ljava/lang/String;)LX/38i;
+hook tab_config LX/1nk;->A02(Landroid/content/Context;Lcom/facebook/auth/usersession/FbUserSession;)LX/1oC;
 hook tab_notifications LX/1n0;->A09(LX/1n0;)Z
 hook tab_people LX/1n0;->A0E(LX/1n0;)Z
 hook text_style LX/8eA;->onFocusChanged(ZILandroid/graphics/Rect;)V

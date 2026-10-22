@@ -1,6 +1,6 @@
 [versions]
-morphe-patcher = "1.15.1"
-smali = "d856bad65f"
+morphe-patcher = "2.0.0"
+smali = "4220ae75f7"
 # Every org.bouncycastle request is rewritten to this, in :patches and on the settings classpath
 # (settings.gradle.kts spells it out because the catalog does not exist yet there). 1.86 publishes
 # bcprov, bcpkix and bcutil and is outside CVE-2025-8916, CVE-2026-5588, CVE-2025-14813,

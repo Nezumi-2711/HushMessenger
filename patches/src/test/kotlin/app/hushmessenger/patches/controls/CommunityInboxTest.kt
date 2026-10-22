@@ -287,10 +287,14 @@ class CommunityInboxTest {
             val host = classes.single { it.type == HOST_SCREENS }
             val joined = host.methods.single { it.hookId() == JOINED_COMMUNITY_ROW }
             val scope = host.methods.single { it.hookId() == MAIN_INBOX_SCOPE }
-            for (profile in controlProfiles.values.toSet()) {
+            val profiles = controlProfiles.values.toSet()
+            assertTrue(profiles.isNotEmpty())
+            for (profile in profiles) {
                 activeProfile = profile
                 val contract = assertNotNull(findCommunityInbox(communityInboxFixture()))
                 val helpers = injectCommunityInbox(contract, contract.render as MutableMethod, MutableMethod(joined), MutableMethod(scope))
+                // all {} holds for an empty list too.
+                assertTrue(helpers.isNotEmpty())
                 assertTrue(helpers.all { AccessFlags.STATIC.isSet(it.accessFlags) && !AccessFlags.PRIVATE.isSet(it.accessFlags) })
             }
         } finally { Files.deleteIfExists(extension) }

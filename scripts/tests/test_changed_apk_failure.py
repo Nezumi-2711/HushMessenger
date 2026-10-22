@@ -87,6 +87,9 @@ class ChangedApkChecks(unittest.TestCase):
         cases = [
             "valid",
             "wrapped-reason",
+            "step-results",
+            "step-results-rebuild",
+            "step-results-missing",
             "output",
             "exit-zero",
             "rebuild",
@@ -136,6 +139,15 @@ class ChangedApkChecks(unittest.TestCase):
                         Path(
                             next(arg[3:] for arg in command if arg.startswith("-o="))
                         ).write_bytes(b"unexpected")
+                    if case == "step-results-rebuild":
+                        outcome["patchingSteps"].append(
+                            {"step": "REBUILDING", "success": False}
+                        )
+                    # Desktop 1.19.0 renamed patchingSteps to stepResults.
+                    if case in {"step-results", "step-results-rebuild"}:
+                        outcome["stepResults"] = outcome.pop("patchingSteps")
+                    if case == "step-results-missing":
+                        outcome.pop("patchingSteps")
                     if case == "rebuild":
                         outcome["patchingSteps"].append(
                             {"step": "REBUILDING", "success": False}
@@ -182,7 +194,7 @@ class ChangedApkChecks(unittest.TestCase):
                     patch.object(checker, "run_bounded", side_effect=desktop),
                     redirect_stdout(io.StringIO()),
                 ):
-                    if case in {"valid", "wrapped-reason"}:
+                    if case in {"valid", "wrapped-reason", "step-results"}:
                         self.assertEqual(checker.check(args), 0)
                     elif case == "missing-report":
                         # Desktop that never started must say so, not point at a deleted temp file.

@@ -182,7 +182,10 @@ class MaterialYouPatchTest {
             withThemeContext(temporary.resolve("register-$register"), classes) { context, _ ->
                 materialYouPatch.execute(context)
                 val dex = DexBackedDexFile(Opcodes.forApi(28), java.nio.ByteBuffer.wrap(lifecycleDex(classes.map { context.classDefBy(it.type) })))
-                for (cls in dex.classes.filter { it.type in routes }) {
+                val routed = dex.classes.filter { it.type in routes }
+                // Otherwise a dex without these classes would check nothing and pass.
+                assertEquals(routes.keys, routed.map { it.type }.toSet())
+                for (cls in routed) {
                     val code = cls.methods.single().implementation!!.instructions.toList()
                     val helper = code.indexOfFirst { (it as? ReferenceInstruction)?.reference.toString() ==
                         "Lapp/hushmessenger/extension/MaterialYouTheme;->${routes.getValue(cls.type)}" }
@@ -190,7 +193,9 @@ class MaterialYouPatchTest {
                     assertEquals(if (register < 16) Opcode.INVOKE_STATIC else Opcode.INVOKE_STATIC_RANGE, code[helper].opcode)
                     assertEquals(listOf(Opcode.MOVE_RESULT, Opcode.RETURN), code.drop(helper + 1).take(2).map { it.opcode })
                     assertEquals(listOf(register, register), code.drop(helper + 1).take(2).map { (it as OneRegisterInstruction).registerA })
-                    for (at in code.indices.filter { code[it].opcode == Opcode.IF_EQZ || code[it].opcode == Opcode.GOTO }) {
+                    val branches = code.indices.filter { code[it].opcode == Opcode.IF_EQZ || code[it].opcode == Opcode.GOTO }
+                    assertTrue(branches.isNotEmpty(), cls.type)
+                    for (at in branches) {
                         assertEquals(helper, code.branchTarget(at), cls.type)
                     }
                     val switch = code.indexOfFirst { it.opcode == Opcode.PACKED_SWITCH }

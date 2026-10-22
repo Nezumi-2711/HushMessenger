@@ -138,6 +138,7 @@ public class CompatReport {
         Map.entry("reels_badge", Set.of("com.facebook.messaging.reels.plugins.badge.ReelsBadgeKillSwitch")),
         Map.entry("ai_toolbar", Set.of("com.facebook.messaging.inbox.tab.plugins.core.tabtoolbarbutton.aihomebutton.AiHomeButtonKillSwitch")),
         Map.entry("ai_tab", Set.of("com.facebook.messaging.aibot.plugins.tab.tabcontent.MetaAiTabContentImplementation")),
+        Map.entry("ai_muse_tab", Set.of("com.facebook.messaging.aiagent.plugins.tab.tabcontent.MuseTabContentImplementation")),
         Map.entry("tab_people", Set.of("com.facebook.messaging.peopletab.plugins.tab.tabcontent.PeopleTabContentImplementation")),
         Map.entry("tab_notifications", Set.of("com.facebook.messaging.inbox.jewel.jeweltab.plugins.core.tabcontent.JewelTabContentImplementation")),
         Map.entry("mark_read_action", Set.of("com.facebook.messaging.threadlist.threaditemmenu.plugins.core.markreadmenuitem.MarkReadMenuItemImplementation"))
@@ -172,13 +173,14 @@ public class CompatReport {
         PATCHES.put("Hide Mark as read", List.of("mark_read_action"));
         PATCHES.put("Pin more chats", List.of("pinned_chats"));
         PATCHES.put("Hide Facebook shortcuts", List.of("facebook", "facebook_profile"));
-        PATCHES.put("Hide Meta AI", List.of("ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_search", "ai_search_chip", "ai_mentions", "ai_commands", "ai_search_hint", "ai_mention_rows"));
+        PATCHES.put("Hide Meta AI", List.of("ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_muse_tab", "ai_search", "ai_search_chip", "ai_mentions", "ai_commands", "ai_search_hint", "ai_mention_rows", "tab_config"));
         PATCHES.put("Hide Chat Moments", List.of("moments"));
         PATCHES.put("Hide Reels badge", List.of("reels_badge"));
-        PATCHES.put("Hide People tab", List.of("tab_people"));
-        PATCHES.put("Hide Notifications tab", List.of("tab_notifications"));
+        PATCHES.put("Hide People tab", List.of("tab_people", "tab_config"));
+        PATCHES.put("Hide Notifications tab", List.of("tab_notifications", "tab_config"));
+        PATCHES.put("Hide tab badges", List.of("tab_badges", "facebook_badge"));
         PATCHES.put("Hold stories at the end", List.of("story_hold"));
-        PATCHES.put("Hide AI sticker tools", List.of("ai_stickers", "ai_sticker_cell"));
+        PATCHES.put("Hide AI sticker tools", List.of("ai_stickers", "ai_sticker_cell", "ai_sticker_grid"));
         PATCHES.put("Hide avatar stickers", List.of("avatar_stickers", "avatar_tabs"));
         PATCHES.put("Restore old emoji drawer", List.of("emoji_drawer"));
         PATCHES.put("Keep emoji search on emoji", List.of("emoji_search"));
@@ -194,18 +196,19 @@ public class CompatReport {
         PATCHES.put("Send photos at original quality", List.of("original_photo"));
         PATCHES.put("Send videos without re-encoding", List.of("original_video"));
         PATCHES.put("Fix videos that won't send", List.of("xhe_audio", "xhe_transcode"));
-        PATCHES.put("Turn off the swipe up for disappearing messages", List.of("disappearing_swipe"));
+        PATCHES.put("Ignore the swipe up for disappearing messages", List.of("disappearing_swipe"));
         PATCHES.put("Hide the recent photo card", List.of("recent_media"));
         PATCHES.put("Use the phone's camera app", List.of("system_camera"));
         PATCHES.put("Open your gallery app", List.of("external_gallery"));
         PATCHES.put("Stop analytics uploads", List.of("analytics_uploads"));
         PATCHES.put("Stop ad attribution uploads", List.of("attribution_uploads"));
         PATCHES.put("Stop inbox and ad link logging", List.of("ad_events"));
-        PATCHES.put("Stop MQTT logging", List.of("mqtt_telemetry"));
+        PATCHES.put("Stop live connection logging", List.of("mqtt_telemetry"));
         PATCHES.put("Stop nearby scans", List.of("nearby_scans", "wifi_identity"));
         PATCHES.put("Stop app list and device ID sharing", List.of("phone_id_sync"));
         PATCHES.put("Keep a message log", List.of("message_log"));
         PATCHES.put("Auto reply", List.of("auto_reply"));
+        PATCHES.put("Quiet incoming calls", List.of("quiet_call_ring", "quiet_call_notification"));
         PATCHES.put("Allow screenshots", List.of("allow_screenshot", "screenshot_viewers"));
         PATCHES.put("Hide read receipts", List.of("hide_read_receipts", "reply_read"));
         PATCHES.put("Mark as read button", List.of("mark_read_bar", "mark_read_click"));
@@ -319,11 +322,29 @@ public class CompatReport {
 
     static final Path PROFILES = scriptDir().resolve("profiles");
 
+    /** Python 3 from PATH: the py launcher first on Windows, then python3 or python. */
+    static List<String> python() throws IOException {
+        boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
+        String path = System.getenv("PATH");
+        for (var name : win ? List.of("py", "python3", "python") : List.of("python3", "python")) {
+            for (var dir : (path == null ? "" : path).split(File.pathSeparator)) {
+                if (dir.isBlank()) continue;
+                Path exe;
+                try { exe = Path.of(dir.strip(), win ? name + ".exe" : name); } catch (InvalidPathException e) { continue; }
+                // WindowsApps holds the Store's python stubs, which open the Store instead of running a script.
+                if (!Files.isRegularFile(exe) || (win && exe.toString().toLowerCase().contains("\\windowsapps\\"))) continue;
+                return "py".equals(name) ? List.of(exe.toString(), "-3") : List.of(exe.toString());
+            }
+        }
+        throw new IOException("verify_compat_patch.py needs Python 3. Put the py launcher, python3 or python on PATH");
+    }
+
     /** Discovery isn't patch application. Never publish a profile on discovery evidence alone. */
     static boolean verifyPatch(File apk, String apkHash, Path desktop, Path bundle) throws IOException, InterruptedException {
         String aapt2 = findTool("aapt2");
         if (aapt2 == null) throw new IOException("Android Build Tools aapt2 is required to validate the rebuilt APK");
-        var command = new ArrayList<>(List.of("python", scriptDir().resolve("verify_compat_patch.py").toString(),
+        var command = new ArrayList<>(python());
+        command.addAll(List.of(scriptDir().resolve("verify_compat_patch.py").toString(),
             "--apk", apk.getAbsolutePath(), "--apk-sha256", apkHash, "--desktop", desktop.toAbsolutePath().toString(),
             "--bundle", bundle.toAbsolutePath().toString(), "--java",
             Path.of(System.getProperty("java.home"), "bin", "java").toString(), "--aapt2", aapt2));
@@ -1697,6 +1718,8 @@ public class CompatReport {
     static final String WINDOW = "Landroid/view/Window;";
     static final String SET_FLAGS = WINDOW + "->setFlags(II)V", ADD_FLAGS = WINDOW + "->addFlags(I)V";
     static final int GENERATE_AI_LABEL = 0x7f140559;
+    // "Generate": the same cell's label when its tap opens the custom, AI and music sticker menu
+    static final int GENERATE_MENU_LABEL = 0x7f141bd3;
     // The viewer's onCreateDialog override, A1K in 584
     static final String EPHEMERAL_DIALOG = "A1K";
 
@@ -1784,16 +1807,16 @@ public class CompatReport {
     }
 
     /**
-     * Mirrors NativeMediaControls.kt: 584's cell, its label, how many renders offer that label and its render's size
-     * (24 registers). Four renders offer the label.
+     * Mirrors NativeMediaControls.kt: 584's cell, its label, how many renders offer that label, the same for its Generate
+     * menu label, and its render's size (24 registers). Four renders offer the AI label and one the menu label.
      */
-    record AiCell(String type, String superclass, String scope, String component, int label, int sources, int size) {
+    record AiCell(String type, String superclass, String scope, String component, int label, int sources, int size, int menu, int menuSources) {
         String render() { return type + "->render(" + scope + ")" + component; }
     }
+    static final List<AiCell> AI_CELLS = List.of(new AiCell("LX/CVr;", "LX/1Nj;", "LX/2DF;", "LX/1J7;", GENERATE_AI_LABEL, 4, 107, GENERATE_MENU_LABEL, 1));
     static List<Method> findAiStickerCells(List<ClassDef> classes) {
-        var shapes = List.of(new AiCell("LX/CVr;", "LX/1Nj;", "LX/2DF;", "LX/1J7;", GENERATE_AI_LABEL, 4, 107));
         var result = new ArrayList<Method>();
-        for (var shape : shapes) {
+        for (var shape : AI_CELLS) {
             var matching = classes.stream().filter(c -> c.getType().equals(shape.type())).toList();
             if (matching.size() != 1) continue;
             var cls = matching.getFirst();
@@ -1811,7 +1834,7 @@ public class CompatReport {
                     !Objects.equals(ref(b.get(5)), shape.type() + "->A00:I") || b.stream().filter(i -> Objects.equals(ref(i), shape.type() + "->A00:I")).count() != 1 ||
                     b.subList(0, 5).stream().anyMatch(i -> mediaWrites(i, 0) || mediaWrites(i, 11)) ||
                     b.stream().anyMatch(i -> i instanceof OffsetInstruction) || !ctor.getImplementation().getTryBlocks().isEmpty()) continue;
-            int sources = 0;
+            int sources = 0, menus = 0;
             for (var sourceClass : classes) for (var source : sourceClass.getMethods()) {
                 if (!source.getName().equals("render")) continue;
                 var c = instructions(source);
@@ -1819,16 +1842,115 @@ public class CompatReport {
                     if (!Set.of(Opcode.INVOKE_DIRECT, Opcode.INVOKE_DIRECT_RANGE).contains(c.get(at).getOpcode()) || !Objects.equals(ref(c.get(at)), hookId(ctor))) continue;
                     var args = bubbleArgs(c.get(at)); if (args.isEmpty()) continue; int arg = args.getLast(), literal = -1;
                     for (int j = at - 1; j >= Math.max(0, at - 24); j--) if (mediaWrites(c.get(j), arg)) { literal = j; break; }
-                    if (literal < 0 || !(c.get(literal) instanceof NarrowLiteralInstruction n) || n.getNarrowLiteral() != shape.label()) continue;
-                    boolean straight = true; for (int j = literal + 1; j < at; j++) if (c.get(j) instanceof OffsetInstruction) straight = false;
-                    for (int t : mediaTargets(source)) if (t > literal && t <= at) straight = false;
-                    if (straight) sources++;
+                    if (literal < 0 || !(c.get(literal) instanceof NarrowLiteralInstruction n)) continue;
+                    boolean branchFree = true; for (int j = literal + 1; j < at; j++) if (c.get(j) instanceof OffsetInstruction) branchFree = false;
+                    if (!branchFree) continue;
+                    boolean joined = false; for (int t : mediaTargets(source)) if (t > literal && t <= at) joined = true;
+                    if (n.getNarrowLiteral() == shape.label() && !joined) sources++;
+                    // The music sticker branch jumps into the menu cell's constructor call, so only the straight run from the literal counts.
+                    if (n.getNarrowLiteral() == shape.menu()) menus++;
                 }
             }
-            if (sources != shape.sources()) continue;
+            if (sources != shape.sources() || menus != shape.menuSources()) continue;
             for (var m : cls.getMethods()) if (hookId(m).equals(shape.render()) && !AccessFlags.STATIC.isSet(m.getAccessFlags()) && m.getImplementation() != null &&
                     m.getImplementation().getRegisterCount() == 24 && instructions(m).size() == shape.size() && m.getImplementation().getTryBlocks().size() == 4) result.add(m);
         }
+        return result;
+    }
+
+    static final Set<Opcode> MEDIA_GOTOS = Set.of(Opcode.GOTO, Opcode.GOTO_16, Opcode.GOTO_32);
+    static final Set<Opcode> MEDIA_EXITS = Set.of(Opcode.RETURN_VOID, Opcode.RETURN, Opcode.RETURN_WIDE, Opcode.RETURN_OBJECT, Opcode.THROW);
+    static final String ITERATOR_HAS_NEXT = "Ljava/util/Iterator;->hasNext()Z", ITERATOR_NEXT = "Ljava/util/Iterator;->next()Ljava/lang/Object;";
+    static boolean mediaIs(List<Instruction> c, int at, Opcode... ops) {
+        return at >= 0 && at < c.size() && Arrays.asList(ops).contains(c.get(at).getOpcode());
+    }
+
+    /** Mirrors NativeMediaControls.kt feedsAiCell: the label at {@code at} reaches the cell's constructor, following plain gotos only. */
+    static boolean feedsAiCell(List<Instruction> c, int at, AiCell cell) {
+        int register = register(c.get(at));
+        if (register < 0) return false;
+        int i = at + 1;
+        for (int step = 0; step < 48; step++) {
+            if (i < 0 || i >= c.size()) return false;
+            var instruction = c.get(i);
+            if (MEDIA_GOTOS.contains(instruction.getOpcode())) { i = mediaTarget(c, i); continue; }
+            if (Set.of(Opcode.INVOKE_DIRECT, Opcode.INVOKE_DIRECT_RANGE).contains(instruction.getOpcode()) && instruction instanceof ReferenceInstruction r &&
+                    r.getReference() instanceof MethodReference m && m.getDefiningClass().equals(cell.type()) && m.getName().equals("<init>")) {
+                var args = bubbleArgs(instruction);
+                return m.getParameterTypes().size() == 11 && m.getParameterTypes().getLast().toString().equals("I") && !args.isEmpty() && args.getLast() == register;
+            }
+            if (instruction instanceof OffsetInstruction || mediaWrites(instruction, register) || MEDIA_EXITS.contains(instruction.getOpcode())) return false;
+            i++;
+        }
+        return false;
+    }
+
+    /**
+     * Mirrors NativeMediaControls.kt aiStickerGrid: the Suggested grid loop whose instance-of chain sends the Generate menu
+     * item and the Generate AI item to the cell. Sites are where those two branch bodies start, skip is the loop's continue step.
+     */
+    record AiGrid(List<Integer> sites, int skip, int flag) {}
+    static AiGrid aiStickerGrid(Method method, AiCell cell) {
+        if (!method.getName().equals("render") || AccessFlags.STATIC.isSet(method.getAccessFlags())) return null;
+        var c = instructions(method);
+        java.util.function.IntPredicate labelled = at -> c.get(at).getOpcode() == Opcode.CONST && c.get(at) instanceof NarrowLiteralInstruction n &&
+                (n.getNarrowLiteral() == cell.menu() || n.getNarrowLiteral() == cell.label());
+        var labels = new ArrayList<Integer>();
+        for (int at = 0; at < c.size(); at++) if (labelled.test(at)) labels.add(at);
+        if (labels.isEmpty() || c.stream().noneMatch(i -> ITERATOR_HAS_NEXT.equals(ref(i)))) return null;
+        var found = new ArrayList<AiGrid>();
+        for (int head = 0; head < c.size(); head++) {
+            if (!mediaIs(c, head, Opcode.INVOKE_INTERFACE, Opcode.INVOKE_INTERFACE_RANGE) || !ITERATOR_HAS_NEXT.equals(ref(c.get(head)))) continue;
+            var iterators = bubbleArgs(c.get(head));
+            if (iterators.size() != 1 || head + 7 >= c.size() || !(c.get(head + 5) instanceof TwoRegisterInstruction step)) continue;
+            int iterator = iterators.getFirst(), more = register(c.get(head + 1)), item = register(c.get(head + 4));
+            if (!mediaIs(c, head + 1, Opcode.MOVE_RESULT) || !mediaIs(c, head + 2, Opcode.IF_EQZ) || register(c.get(head + 2)) != more ||
+                    !mediaIs(c, head + 3, Opcode.INVOKE_INTERFACE, Opcode.INVOKE_INTERFACE_RANGE) || !ITERATOR_NEXT.equals(ref(c.get(head + 3))) ||
+                    !bubbleArgs(c.get(head + 3)).equals(List.of(iterator)) || !mediaIs(c, head + 4, Opcode.MOVE_RESULT_OBJECT) ||
+                    !mediaIs(c, head + 5, Opcode.ADD_INT_LIT8) || ((NarrowLiteralInstruction) step).getNarrowLiteral() != 1 ||
+                    !mediaIs(c, head + 6, Opcode.IF_LTZ) || register(c.get(head + 6)) != step.getRegisterB() ||
+                    !mediaIs(c, head + 7, Opcode.CHECK_CAST) || register(c.get(head + 7)) != item) continue;
+            int index = step.getRegisterB(), next = step.getRegisterA();
+            var backs = new ArrayList<Integer>();
+            for (int i = 0; i < c.size(); i++) if (c.get(i) instanceof OffsetInstruction && mediaTarget(c, i) == head) backs.add(i);
+            if (backs.size() != 1) continue;
+            int back = backs.getFirst();
+            if (!MEDIA_GOTOS.contains(c.get(back).getOpcode()) || !mediaIs(c, back - 1, Opcode.MOVE, Opcode.MOVE_FROM16, Opcode.MOVE_16) ||
+                    !(c.get(back - 1) instanceof TwoRegisterInstruction move) || move.getRegisterA() != index || move.getRegisterB() != next) continue;
+            int link = head + 8;
+            Integer flag = null;
+            var menus = new ArrayList<Integer>();
+            var ais = new ArrayList<Integer>();
+            var bodies = new ArrayList<int[]>();
+            while (mediaIs(c, link, Opcode.INSTANCE_OF)) {
+                var test = (TwoRegisterInstruction) c.get(link);
+                if (test.getRegisterB() != item || (flag != null && test.getRegisterA() != flag)) break;
+                flag = test.getRegisterA();
+                if (!mediaIs(c, link + 1, Opcode.IF_EQZ) || register(c.get(link + 1)) != flag) break;
+                int end = mediaTarget(c, link + 1);
+                if (end <= link + 2) break;
+                for (int at = link + 2; at < end; at++) {
+                    if (!labelled.test(at) || !feedsAiCell(c, at, cell)) continue;
+                    if (((NarrowLiteralInstruction) c.get(at)).getNarrowLiteral() == cell.menu()) menus.add(link + 2); else ais.add(link + 2);
+                    bodies.add(new int[] {link + 2, end});
+                }
+                link = end;
+            }
+            var sites = new ArrayList<Integer>(menus);
+            sites.addAll(ais);
+            Collections.sort(sites);
+            var targets = mediaTargets(method);
+            // One branch per label, each entered only from its own instance-of test, and no label outside them.
+            if (flag == null || flag > 15 || menus.size() != 1 || ais.size() != 1 || menus.equals(ais) ||
+                    List.of(item, index, next, iterator).contains(flag) || sites.stream().anyMatch(targets::contains) ||
+                    labels.stream().anyMatch(at -> bodies.stream().noneMatch(b -> at >= b[0] && at < b[1]))) continue;
+            found.add(new AiGrid(sites, back - 1, flag));
+        }
+        return found.size() == 1 ? found.getFirst() : null;
+    }
+    static List<Method> findAiStickerGrids(List<ClassDef> classes) {
+        var result = new ArrayList<Method>();
+        for (var cls : classes) for (var m : cls.getMethods()) if (AI_CELLS.stream().anyMatch(cell -> aiStickerGrid(m, cell) != null)) result.add(m);
         return result;
     }
 
@@ -3032,29 +3154,78 @@ public class CompatReport {
         return startsFromProvider(editor, providerType, iface + "->" + start.getName() + "(" + startParams + ")Z") ? field : null;
     }
 
+    static final String ACTIVITY_RESULT_EVENT = "Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;";
+
+    /** The p-number of the method's one parameter of this type, or -1 when it has none or several. */
+    static int onlyParameter(Method m, String type) {
+        int at = -1, found = 0, words = AccessFlags.STATIC.isSet(m.getAccessFlags()) ? 0 : 1;
+        for (var param : m.getParameterTypes()) {
+            if (type.contentEquals(param)) { found++; at = words; }
+            words += "J".contentEquals(param) || "D".contentEquals(param) ? 2 : 1;
+        }
+        return found == 1 ? at : -1;
+    }
+
+    /**
+     * The chat's static handler for a photo picked in another app: handed one thread and one result event, it checks for
+     * 1112 and reads the event's one intent field from that parameter, which it never writes. Mirrors galleryItemsIntent
+     * in ExternalGallery.kt.
+     */
+    static boolean isGalleryItemsHandler(Method m, Map<String, ClassDef> byType) {
+        if (!AccessFlags.STATIC.isSet(m.getAccessFlags()) || !"V".equals(m.getReturnType()) || m.getImplementation() == null ||
+            onlyParameter(m, THREAD_KEY) < 0 || onlyParameter(m, ACTIVITY_RESULT_EVENT) < 0 || !hasLiteral(m, 1112)) return false;
+        int event = galleryItemsRegister(m, ACTIVITY_RESULT_EVENT);
+        var intents = new LinkedHashMap<String, FieldReference>();
+        for (var i : instructions(m)) {
+            if (writesRegister(i, event)) return false;
+            if (i.getOpcode() == Opcode.IGET_OBJECT && ((TwoRegisterInstruction) i).getRegisterB() == event &&
+                ((ReferenceInstruction) i).getReference() instanceof FieldReference f && ACTIVITY_RESULT_EVENT.equals(f.getDefiningClass()) &&
+                "Landroid/content/Intent;".equals(f.getType())) intents.put(f.toString(), f);
+        }
+        if (intents.size() != 1) return false;
+        var intent = intents.values().iterator().next();
+        var eventClass = byType.get(ACTIVITY_RESULT_EVENT);
+        if (eventClass == null) return false;
+        int fields = 0;
+        for (var field : eventClass.getFields())
+            if (field.getName().equals(intent.getName()) && field.getType().equals(intent.getType()) && !AccessFlags.STATIC.isSet(field.getAccessFlags())) fields++;
+        return fields == 1;
+    }
+
+    /** The register that holds the static method's one parameter of this type. */
+    static int galleryItemsRegister(Method m, String type) {
+        int words = 0;
+        for (var param : m.getParameterTypes()) words += "J".contentEquals(param) || "D".contentEquals(param) ? 2 : 1;
+        return m.getImplementation().getRegisterCount() - words + onlyParameter(m, type);
+    }
+
     /**
      * external_gallery: the chat's gallery event handlers (at most one of each kind, every one routing), the chat camera
-     * launcher's start (the one way each handler's Edit branch reaches that launcher) and the chat's result reader,
-     * counted only while the reader is an instance method that reads the chat camera's request code and the launcher is
-     * the camera switch's own. Mirrors findExternalGallery in ExternalGallery.kt. Each handler needs three locals for its
-     * scratch registers.
+     * launcher's start (the one way each handler's Edit branch reaches that launcher), the chat's result reader and its
+     * one handler for a photo from another app, counted only while the reader is an instance method that reads the chat
+     * camera's request code and the launcher is the camera switch's own. Mirrors findExternalGallery in ExternalGallery.kt.
+     * Each gallery handler needs three locals for its scratch registers, and the photo handler's hook reaches its thread
+     * and event with plain instructions, so both sit below v16.
      */
     static List<Method> externalGalleryHooks(List<ClassDef> classes) {
         var readers = new ArrayList<Method>();
         var factories = new ArrayList<Method>();
         var handlers = new ArrayList<Method>();
+        var items = new ArrayList<Method>();
         var byType = new HashMap<String, ClassDef>();
+        for (var cls : classes) byType.put(cls.getType(), cls);
         for (var cls : classes) {
-            byType.put(cls.getType(), cls);
             for (var m : cls.getMethods()) {
                 if (m.getImplementation() == null) continue;
                 if (isComposerResult(m)) readers.add(m);
                 if (isChatCameraFactory(m)) factories.add(m);
                 if (isGalleryHandler(m)) handlers.add(m);
+                if (isGalleryItemsHandler(m, byType)) items.add(m);
             }
         }
         if (readers.size() != 1 || !hasLiteral(readers.get(0), 7376) || AccessFlags.STATIC.isSet(readers.get(0).getAccessFlags()) ||
-            factories.size() != 1 || handlers.isEmpty()) return List.of();
+            factories.size() != 1 || handlers.isEmpty() || items.size() != 1) return List.of();
+        if (galleryItemsRegister(items.get(0), THREAD_KEY) > 15 || galleryItemsRegister(items.get(0), ACTIVITY_RESULT_EVENT) > 15) return List.of();
         var kinds = new HashSet<String>();
         for (var handler : handlers) if (!kinds.add(galleryHandlerKind(handler))) return List.of();
         var factory = factories.get(0);
@@ -3087,6 +3258,7 @@ public class CompatReport {
         var hooks = new ArrayList<Method>(handlers);
         hooks.add(start);
         hooks.add(readers.get(0));
+        hooks.add(items.get(0));
         return hooks;
     }
 
@@ -3251,6 +3423,54 @@ public class CompatReport {
         return found.size() == 1 ? found : List.of();
     }
 
+    static final List<String> UPLOAD_ACTIONS = List.of("com.facebook.analytics2.logger.UPLOAD_NOW",
+        "com.facebook.analytics2.logger.USER_LOGOUT", "Unknown action=");
+
+    static String methodId(MethodReference r) {
+        return r.getDefiningClass() + "->" + r.getName() + "(" + String.join("", r.getParameterTypes()) + ")" + r.getReturnType();
+    }
+
+    /** The uploader's (params, callback, action)V dispatcher, which names both upload actions and the unknown one. */
+    static boolean isUploadActionDispatcher(Method m) {
+        if (!"V".equals(m.getReturnType()) || AccessFlags.STATIC.isSet(m.getAccessFlags()) || m.getImplementation() == null ||
+            m.getParameterTypes().size() != 3 || !"Ljava/lang/String;".contentEquals(m.getParameterTypes().get(2))) return false;
+        var strings = new HashSet<String>();
+        for (var i : m.getImplementation().getInstructions())
+            if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference s) strings.add(s.getString());
+        return strings.containsAll(UPLOAD_ACTIONS);
+    }
+
+    /** (params, action)V that only calls the dispatcher with this, its params, a null callback and its action. */
+    static boolean startsUploadInProcess(Method m, Method dispatcher) {
+        if (!"V".equals(m.getReturnType()) || AccessFlags.STATIC.isSet(m.getAccessFlags()) || m.getImplementation() == null ||
+            m.getParameterTypes().size() != 2 || !"Ljava/lang/String;".contentEquals(m.getParameterTypes().get(1))) return false;
+        var code = new ArrayList<Instruction>();
+        m.getImplementation().getInstructions().forEach(code::add);
+        if (code.size() != 3 || code.get(0).getOpcode() != Opcode.CONST_4 || ((NarrowLiteralInstruction) code.get(0)).getNarrowLiteral() != 0 ||
+            code.get(1).getOpcode() != Opcode.INVOKE_DIRECT || code.get(2).getOpcode() != Opcode.RETURN_VOID) return false;
+        if (!(((ReferenceInstruction) code.get(1)).getReference() instanceof MethodReference target) ||
+            !methodId(target).equals(methodId(dispatcher)) ||
+            !m.getParameterTypes().get(0).toString().equals(target.getParameterTypes().get(0).toString())) return false;
+        var call = (FiveRegisterInstruction) code.get(1);
+        int self = m.getImplementation().getRegisterCount() - 3;
+        int callback = ((OneRegisterInstruction) code.get(0)).getRegisterA();
+        return callback < self && call.getRegisterCount() == 4 && call.getRegisterC() == self && call.getRegisterD() == self + 1 &&
+            call.getRegisterE() == callback && call.getRegisterF() == self + 2;
+    }
+
+    /** The in-process upload start beside the one dispatcher, when there's exactly one. Mirrors AnalyticsUploads.kt. */
+    static List<Method> inProcessUploadStarts(List<ClassDef> classes) {
+        var dispatchers = new ArrayList<Method>();
+        for (var cls : classes) for (var m : cls.getMethods()) if (isUploadActionDispatcher(m)) dispatchers.add(m);
+        if (dispatchers.size() != 1) return List.of();
+        var dispatcher = dispatchers.get(0);
+        var starts = new ArrayList<Method>();
+        for (var cls : classes)
+            if (cls.getType().equals(dispatcher.getDefiningClass()))
+                for (var m : cls.getMethods()) if (startsUploadInProcess(m, dispatcher)) starts.add(m);
+        return starts.size() == 1 ? starts : List.of();
+    }
+
     static List<Method> analyticsUploads(List<ClassDef> classes) {
         var found = new ArrayList<Method>();
         ClassDef uploader = null;
@@ -3295,6 +3515,161 @@ public class CompatReport {
             if (strings.contains("afterTextChanged") && strings.contains("expression")) watchers.add(method);
         }
         return watchers.size() == 1 ? watchers : List.of();
+    }
+
+    static final String TAB_CONTENT_SPEC = "messaging.navigation.home.tabs.tabcontent.TabContentInterfaceSpec";
+    static final String FACEBOOK_BUTTON =
+        "Lcom/facebook/messaging/inbox/tab/plugins/core/tabtoolbarbutton/facebookbutton/facebooktoolbarbutton/FacebookButtonTabButtonImplementation;";
+
+    /**
+     * tab_badges: the bottom bar's badge dispatcher, an instance (String) method naming the tab content spec and
+     * "getBadgeController", whose no-badge tabs all read one static field of its return type. Every match must hold that
+     * field and keep its tab id within v15, or none counts. Mirrors TabBadges.kt.
+     */
+    static List<Method> tabBadgeDispatchers(List<ClassDef> classes) {
+        var found = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (method.getImplementation() == null || AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+                !method.getReturnType().startsWith("L") || method.getParameterTypes().size() != 1 ||
+                !"Ljava/lang/String;".equals(method.getParameterTypes().get(0).toString())) continue;
+            var strings = new HashSet<String>();
+            for (var i : method.getImplementation().getInstructions())
+                if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr) strings.add(sr.getString());
+            if (strings.contains(TAB_CONTENT_SPEC) && strings.contains("getBadgeController")) found.add(method);
+        }
+        for (var method : found) {
+            var none = new HashSet<String>();
+            for (var i : instructions(method))
+                if (i.getOpcode() == Opcode.SGET_OBJECT && ((ReferenceInstruction) i).getReference() instanceof FieldReference f &&
+                    method.getReturnType().equals(f.getType())) none.add(f.toString());
+            // The tab id is p1, the method's last register.
+            if (none.size() != 1 || method.getImplementation().getRegisterCount() - 1 > 15) return List.of();
+        }
+        return found;
+    }
+
+    /**
+     * facebook_badge: the Facebook button's build, whose one (FbUserSession)Z check drops the cast badge controller to
+     * null right before the button is made with it, and whose check result no other path jumps past. Mirrors TabBadges.kt.
+     */
+    static List<Method> facebookBadgeChecks(List<ClassDef> classes) {
+        var found = new ArrayList<Method>();
+        for (var cls : classes) {
+            if (!FACEBOOK_BUTTON.equals(cls.getType())) continue;
+            for (var method : cls.getMethods()) if (facebookBadgeCheck(method) >= 0) found.add(method);
+        }
+        for (var method : found) {
+            int result = facebookBadgeCheck(method);
+            if (register(instructions(method).get(result)) > 15 || mediaTargets(method).contains(result + 1)) return List.of();
+        }
+        return found;
+    }
+
+    static final String TAB_CONFIG_TRACE = "MessengerTabConfigurationCreator.createTabConfiguration";
+    static final Set<String> HIDABLE_TABS = Set.of("PEOPLE", "JEWEL", "AI", "MUSE");
+
+    /**
+     * tab_config: the bottom bar's tab-list builder, an instance (Context, FbUserSession) method naming its trace. Every
+     * match must have one configuration site with nothing jumping to it, or none counts. Mirrors TabConfig.kt.
+     */
+    static List<Method> tabConfigurations(List<ClassDef> classes) {
+        var found = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (method.getImplementation() == null || AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+                !method.getReturnType().startsWith("L") || method.getParameterTypes().size() != 2 ||
+                !"Landroid/content/Context;".equals(method.getParameterTypes().get(0).toString()) ||
+                !BUBBLE_SESSION.equals(method.getParameterTypes().get(1).toString())) continue;
+            boolean traced = false;
+            for (var i : method.getImplementation().getInstructions())
+                if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr && TAB_CONFIG_TRACE.equals(sr.getString())) traced = true;
+            if (traced) found.add(method);
+        }
+        for (var method : found) {
+            int site = tabConfigSite(method);
+            if (site < 0) return List.of();
+            var targets = mediaTargets(method);
+            if (targets.contains(site) || targets.contains(site + 1)) return List.of();
+        }
+        return found;
+    }
+
+    /**
+     * Index of the new-instance right before the builder's one (List, List) configuration constructor, or -1. The builder
+     * must read PEOPLE, JEWEL, AI and MUSE as constants of one enum.
+     */
+    static int tabConfigSite(Method method) {
+        var code = instructions(method);
+        int at = -1;
+        for (int i = 0; i < code.size(); i++) {
+            var op = code.get(i).getOpcode();
+            if ((op == Opcode.INVOKE_DIRECT || op == Opcode.INVOKE_DIRECT_RANGE) &&
+                ((ReferenceInstruction) code.get(i)).getReference() instanceof MethodReference m &&
+                "<init>".equals(m.getName()) && method.getReturnType().equals(m.getDefiningClass())) {
+                if (at >= 0) return -1;
+                at = i;
+            }
+        }
+        if (at < 1 || !(code.get(at) instanceof FiveRegisterInstruction build) || build.getRegisterCount() != 3) return -1;
+        var params = new ArrayList<String>();
+        for (var t : ((MethodReference) ((ReferenceInstruction) build).getReference()).getParameterTypes()) params.add(t.toString());
+        if (!params.equals(List.of("Ljava/util/List;", "Ljava/util/List;"))) return -1;
+        var start = code.get(at - 1);
+        if (start.getOpcode() != Opcode.NEW_INSTANCE || register(start) != build.getRegisterC() ||
+            !method.getReturnType().equals(((TypeReference) ((ReferenceInstruction) start).getReference()).getType())) return -1;
+        var names = new HashSet<String>();
+        var types = new HashSet<String>();
+        for (var i : code)
+            if (i.getOpcode() == Opcode.SGET_OBJECT && ((ReferenceInstruction) i).getReference() instanceof FieldReference f &&
+                HIDABLE_TABS.contains(f.getName()) && f.getType().equals(f.getDefiningClass())) {
+                names.add(f.getName());
+                types.add(f.getType());
+            }
+        return names.equals(HIDABLE_TABS) && types.size() == 1 ? at - 1 : -1;
+    }
+
+    /** Index of the check's MOVE_RESULT, or -1. */
+    static int facebookBadgeCheck(Method method) {
+        if (!FACEBOOK_BUTTON.equals(method.getDefiningClass()) || AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+            !method.getParameterTypes().isEmpty() || !method.getReturnType().startsWith("L")) return -1;
+        var code = instructions(method);
+        int at = -1, sites = 0;
+        for (int i = 0; i + 3 < code.size(); i++) {
+            if (code.get(i).getOpcode() != Opcode.INVOKE_VIRTUAL ||
+                !(((ReferenceInstruction) code.get(i)).getReference() instanceof MethodReference callee) ||
+                !"Z".equals(callee.getReturnType()) || callee.getParameterTypes().size() != 1 ||
+                !"Lcom/facebook/auth/usersession/FbUserSession;".equals(callee.getParameterTypes().get(0).toString())) continue;
+            if (code.get(i + 1).getOpcode() != Opcode.MOVE_RESULT || code.get(i + 2).getOpcode() != Opcode.IF_NEZ ||
+                register(code.get(i + 2)) != register(code.get(i + 1)) || !jumpsTo(code, i + 2, i + 4) ||
+                code.get(i + 3).getOpcode() != Opcode.CONST_4 || ((NarrowLiteralInstruction) code.get(i + 3)).getNarrowLiteral() != 0) continue;
+            at = i;
+            sites++;
+        }
+        if (sites != 1) return -1;
+        int controller = register(code.get(at + 3));
+        Instruction cast = null;
+        for (int i = 0; i < at; i++)
+            if (code.get(i).getOpcode() == Opcode.CHECK_CAST && register(code.get(i)) == controller) cast = code.get(i);
+        if (cast == null) return -1;
+        var type = ((TypeReference) ((ReferenceInstruction) cast).getReference()).getType();
+        Instruction build = null;
+        for (int i = at + 4; i < code.size() && build == null; i++)
+            if ((code.get(i).getOpcode() == Opcode.INVOKE_DIRECT || code.get(i).getOpcode() == Opcode.INVOKE_DIRECT_RANGE) &&
+                ((ReferenceInstruction) code.get(i)).getReference() instanceof MethodReference init && "<init>".equals(init.getName()) &&
+                method.getReturnType().equals(init.getDefiningClass())) build = code.get(i);
+        if (build == null) return -1;
+        // The dropped register is the controller argument of the button the method returns, and nothing else.
+        var arguments = bubbleArgs(build);
+        int word = 1, uses = 0;
+        String usedAs = null;
+        for (var parameter : ((MethodReference) ((ReferenceInstruction) build).getReference()).getParameterTypes()) {
+            var name = parameter.toString();
+            if (word < arguments.size() && arguments.get(word) == controller) {
+                uses++;
+                usedAs = name;
+            }
+            word += "J".equals(name) || "D".equals(name) ? 2 : 1;
+        }
+        return uses == 1 && type.equals(usedAs) ? at + 1 : -1;
     }
 
     static final Set<String> AI_MENTION_PLUGINS = Set.of(
@@ -4013,6 +4388,83 @@ public class CompatReport {
         return List.of();
     }
 
+    static final String RTC_NOTIFICATION_SERVICE = "Lcom/facebook/rtc/notification/RtcNotificationForegroundService;";
+
+    /** The one register a String.valueOf(boolean) call reads, in either invoke form, or -1. */
+    static int booleanText(Instruction i) {
+        if (!"Ljava/lang/String;->valueOf(Z)Ljava/lang/String;".equals(ref(i))) return -1;
+        if (i.getOpcode() == Opcode.INVOKE_STATIC && i instanceof FiveRegisterInstruction call && call.getRegisterCount() == 1) return call.getRegisterC();
+        if (i.getOpcode() == Opcode.INVOKE_STATIC_RANGE && i instanceof RegisterRangeInstruction range && range.getRegisterCount() == 1) return range.getStartRegister();
+        return -1;
+    }
+
+    /** Index of the one const-string with this text, or -1 when there are none or several. */
+    static int onlyString(List<Instruction> code, String text) {
+        int at = -1;
+        for (int i = 0; i < code.size(); i++) {
+            if (code.get(i) instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr && text.equals(sr.getString())) {
+                if (at >= 0) return -1;
+                at = i;
+            }
+        }
+        return at;
+    }
+
+    /**
+     * quiet_call_ring: the app's only method naming "Maybe start ringing", an instance run()V that also names
+     * ringtone_disabled and notifications_blocked once each. The register String.valueOf(Z) reads right after
+     * ringtone_disabled has exactly one if-nez before "Maybe start ringing" that lands after it and at or before that
+     * log, and nothing jumps to the instruction after that branch. Mirrors QuietCalls.kt.
+     */
+    static List<Method> quietCallRing(List<ClassDef> classes) {
+        var deciders = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) if (literals(method).contains("Maybe start ringing")) deciders.add(method);
+        if (deciders.size() != 1) return List.of();
+        var decider = deciders.get(0);
+        if (AccessFlags.STATIC.isSet(decider.getAccessFlags()) || !"run".equals(decider.getName()) ||
+            !decider.getParameterTypes().isEmpty() || !"V".equals(decider.getReturnType())) return List.of();
+        var code = instructions(decider);
+        int ring = onlyString(code, "Maybe start ringing"), logged = onlyString(code, "ringtone_disabled");
+        if (ring < 0 || logged < 0 || onlyString(code, "notifications_blocked") < 0 || logged + 1 >= code.size()) return List.of();
+        int flag = booleanText(code.get(logged + 1));
+        if (flag < 0) return List.of();
+        var branches = new ArrayList<Integer>();
+        for (int i = 0; i < ring; i++) {
+            if (code.get(i).getOpcode() != Opcode.IF_NEZ || register(code.get(i)) != flag) continue;
+            int target = mediaTarget(code, i);
+            if (target > ring && target <= logged) branches.add(i);
+        }
+        if (branches.size() != 1 || mediaTargets(decider).contains(branches.get(0) + 1)) return List.of();
+        return List.of(decider);
+    }
+
+    /**
+     * quiet_call_notification: the call service's only instance (Notification, Context, ...)V method that makes an
+     * invoke-virtual startForeground(int, Notification...) call, when nothing jumps to its first instruction. Mirrors
+     * QuietCalls.kt.
+     */
+    static List<Method> quietCallNotification(List<ClassDef> classes) {
+        var posters = new ArrayList<Method>();
+        for (var cls : classes) {
+            if (!RTC_NOTIFICATION_SERVICE.equals(cls.getType())) continue;
+            for (var method : cls.getMethods()) {
+                var types = params(method);
+                if (method.getImplementation() == null || AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"V".equals(method.getReturnType()) ||
+                    types.size() < 2 || !"Landroid/app/Notification;".equals(types.get(0)) || !"Landroid/content/Context;".equals(types.get(1))) continue;
+                for (var i : instructions(method)) {
+                    if (i.getOpcode() == Opcode.INVOKE_VIRTUAL && i instanceof ReferenceInstruction ri && ri.getReference() instanceof MethodReference target &&
+                        "startForeground".equals(target.getName()) && target.getParameterTypes().size() >= 2 &&
+                        "I".contentEquals(target.getParameterTypes().get(0)) && "Landroid/app/Notification;".contentEquals(target.getParameterTypes().get(1))) {
+                        posters.add(method);
+                        break;
+                    }
+                }
+            }
+        }
+        if (posters.size() != 1 || mediaTargets(posters.get(0)).contains(0)) return List.of();
+        return posters;
+    }
+
     static final String PHONE_ID_PROVIDER = ".provider.phoneid";
     static final String GET_PHONE_ID = "com.facebook.GET_PHONE_ID";
     static final String INSTALLED_PACKAGES = "Landroid/content/pm/PackageManager;->getInstalledPackages(I)Ljava/util/List;";
@@ -4551,10 +5003,14 @@ public class CompatReport {
         var inboxTypes = new HashMap<String, ClassDef>();
         classes.forEach(c -> inboxTypes.put(c.getType(), c));
         found.get("ai_sticker_cell").addAll(findAiStickerCells(classes));
+        found.get("ai_sticker_grid").addAll(findAiStickerGrids(classes));
         var community = communityInbox(classes);
         if (community != null) found.get("community_inbox").add(community.render());
         found.get("emoji_drawer").addAll(emojiDrawerReaders(classes));
         found.get("emoji_search").addAll(emojiSearchWatchers(classes));
+        found.get("tab_badges").addAll(tabBadgeDispatchers(classes));
+        found.get("facebook_badge").addAll(facebookBadgeChecks(classes));
+        found.get("tab_config").addAll(tabConfigurations(classes));
         found.get("ai_mentions").addAll(aiMentionDispatchers(classes));
         found.get("ai_commands").addAll(aiCommandLists(classes));
         found.get("ai_search_hint").addAll(searchBarBuilders(classes));
@@ -4567,6 +5023,7 @@ public class CompatReport {
         found.get("analytics_uploads").addAll(analyticsUploads(classes));
         found.get("analytics_uploads").addAll(boundUploadTasks(classes));
         found.get("analytics_uploads").addAll(xanalyticsUploadTimers(classes));
+        found.get("analytics_uploads").addAll(inProcessUploadStarts(classes));
         found.get("attribution_uploads").addAll(attributionUploads(classes));
         found.get("ad_events").addAll(adEvents(classes));
         found.get("mqtt_telemetry").addAll(mqttTelemetry(classes));
@@ -4575,6 +5032,8 @@ public class CompatReport {
         found.get("wifi_identity").addAll(wifiIdentityReads(classes));
         found.get("phone_id_sync").addAll(phoneIdSync(classes));
         found.get("story_hold").addAll(storyHold(classes));
+        found.get("quiet_call_ring").addAll(quietCallRing(classes));
+        found.get("quiet_call_notification").addAll(quietCallNotification(classes));
         var markRead = markReadButton(classes);
         if (!markRead.isEmpty()) {
             found.get("mark_read_bar").add(markRead.get(0));
@@ -5138,8 +5597,8 @@ public class CompatReport {
     static final Set<String> NEEDS_A_LOCAL = Set.of("ad_events", "ai_commands", "ai_fab", "ai_mention_rows", "ai_menu", "ai_search",
         "ai_search_chip", "allow_screenshot", "analytics_uploads", "app_icons", "attribution_uploads", "bubbles", "delta_unsent",
         "disappearing_swipe", "external_gallery", "facebook", "facebook_profile", "font_by_name", "font_repository", "growth_notes", "growth_story_card", "keep_unsent",
-        "mqtt_telemetry", "nearby_scans", "original_photo", "people_story", "phone_id_sync", "people_tab", "recent_media", "stories", "system_camera", "typing",
-        "unsent_indicator");
+        "mqtt_telemetry", "nearby_scans", "original_photo", "people_story", "phone_id_sync", "people_tab", "recent_media", "stories", "system_camera",
+        "tab_badges", "typing", "unsent_indicator");
 
     /** More registers than the parameters take, as ControlHooks.kt's validateScratch asks. */
     static boolean hasLocal(Method method) {
@@ -5641,8 +6100,16 @@ public class CompatReport {
             System.out.println("[FAIL] Version name: expected " + expected.version + ", got " + info.versionName);
             anyFail = true;
         }
-        if (signer != null && !FACEBOOK_SIGNER.equals(signer) && !META_SIGNER.equals(signer)) {
+        boolean stockSigner = FACEBOOK_SIGNER.equals(signer) || META_SIGNER.equals(signer);
+        if (signer != null && !stockSigner) {
             System.out.println("[WARN] Signer: " + signer + " is not the stock Facebook or Meta certificate");
+        }
+        // A record pins the APK's hash, so it may only ever describe the stock file from Meta.
+        if (save && !stockSigner) {
+            System.out.println("[FAIL] Signer: " + (signer == null ? "apksigner couldn't read it" : "not stock") +
+                ", and --save records only an APK signed by Facebook or Meta");
+            blockers.add("Signer");
+            anyFail = true;
         }
 
         // Load DEX

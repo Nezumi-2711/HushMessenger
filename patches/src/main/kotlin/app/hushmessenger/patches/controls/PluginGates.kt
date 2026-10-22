@@ -19,6 +19,7 @@ internal data class PluginGate(val anchors: Set<String>)
 internal const val AD_CONTEXT_BANNER = "ad_context_banner"
 internal const val TAB_PEOPLE = "tab_people"
 internal const val TAB_NOTIFICATIONS = "tab_notifications"
+internal const val AI_MUSE_TAB = "ai_muse_tab"
 
 internal val pluginGates = mapOf(
     "people" to PluginGate(
@@ -107,6 +108,12 @@ internal val pluginGates = mapOf(
     "ai_tab" to PluginGate(
         setOf(
             "com.facebook.messaging.aibot.plugins.tab.tabcontent.MetaAiTabContentImplementation",
+        ),
+    ),
+    // The same tab on accounts where mobileconfig swaps it for MUSE, an AI agent tab with its own gate in the bottom bar.
+    AI_MUSE_TAB to PluginGate(
+        setOf(
+            "com.facebook.messaging.aiagent.plugins.tab.tabcontent.MuseTabContentImplementation",
         ),
     ),
     // The People and Notifications bottom tabs, anchored the same way. Each tab content is named by its bottom bar gate

@@ -530,7 +530,7 @@ class CloneInstallPatchTest {
                             manifest.named("activity", "app.hushmessenger.extension.SettingsActivity").getAttribute("android:taskAffinity"), name)
                     }
                     resources.document("res/xml/stock_shortcuts.xml").use { shortcuts ->
-                        assertEquals(listOf(owner, owner), shortcuts.elements("intent").map { it.getAttribute("android:targetPackage") }, name)
+                        assertEquals(listOf(owner), shortcuts.elements("intent").map { it.getAttribute("android:targetPackage") }, name)
                     }
                     val output = patcher.get()
                     // The written DEX streams hold the patcher's files open until they're read or closed.

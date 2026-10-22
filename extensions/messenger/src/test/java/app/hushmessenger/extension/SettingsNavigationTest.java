@@ -31,7 +31,7 @@ public class SettingsNavigationTest {
             View root = screen.get().getWindow().getDecorView();
             TextView count = root.findViewWithTag("search_status");
             root.findViewWithTag("category_chats").performClick();
-            assertEquals(ExpectedTotals.shown(20), count.getText().toString());
+            assertEquals(ExpectedTotals.shown(21), count.getText().toString());
             assertEquals(View.GONE, ((View) root.findViewWithTag("people").getParent()).getVisibility());
             ((EditText) root.findViewWithTag("find_control")).setText("People You");
             assertEquals(View.VISIBLE, root.findViewWithTag("empty_state").getVisibility());
@@ -40,9 +40,39 @@ public class SettingsNavigationTest {
             assertEquals(View.GONE, root.findViewWithTag("empty_state").getVisibility());
             assertTrue(root.findViewWithTag("category_all").isSelected());
             root.findViewWithTag("category_more").performClick();
-            assertEquals(ExpectedTotals.shown(26), count.getText().toString());
+            assertEquals(ExpectedTotals.shown(27), count.getText().toString());
             assertEquals(View.VISIBLE, ((View) root.findViewWithTag("facebook").getParent()).getVisibility());
         }
+    }
+
+    @Test public void photoAndVideoControlsHaveTheirOwnSectionUnderChats() {
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = screen.get().getWindow().getDecorView();
+            android.widget.LinearLayout group = root.findViewWithTag("photos_videos");
+            android.widget.LinearLayout heading = (android.widget.LinearLayout) group.getChildAt(0);
+            assertEquals("PHOTOS AND VIDEOS", ((TextView) heading.getChildAt(0)).getText().toString());
+            for (String key : new String[] {"original_photo", "original_video", "xhe_audio", "recent_media", "system_camera", "external_gallery"})
+                assertTrue(key + " should sit in Photos and videos", inside(root.findViewWithTag(key), group));
+            assertFalse(inside(root.findViewWithTag("typing"), group));
+            root.findViewWithTag("category_chats").performClick();
+            assertEquals(View.VISIBLE, group.getVisibility());
+            assertEquals("6", ((TextView) heading.getChildAt(1)).getText().toString());
+        }
+    }
+
+    /** The headings are English on every phone, so a Turkish phone's own capitals (a dotted İ) never reach them. */
+    @Test @org.robolectric.annotation.Config(qualifiers = "tr-rTR") public void headingsUseEnglishCapitalsOnATurkishPhone() {
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            android.widget.LinearLayout group = screen.get().getWindow().getDecorView().findViewWithTag("links_bubbles");
+            android.widget.LinearLayout heading = (android.widget.LinearLayout) group.getChildAt(0);
+            assertEquals("LINKS AND BUBBLES", ((TextView) heading.getChildAt(0)).getText().toString());
+        }
+    }
+
+    private static boolean inside(View view, View group) {
+        for (android.view.ViewParent parent = view.getParent(); parent != null; parent = parent.getParent())
+            if (parent == group) return true;
+        return false;
     }
 
     @Test public void selectedChipIsFilledInBothThemesAndTheWordmarkStaysOnOneLine() {
@@ -73,7 +103,7 @@ public class SettingsNavigationTest {
             clear.performClick();
             assertEquals("", search.getText().toString());
             assertTrue(root.findViewWithTag("category_chats").isSelected());
-            assertEquals(ExpectedTotals.shown(20), ((TextView) root.findViewWithTag("search_status")).getText().toString());
+            assertEquals(ExpectedTotals.shown(21), ((TextView) root.findViewWithTag("search_status")).getText().toString());
             assertTrue(search.hasFocus());
             assertEquals(View.GONE, clear.getVisibility());
         }
@@ -83,11 +113,11 @@ public class SettingsNavigationTest {
         try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
             ((Switch) screen.get().getWindow().getDecorView().findViewWithTag("light")).performClick();
             Toast themeToast = ShadowToast.getLatestToast();
-            assertEquals("Light theme on", ShadowToast.getTextOfLatestToast());
+            assertEquals("Light theme is on", ShadowToast.getTextOfLatestToast());
             Shadows.shadowOf(Looper.getMainLooper()).idle();
             ((Switch) screen.get().getWindow().getDecorView().findViewWithTag("people")).performClick();
             assertTrue(Shadows.shadowOf(themeToast).isCancelled());
-            assertEquals("Hide People You May Know on", ShadowToast.getTextOfLatestToast());
+            assertEquals("Hide People You May Know is on", ShadowToast.getTextOfLatestToast());
         }
     }
 

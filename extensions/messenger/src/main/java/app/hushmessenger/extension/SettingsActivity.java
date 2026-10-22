@@ -58,8 +58,7 @@ public final class SettingsActivity extends Activity {
     private final Map<Switch, CharSequence> switchDescriptions = new java.util.HashMap<>();
     private long documentGeneration;
     private final SharedPreferences.OnSharedPreferenceChangeListener preferenceListener = (preferences, key) -> {
-        if (key == null || "paused".equals(key) || Settings.BUBBLE_CHAT_HEADS.equals(key) || Settings.KEEP_FACEBOOK_PROFILE.equals(key)
-            || Settings.installed.contains(key))
+        if (key == null || "paused".equals(key) || Settings.SUB_SWITCHES.containsKey(key) || Settings.installed.contains(key))
             documentGeneration++;
         refreshChoices();
         if (key == null || "check_updates".equals(key)) syncUpdateChoice(true);
@@ -81,7 +80,16 @@ public final class SettingsActivity extends Activity {
     /** Shown above both pages while a change waits for Messenger to restart. */
     private LinearLayout restartRow;
     private TextView restartWaiting;
-    static final int SAVE_CHOICES = 7101, READ_CHOICES = 7102, PICK_FONT = 7103;
+    /** Shown above both pages for a few seconds after a Quick setup or Clear log, which act at once with no dialog. */
+    private Button undoButton;
+    /** What Undo does and when its time runs out. Main thread only, null when nothing can be taken back. */
+    private Runnable undoAction, undoExpiry;
+    /** While Undo can still put back the log a Clear took, the log's empty page shows an Undo too. */
+    private boolean messageLogUndo;
+    /** Between onStart and onStop. A Clear that finishes while settings are out of sight is final at once. */
+    private boolean started;
+    static final int UNDO_MILLIS = 10_000;
+    static final int SAVE_CHOICES = 7101, READ_CHOICES = 7102, PICK_FONT = 7103, PICK_AUTO_REPLY_PICTURE = 7104;
     /** The names providers give fonts, and plain bytes for one that doesn't know a font. The copy checks what it really is. */
     static final String[] FONT_TYPES = {"font/ttf", "font/otf", "font/collection", "font/sfnt", "application/x-font-ttf",
         "application/x-font-otf", "application/font-sfnt", "application/vnd.ms-opentype", "application/octet-stream"};
@@ -107,9 +115,12 @@ public final class SettingsActivity extends Activity {
     private TextView fontStatus, fontSize, fontShift;
     private Button fontChoose, fontStop, fontPhone, fontSmaller, fontLarger, fontUp, fontDown;
     private LinearLayout fontAdjust;
-    /** #22's control and whether it could be turned on when it was built. */
-    private LinearLayout menuRowControl;
-    private boolean menuRowAvailable;
+    /**
+     * The switch for each way back in (#22, HushFacebook#146), and the help and reason each was built with. Turning one
+     * way off can change what the others say or whether they can turn off, so they're rebuilt when that changes.
+     */
+    private final Map<String, LinearLayout> wayControls = new java.util.LinkedHashMap<>();
+    private final Map<String, String> wayBuilt = new java.util.HashMap<>();
     /** The Quick setups heading and panel, hidden by a long press on either, and the line that says which way the choice is. */
     private TextView quickHeading, quickHomeStatus;
     private LinearLayout quickPanel;
@@ -132,7 +143,9 @@ public final class SettingsActivity extends Activity {
     private static Toast toast;
     static final String SUPPORT_PAGE = "https://ko-fi.com/X8K126YVER";
     /** Switches whose effect hasn't been confirmed on a phone. Each shows the Experimental badge. */
-    static final Set<String> EXPERIMENTAL = Set.of("pinned_chats", "nearby_scans", "phone_id_sync", "mark_read_button", "story_hold");
+    /** The switches that take a way into these settings away, each with a reason when it can't turn on. */
+    static final Set<String> WAYS_IN = Set.of("hide_menu_row", Settings.HIDE_ICON_SHORTCUTS, Settings.HIDE_LOGO_PRESS);
+    static final Set<String> EXPERIMENTAL = Set.of("pinned_chats", "nearby_scans", "phone_id_sync", "mark_read_button", "story_hold", "quiet_calls");
     static final String[][] CONTROLS = {
         {"people", "Hide People You May Know", "Hides suggested people in chats, search and stories, and on the People and Notifications tabs. Good if you only want people you know.", "inbox"},
         {"friend_requests", "Hide friend request cards", "Hides friend request cards in your chat list. It doesn't accept or decline anyone.", "inbox"},
@@ -148,10 +161,11 @@ public final class SettingsActivity extends Activity {
         {"moments", "Hide Chat Moments", "Hides Chat Moments in the menu.", "navigation"},
         {"reels_badge", "Hide Reels badge", "Hides the Reels notification badge.", "navigation"},
         {"tab_people", "Hide People tab", "Hides the People tab in the bar at the bottom. Restart Messenger to see the tab go.", "navigation"},
+        {"tab_badges", "Hide tab badges", "Hides the red dots and counts on the tabs at the bottom and on the Facebook button at the top. Turn on Keep for any you still want. Restart Messenger to see the change.", "navigation"},
         {"tab_notifications", "Hide Notifications tab", "Hides the Notifications tab in the bar at the bottom. Restart Messenger to see the tab go.", "navigation"},
         {"chat_animation", "Slide chats in and out", "Slides a chat in from the side when you open it and out when you go back. Chat heads and bubbles aren't affected.", "navigation"},
         {"story_hold", "Hold stories at the end", "Keeps a story on screen when it ends instead of moving on to the next one, so you go on with a tap or a swipe. Photos and videos both wait, and the last story stays open until you close it.", "navigation"},
-        {"ai_stickers", "Hide AI sticker tools", "Hides the Generate AI sticker buttons, the AI sticker tab and AI sticker suggestions.", "stickers"},
+        {"ai_stickers", "Hide AI sticker tools", "Hides the Generate and Generate AI sticker buttons, the AI sticker tab and AI sticker suggestions. Custom and music stickers in the Generate menu go with it.", "stickers"},
         {"avatar_stickers", "Hide avatar stickers", "Hides the avatar tab in the sticker keyboard.", "stickers"},
         {"emoji_drawer", "Restore old emoji drawer", "Brings back the earlier emoji keyboard layout by turning off Meta's redesign. Restart Messenger to see the change. Nothing changes if you never got the redesign.", "stickers"},
         {"emoji_search", "Keep emoji search on emoji", "Typing while the emoji keyboard is open no longer jumps to sticker search. The keyboard stays on emoji.", "stickers"},
@@ -162,21 +176,22 @@ public final class SettingsActivity extends Activity {
         {"event_prompts", "Hide event prompts", "Hides event promotion prompts inside chats.", "conversations"},
         {"typing", "Hide typing indicator", "Stops Messenger from showing others when you're typing, even in end-to-end encrypted chats.", "conversations"},
         {"use_system_emoji", "Use system emoji", "Shows emoji in your phone's own style instead of Messenger's built-in set.", "conversations"},
-        {"original_photo", "Send photos at original quality", "With HD on, sends JPEG photos at their full size, not a smaller copy. Location is still removed. Photos over 20 MB are still made smaller.", "conversations"},
-        {"original_video", "Send videos without re-encoding", "Sends a video as the original file when Messenger allows it, instead of a recompressed copy. Videos over 25 MB and edited videos are still compressed.", "conversations"},
-        {"xhe_audio", "Fix videos that won't send", "Videos whose only sound is xHE-AAC and some Samsung screen recordings fail with \"Unable to send\", even in stock Messenger. Whether you share one into Messenger or pick it in a chat, the sound is converted to regular AAC, or the tag Samsung's recorder adds is dropped, before it's sent. The picture isn't touched.", "conversations"},
-        {"disappearing_swipe", "Turn off the swipe up for disappearing messages", "Swiping up at the bottom of a chat no longer turns on disappearing messages. Scrolling works as usual, and you can still set them in the chat's settings.", "conversations"},
-        {"recent_media", "Hide the recent photo card", "Opening a chat right after you take a screenshot, photo or video no longer shows a card above the message box offering to send it. You can still pick it from the gallery.", "conversations"},
+        {"disappearing_swipe", "Ignore the swipe up for disappearing messages", "Swiping up at the bottom of a chat no longer turns on disappearing messages. Scrolling works as usual, and you can still set them in the chat's settings.", "conversations"},
         {"auto_reply", "Auto reply", "Answers a message with a reply you write below when it has words you pick, or any message if you leave the words empty. Replies go out through Messenger's own notification reply, encrypted chats too, at most once every five minutes per chat. One-to-one chats only unless you allow groups. A chat with disappearing messages on gets no notification reply from Messenger, so it isn't answered.", "conversations"},
-        {"system_camera", "Use the phone's camera app", "The camera button in a chat opens your phone's camera app. The photo opens in Messenger's editor, ready to send. Photos only.", "conversations"},
-        {"external_gallery", "Open your gallery app", "The gallery button in a chat opens your phone's own gallery app. What you pick opens in Messenger's editor for that chat, ready to send.", "conversations"},
         {"text_style", "Bold and italic text", "Select words you typed and pick Bold or Italic in the menu that pops up (it can be behind the three dots). Pick it again to undo. Bold changes the letters A to Z (accents are fine) and digits. Italic changes only the letters, and other alphabets stay as they are. They're special Unicode letters, so they show on any phone, but screen readers may read them oddly.", "conversations"},
+        {"quiet_calls", "Quiet incoming calls", "Calls still come in, but Messenger doesn't ring, vibrate or pop the call up over your screen. The call waits in the notification shade with Answer and Decline. A call you miss still shows in the chat. If the Facebook app is on your phone, it can still ring for the same call.", "conversations"},
+        {"original_photo", "Send photos at original quality", "With HD on, sends JPEG photos at their full size, not a smaller copy. Location is still removed. Photos over 20 MB are still made smaller.", "photos_videos"},
+        {"original_video", "Send videos without re-encoding", "Sends a video as the original file when Messenger allows it, instead of a recompressed copy. Videos over 25 MB and edited videos are still compressed.", "photos_videos"},
+        {"xhe_audio", "Fix videos that won't send", "Some videos fail with \"Unable to send\", even in stock Messenger, because of a newer sound format (xHE-AAC) or a tag Samsung's screen recorder adds. This fixes the sound or drops the tag before the video goes out, whether you share it into Messenger or pick it in a chat. The picture isn't touched.", "photos_videos"},
+        {"recent_media", "Hide the recent photo card", "Opening a chat right after you take a screenshot, photo or video no longer shows a card above the message box offering to send it. You can still pick it from the gallery.", "photos_videos"},
+        {"system_camera", "Use the phone's camera app", "The camera button in a chat opens your phone's camera app. The photo opens in Messenger's editor, ready to send. Photos only.", "photos_videos"},
+        {"external_gallery", "Open your gallery app", "The gallery button in a chat opens your phone's own gallery app. One photo or video opens in Messenger's editor for that chat, ready to send. Pick several and Messenger's Send to sheet opens with all of them and that chat at the top.", "photos_videos"},
         {"external_browser", "Open web links externally", "Opens web links (http and https) in your default browser. Other link types work as before.", "links_bubbles"},
-        {"bubbles", "Allow chat bubbles", "Choose Stock, Chat heads or Native Bubbles below. Native Bubbles needs Android 11 or newer, a supported account and notification permission. Restart Messenger after changing.", "links_bubbles"},
+        {"bubbles", "Allow chat bubbles", "Choose Stock, Chat heads or Android bubbles below. Android bubbles need Android 11 or newer, a supported account and notification permission. Restart Messenger after changing.", "links_bubbles"},
         {"analytics_uploads", "Stop analytics uploads", "Stops Messenger's background services from uploading usage statistics. It still records them on your phone, and they can upload after you turn this off.", "privacy"},
         {"attribution_uploads", "Stop ad attribution uploads", "Stops the job that reads your phone's advertising ID and sends it to Meta with your ad tracking setting. The ID itself doesn't change.", "privacy"},
         {"ad_events", "Stop inbox and ad link logging", "Stops two reports Messenger logs. One says which part of your chat list was on screen, which Messenger files under inbox ads. The other says which ad brought you in when a link from an ad opens a chat.", "privacy"},
-        {"mqtt_telemetry", "Stop MQTT logging", "Drops the health reports and push logging Messenger's MQTT client sends. Messenger sends most of its traffic another way, so there's often little for it to drop. Messages, calls and active status keep working.", "privacy"},
+        {"mqtt_telemetry", "Stop live connection logging", "Drops the health reports and push logging Messenger sends over its live connection (MQTT). Messenger sends most of its traffic another way, so there's often little for it to drop. Messages, calls and active status keep working.", "privacy"},
         {"nearby_scans", "Stop nearby scans", "Stops Messenger from reading the list of Wi-Fi networks around you, and hides the name and hardware address of the one you're connected to, the way Android does when Messenger can't see your location. Also stops the timer it can run while it's open to check your location and scan for Wi-Fi networks and Bluetooth devices.", "privacy"},
         {"phone_id_sync", "Stop app list and device ID sharing", "Stops Messenger from going through the apps on your phone to find other Meta apps, and from asking them for the device ID Meta uses to link the apps on one phone. Messenger keeps the ID it already has.", "privacy"},
         {"message_log", "Keep a message log", "Saves each message when its notification arrives, so you can read it after it's unsent. Works in encrypted chats. Stays on your phone. In a chat with disappearing messages on, Messenger leaves the words out of its notification, so those messages aren't logged.", "privacy"},
@@ -325,6 +340,8 @@ public final class SettingsActivity extends Activity {
                 if (target != null && target.isShown()) target.requestFocus();
             });
             Bundle draft = state.getBundle("auto_reply_draft");
+            // The picker's answer arrives before the posted sheet is back, so the card it's for is known now.
+            if (draft != null) autoReplyPictureFor = draft.getInt("picture_for", -1);
             messageLogClearFailed = state.getBoolean("message_log_clear_failed");
             if (draft != null) root.post(() -> showAutoReplies(draft));
             else if (state.getBoolean("message_log_open")) root.post(this::showMessageLog);
@@ -344,6 +361,7 @@ public final class SettingsActivity extends Activity {
 
     @Override protected void onStart() {
         super.onStart();
+        started = true;
         Settings.preferences.registerOnSharedPreferenceChangeListener(preferenceListener);
     }
 
@@ -354,6 +372,10 @@ public final class SettingsActivity extends Activity {
     }
 
     @Override protected void onStop() {
+        // Leaving settings makes a Quick setup or a Clear final, one still running included.
+        started = false;
+        if (messageLogClearJob != null) messageLogClearJob.undoable = false;
+        endUndo();
         Settings.preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener);
         super.onStop();
     }
@@ -397,30 +419,58 @@ public final class SettingsActivity extends Activity {
         });
     }
 
-    private LinearLayout menuRowControl() {
-        return controlRow("hide_menu_row", text.format("hide_menu_row"),
-            text.format(Settings.logoOpensSettings() ? "hide_menu_row_help" : "hide_menu_row_help_without_logo"), false);
+    /** The help a way's switch shows, which names only the ways back that are still on. */
+    private String wayHelp(String key) {
+        if (!"hide_menu_row".equals(key)) return key + "_help";
+        if (!Settings.iconShortcutsShown(this)) return Settings.logoPressOn() ? "hide_menu_row_help_without_shortcut" : "hide_menu_row_help_plain";
+        return Settings.logoPressOn() ? "hide_menu_row_help" : "hide_menu_row_help_without_logo";
     }
 
-    /** Swaps the Hide the Menu row control for one built with its current availability and reason. */
-    private void rebuildMenuRowControl() {
-        LinearLayout parent = (LinearLayout) menuRowControl.getParent();
-        if (parent == null) return;
-        switches.remove(menuRowControl.findViewWithTag("hide_menu_row"));
-        int at = parent.indexOfChild(menuRowControl);
-        ViewGroup.LayoutParams params = menuRowControl.getLayoutParams();
-        menuRowAvailable = Settings.available("hide_menu_row");
-        menuRowControl = menuRowControl();
-        parent.removeViewAt(at);
-        parent.addView(menuRowControl, at, params);
+    /** Why a way's switch can't turn on, or null when it can. */
+    private String wayReason(String key) {
+        if (Settings.available(key)) return null;
+        if (!"hide_menu_row".equals(key)) return "last_way_in";
+        if (Settings.iconShortcutsShown(this)) return "menu_row_needs_shortcut";
+        return Settings.logoPressOn() ? "menu_row_needs_logo" : "menu_row_needs_way";
+    }
+
+    private LinearLayout wayControl(String key) {
+        String help = wayHelp(key);
+        wayBuilt.put(key, help + "|" + wayReason(key));
+        LinearLayout row = controlRow(key, text.format(key), text.format(help), false);
+        wayControls.put(key, row);
+        return row;
+    }
+
+    /** Swaps each way's switch whose help or reason has changed for one built with the current ones. */
+    private void rebuildWayControls() {
+        for (String key : new ArrayList<>(wayControls.keySet())) {
+            LinearLayout old = wayControls.get(key);
+            LinearLayout parent = (LinearLayout) old.getParent();
+            if (parent == null || (wayHelp(key) + "|" + wayReason(key)).equals(wayBuilt.get(key))) continue;
+            switches.remove(old.findViewWithTag(key));
+            int at = parent.indexOfChild(old);
+            ViewGroup.LayoutParams params = old.getLayoutParams();
+            LinearLayout row = wayControl(key);
+            parent.removeViewAt(at);
+            parent.addView(row, at, params);
+        }
     }
 
     private String accessHelpText() {
         // The Menu row patch also makes the Messenger logo open settings where it finds the logo's handler, and that keeps
-        // working while the row is hidden.
-        boolean logo = Settings.logoOpensSettings();
+        // working while the row is hidden, unless its own switch turns it off.
+        boolean logo = Settings.logoPressOn();
+        boolean menuRow = accessHelpMenuRow && !Settings.menuRowHidden();
+        if (!Settings.iconShortcutsShown(this)) {
+            StringBuilder ways = new StringBuilder();
+            if (menuRow) ways.append(text.get("way_menu")).append(' ');
+            if (logo) ways.append(text.get("way_logo")).append(' ');
+            if (Settings.drawerIconShown(this)) ways.append(text.get("way_drawer")).append(' ');
+            return ways.append(text.get("way_shortcuts_hidden")).toString();
+        }
         if (!accessHelpMenuRow) return text.get(accessHelpId);
-        if (Settings.menuRowHidden()) return text.get(accessHelpId + (logo ? "_logo" : ""));
+        if (!menuRow) return text.get(accessHelpId + (logo ? "_logo" : ""));
         return text.get(accessHelpId + (logo ? "_menu" : "_menu_without_logo"));
     }
 
@@ -432,8 +482,9 @@ public final class SettingsActivity extends Activity {
             }
             return;
         }
-        // Opening settings from the long-press shortcut can bring this screen back rather than a new one.
-        if (menuRowControl != null && Settings.available("hide_menu_row") != menuRowAvailable) rebuildMenuRowControl();
+        // Opening settings from the long-press shortcut can bring this screen back rather than a new one, and turning one
+        // way in off changes what the others can do.
+        rebuildWayControls();
         if (accessHelp != null) {
             String help = accessHelpText();
             if (!help.contentEquals(accessHelp.getText())) accessHelp.setText(help);
@@ -547,6 +598,49 @@ public final class SettingsActivity extends Activity {
         restartRow.addView(restartNow, restartParams);
         restartRow.setVisibility(View.GONE);
         ui.add(header, restartRow, 12);
+        undoButton = ui.button("");
+        undoButton.setTag("undo");
+        undoButton.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        undoButton.setOnClickListener(view -> undo());
+        undoButton.setVisibility(View.GONE);
+        ui.add(header, undoButton, 12);
+    }
+
+    /** Shows Undo for [what] until it's tapped, its time runs out, something else takes its place or settings close. */
+    private void offerUndo(String what, Runnable action) {
+        endUndo();
+        undoAction = action;
+        undoButton.setText(text.get("undo_action", what));
+        undoButton.setVisibility(View.VISIBLE);
+        long millis = UNDO_MILLIS;
+        // TalkBack and Switch Access users can ask for longer, and this timeout takes a button away.
+        android.view.accessibility.AccessibilityManager access = getSystemService(android.view.accessibility.AccessibilityManager.class);
+        if (Build.VERSION.SDK_INT >= 29 && access != null) millis = access.getRecommendedTimeoutMillis(UNDO_MILLIS,
+            android.view.accessibility.AccessibilityManager.FLAG_CONTENT_TEXT | android.view.accessibility.AccessibilityManager.FLAG_CONTENT_CONTROLS);
+        undoExpiry = this::endUndo;
+        undoButton.postDelayed(undoExpiry, millis);
+    }
+
+    private void undo() {
+        Runnable action = undoAction;
+        // The log's page shows what the undo brings back once it's written, not an empty page in between.
+        messageLogUndo = false;
+        View sheetUndo = messageLogList == null ? null : messageLogList.findViewWithTag("message_log_undo");
+        if (sheetUndo != null) sheetUndo.setEnabled(false);
+        endUndo();
+        if (action != null) action.run();
+    }
+
+    /** Lets go of what Undo held, so the change stands, and hides the button. */
+    private void endUndo() {
+        if (undoExpiry != null) undoButton.removeCallbacks(undoExpiry);
+        undoExpiry = null;
+        undoAction = null;
+        if (undoButton != null) undoButton.setVisibility(View.GONE);
+        if (messageLogUndo) {
+            messageLogUndo = false;
+            if (messageLogList != null) loadMessageLog();
+        }
     }
 
     /**
@@ -682,7 +776,7 @@ public final class SettingsActivity extends Activity {
                 group = ui.column();
                 group.setTag(last);
                 LinearLayout heading = ui.row();
-                heading.addView(ui.heading(text.get(last).toUpperCase(Locale.ROOT)), new LinearLayout.LayoutParams(0, -2, 1));
+                heading.addView(ui.heading(text.get(last)), new LinearLayout.LayoutParams(0, -2, 1));
                 heading.addView(ui.text("", 13, ui.muted, true));
                 ui.add(group, heading, 0);
                 groupBody = ui.column();
@@ -698,13 +792,17 @@ public final class SettingsActivity extends Activity {
                 groups.add(group);
             }
             LinearLayout row = controlRow(spec[0], text.control(spec, 1), text.control(spec, 2), true);
-            if ("bubbles".equals(spec[0]) || "facebook".equals(spec[0]) || OwnFont.KEY.equals(spec[0]) || MessageLog.KEY.equals(spec[0]) || AutoReply.KEY.equals(spec[0])) {
+            if ("bubbles".equals(spec[0]) || "facebook".equals(spec[0]) || Settings.TAB_BADGES.equals(spec[0]) || OwnFont.KEY.equals(spec[0])
+                    || MessageLog.KEY.equals(spec[0]) || AutoReply.KEY.equals(spec[0])) {
                 // Below the row, where TalkBack reaches them: the row's label column hides its descendants.
                 LinearLayout wrapper = ui.column();
                 ui.add(wrapper, row, 0);
                 if ("bubbles".equals(spec[0])) addBubbleModes(wrapper);
                 else if ("facebook".equals(spec[0])) ui.add(wrapper, controlRow(Settings.KEEP_FACEBOOK_PROFILE,
                     text.format("facebook_keep_profile"), text.format("facebook_keep_profile_help"), false), 8);
+                else if (Settings.TAB_BADGES.equals(spec[0])) {
+                    for (String keep : Settings.KEEP_BADGES.values()) ui.add(wrapper, controlRow(keep, text.format(keep), "", false), 8);
+                }
                 else if (OwnFont.KEY.equals(spec[0])) addFontFile(wrapper);
                 else if (AutoReply.KEY.equals(spec[0])) addAutoReplyActions(wrapper);
                 else addMessageLogActions(wrapper);
@@ -1248,7 +1346,7 @@ public final class SettingsActivity extends Activity {
         if (!available) description += " " + text.format(CameraActivity.KEY.equals(key) ? "camera_unsupported"
             : GalleryPicker.KEY.equals(key) ? "gallery_unsupported"
             : TextStyleActivity.KEY.equals(key) ? "text_style_unsupported"
-            : "hide_menu_row".equals(key) ? "menu_row_needs_shortcut"
+            : WAYS_IN.contains(key) ? wayReason(key)
             : "bubbles".equals(key) && Build.VERSION.SDK_INT >= 30 ? "bubble_unsupported" : "unavailable");
         LinearLayout row = ui.row();
         LinearLayout labels = ui.column();
@@ -1308,6 +1406,12 @@ public final class SettingsActivity extends Activity {
                 : text.get(checked ? "choice_on" : "choice_off", title), Toast.LENGTH_SHORT);
             if ("light".equals(key)) refreshChoices();
             if ("hide_drawer_icon".equals(key)) applyDrawerIcon(this, checked);
+            // The icon shortcuts follow their switch now, and stand in when another way in goes while they're hidden.
+            if (Settings.HIDE_ICON_SHORTCUTS.equals(key) || (Settings.HIDE_LOGO_PRESS.equals(key) || "hide_drawer_icon".equals(key))
+                    && Settings.preferences.getBoolean(Settings.HIDE_ICON_SHORTCUTS, false)) HostScreens.refreshShortcuts(this, () -> runOnUiThread(() -> {
+                // Hide the Menu row asks whether Patch controls is published, which is known only now.
+                if (!isFinishing() && !isDestroyed()) refreshChoices();
+            }));
         });
         row.setOnClickListener(view -> { if (control.isEnabled()) control.toggle(); });
         row.setEnabled(available);
@@ -1401,12 +1505,19 @@ public final class SettingsActivity extends Activity {
             drawerHelp.setTag("drawer_help");
             ui.add(access, drawerHelp, 14);
         }
-        // #22: only the long-press shortcut left, once it has proved it works here.
+        wayControls.clear();
+        wayBuilt.clear();
+        // #22: the Menu row can go once another way back has proved it works here.
         if (menuRow) {
             ui.rule(access, 12);
-            menuRowAvailable = Settings.available("hide_menu_row");
-            menuRowControl = menuRowControl();
-            ui.add(access, menuRowControl, 10);
+            ui.add(access, wayControl("hide_menu_row"), 10);
+        }
+        // HushFacebook#146: every install has the icon shortcuts, and the logo's long press comes with the Menu row.
+        ui.rule(access, 12);
+        ui.add(access, wayControl(Settings.HIDE_ICON_SHORTCUTS), 10);
+        if (Settings.logoOpensSettings()) {
+            ui.rule(access, 12);
+            ui.add(access, wayControl(Settings.HIDE_LOGO_PRESS), 10);
         }
         if (drawerAlias && !hosted) {
             TextView sharedInstall = ui.text(text.get("shared_install_help"), 13, ui.muted, false);
@@ -1623,6 +1734,9 @@ public final class SettingsActivity extends Activity {
         java.util.function.Predicate<String> settable = "defaults".equals(name) ? Settings.installed::contains
             : key -> Settings.installed.contains(key) && Settings.available(key);
         java.util.Map<String, Boolean> changes = QuickSetups.changes(values, Settings.preferences, settable);
+        // What each changed key held, null for one never saved, so Undo puts back exactly that.
+        java.util.Map<String, Boolean> before = new java.util.HashMap<>();
+        for (String key : changes.keySet()) before.put(key, Settings.preferences.contains(key) ? Settings.preferences.getBoolean(key, false) : null);
         if (!changes.isEmpty()) {
             SharedPreferences.Editor edit = Settings.preferences.edit();
             for (java.util.Map.Entry<String, Boolean> change : changes.entrySet()) edit.putBoolean(change.getKey(), change.getValue());
@@ -1631,6 +1745,25 @@ public final class SettingsActivity extends Activity {
         refreshChoices();
         feedback(!changes.isEmpty() ? text.count("quick_changed", changes.size())
             : text.get(QuickSetups.anySettable(values, settable) ? "quick_unchanged" : "quick_missing"), Toast.LENGTH_SHORT);
+        if (!changes.isEmpty()) offerUndo(text.format("quick_" + name), () -> undoQuickSetup(changes, before));
+    }
+
+    /** Puts back what a Quick setup changed, except a switch flipped again since, which stays as it is now. */
+    private void undoQuickSetup(java.util.Map<String, Boolean> changes, java.util.Map<String, Boolean> before) {
+        SharedPreferences.Editor edit = Settings.preferences.edit();
+        int restored = 0;
+        for (java.util.Map.Entry<String, Boolean> change : changes.entrySet()) {
+            String key = change.getKey();
+            boolean set = change.getValue();
+            if (Settings.preferences.getBoolean(key, !set) != set) continue;
+            Boolean old = before.get(key);
+            if (old == null) edit.remove(key);
+            else edit.putBoolean(key, old);
+            restored++;
+        }
+        edit.apply();
+        refreshChoices();
+        feedback(text.count("quick_undone", restored), Toast.LENGTH_SHORT);
     }
 
     private void copySetup() {
@@ -1903,6 +2036,13 @@ public final class SettingsActivity extends Activity {
     private TextView autoReplyCount;
     private Button autoReplyAdd;
     private ScrollView autoReplyScroll;
+    /** The picture each reply card holds, by card, until Save. */
+    private final java.util.WeakHashMap<View, String> autoReplyPictures = new java.util.WeakHashMap<>();
+    /** The card whose picture is being picked, by position, or -1. */
+    private int autoReplyPictureFor = -1;
+    /** A picked picture that came back while the sheet was being rebuilt, and the card it's for. */
+    private android.net.Uri pendingAutoReplyPicture;
+    private int pendingAutoReplyPictureFor = -1;
 
     /** Two actions under the message-log switch: open the log or wipe it, no confirmation, just a toast. */
     private void addMessageLogActions(LinearLayout content) {
@@ -2029,6 +2169,13 @@ public final class SettingsActivity extends Activity {
                         empty.addView(accent, new LinearLayout.LayoutParams(ui.dp(36), ui.dp(4)));
                         ui.add(empty, ui.text(text.get("message_log_empty"), 18, ui.text, true), 16);
                         ui.add(empty, ui.text(text.get(Settings.wouldUse(MessageLog.KEY) ? "message_log_empty_on" : "message_log_empty_off"), 14, ui.muted, false), 8);
+                        // The settings page's Undo sits behind this sheet.
+                        if (messageLogUndo) {
+                            Button undo = ui.button(text.get("undo"));
+                            undo.setTag("message_log_undo");
+                            undo.setOnClickListener(view -> undo());
+                            ui.add(empty, undo, 16);
+                        }
                         ui.add(list, empty, result.setAside ? 12 : 0);
                     }
                 }
@@ -2147,8 +2294,10 @@ public final class SettingsActivity extends Activity {
         ArrayList<String> words = draft == null ? null : draft.getStringArrayList("words");
         ArrayList<String> replies = draft == null ? null : draft.getStringArrayList("replies");
         if (words != null && replies != null) {
+            ArrayList<String> pictures = draft.getStringArrayList("pictures");
             for (int i = 0; i < Math.min(AutoReply.MAX_RULES, Math.min(words.size(), replies.size())); i++) {
-                View card = autoReplyCard(list, new AutoReply.Rule("", ""));
+                String picture = pictures != null && i < pictures.size() ? pictures.get(i) : null;
+                View card = autoReplyCard(list, new AutoReply.Rule("", "", picture));
                 ((EditText) card.findViewWithTag("auto_reply_when")).setText(words.get(i));
                 ((EditText) card.findViewWithTag("auto_reply_reply")).setText(replies.get(i));
                 list.addView(card);
@@ -2180,7 +2329,13 @@ public final class SettingsActivity extends Activity {
         });
         Button cancel = ui.button(text.get("auto_reply_cancel"));
         cancel.setTag("auto_reply_cancel");
-        cancel.setOnClickListener(clicked -> dialog.dismiss());
+        cancel.setOnClickListener(clicked -> {
+            pruneAutoReplyPictures(prefs);
+            dialog.dismiss();
+        });
+        // Back or a tap outside throws the edits away like Cancel. The dismiss listener can't do this: it also runs
+        // when the screen is rebuilt with the edits kept as a draft.
+        dialog.setOnCancelListener(canceled -> pruneAutoReplyPictures(prefs));
         sheet.action(cancel);
         Button save = ui.primaryButton(text.get("auto_reply_save"));
         save.setTag("auto_reply_save");
@@ -2190,8 +2345,8 @@ public final class SettingsActivity extends Activity {
             for (int i = 0; i < list.getChildCount(); i++) {
                 View card = list.getChildAt(i);
                 EditText when = card.findViewWithTag("auto_reply_when"), reply = card.findViewWithTag("auto_reply_reply");
-                AutoReply.Rule rule = new AutoReply.Rule(when.getText().toString(), reply.getText().toString());
-                if (!rule.when.isEmpty() && rule.reply.isEmpty()) {
+                AutoReply.Rule rule = new AutoReply.Rule(when.getText().toString(), reply.getText().toString(), autoReplyPictures.get(card));
+                if ((!rule.when.isEmpty() || rule.picture != null) && rule.reply.isEmpty()) {
                     TextView error = card.findViewWithTag("auto_reply_error");
                     error.setVisibility(View.VISIBLE);
                     reply.setBackground(ui.interactive(ui.surface, ui.error, 12, ui.error));
@@ -2207,6 +2362,7 @@ public final class SettingsActivity extends Activity {
                 return;
             }
             int kept = AutoReply.save(prefs, rules, groups.isChecked());
+            pruneAutoReplyPictures(prefs);
             feedback(kept == 0 ? text.get("auto_reply_saved_none") : text.get("auto_reply_saved", kept), Toast.LENGTH_SHORT);
             dialog.dismiss();
         });
@@ -2227,6 +2383,123 @@ public final class SettingsActivity extends Activity {
             }
             sheet.scroll.scrollTo(0, draft.getInt("scroll"));
         });
+        if (pendingAutoReplyPicture != null) {
+            android.net.Uri picked = pendingAutoReplyPicture;
+            pendingAutoReplyPicture = null;
+            copyAutoReplyPicture(picked, pendingAutoReplyPictureFor);
+        }
+    }
+
+    /** Deletes picture copies no saved reply uses: the ones picked and then discarded, or swapped for another. */
+    private void pruneAutoReplyPictures(SharedPreferences prefs) {
+        Set<String> keep = new java.util.HashSet<>();
+        for (AutoReply.Rule rule : AutoReply.rules(prefs)) if (rule.picture != null) keep.add(rule.picture);
+        try {
+            AutoReplyPicture.prune(getApplicationContext(), keep);
+        } catch (RuntimeException failed) {
+            android.util.Log.w("HushMessenger", "auto_reply: unused pictures weren't cleared", failed);
+        }
+    }
+
+    /** The picture part of a reply card: a thumbnail, a line saying what happens, and pick and remove buttons. */
+    private void autoReplyPictureRow(LinearLayout card, String picture) {
+        ui.add(card, ui.text(text.get("auto_reply_picture"), 14, ui.text, true), 16);
+        LinearLayout shown = ui.row();
+        shown.setGravity(Gravity.CENTER_VERTICAL);
+        android.widget.ImageView thumb = new android.widget.ImageView(this);
+        thumb.setTag("auto_reply_picture_thumb");
+        thumb.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
+        thumb.setContentDescription(text.get("auto_reply_picture_thumb"));
+        LinearLayout.LayoutParams square = new LinearLayout.LayoutParams(ui.dp(56), ui.dp(56));
+        square.setMarginEnd(ui.dp(12));
+        shown.addView(thumb, square);
+        TextView status = ui.text("", 13, ui.muted, false);
+        status.setTag("auto_reply_picture_status");
+        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        shown.addView(status, new LinearLayout.LayoutParams(0, -2, 1));
+        ui.add(card, shown, 8);
+        LinearLayout buttons = ui.row();
+        if (ui.largeText) buttons.setOrientation(LinearLayout.VERTICAL);
+        buttons.setGravity(Gravity.END);
+        Button pick = ui.button(text.get("auto_reply_picture_pick"));
+        pick.setTag("auto_reply_picture_pick");
+        pick.setOnClickListener(clicked -> pickAutoReplyPicture(card));
+        buttons.addView(pick);
+        Button clear = ui.button(text.get("auto_reply_picture_clear"));
+        clear.setTag("auto_reply_picture_clear");
+        clear.setOnClickListener(clicked -> {
+            setAutoReplyPicture(card, null);
+            pick.requestFocus();
+        });
+        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, -2);
+        if (ui.largeText) gap.topMargin = ui.dp(8);
+        else gap.setMarginStart(ui.dp(8));
+        buttons.addView(clear, gap);
+        ui.add(card, buttons, 8);
+        setAutoReplyPicture(card, picture);
+    }
+
+    /** Shows [name] on its card. The file stays until Save or Cancel, so a draft can still bring it back. */
+    private void setAutoReplyPicture(View card, String name) {
+        String picture = AutoReplyPicture.validName(name) ? name : null;
+        autoReplyPictures.put(card, picture);
+        android.widget.ImageView thumb = card.findViewWithTag("auto_reply_picture_thumb");
+        if (thumb == null) return;
+        android.graphics.Bitmap small = picture == null ? null : AutoReplyPicture.thumbnail(this, picture, ui.dp(56));
+        thumb.setImageBitmap(small);
+        thumb.setVisibility(small == null ? View.GONE : View.VISIBLE);
+        ((TextView) card.findViewWithTag("auto_reply_picture_status")).setText(text.get(picture == null ? "auto_reply_picture_none" :
+            small == null ? "auto_reply_picture_missing" : "auto_reply_picture_set"));
+        ((Button) card.findViewWithTag("auto_reply_picture_pick")).setText(text.get(picture == null ? "auto_reply_picture_pick" : "auto_reply_picture_change"));
+        card.findViewWithTag("auto_reply_picture_clear").setVisibility(picture == null ? View.GONE : View.VISIBLE);
+    }
+
+    private void pickAutoReplyPicture(View card) {
+        if (autoReplyList == null) return;
+        autoReplyPictureFor = autoReplyList.indexOfChild(card);
+        Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*");
+        try { startActivityForResult(picker, PICK_AUTO_REPLY_PICTURE); }
+        catch (android.content.ActivityNotFoundException missing) {
+            autoReplyPictureFor = -1;
+            feedback(text.get("auto_reply_picture_no_picker"), Toast.LENGTH_LONG);
+        }
+        catch (RuntimeException error) {
+            autoReplyPictureFor = -1;
+            feedback(text.get("auto_reply_picture_failed"), Toast.LENGTH_LONG);
+        }
+    }
+
+    /** Copies the picked picture in on a worker and puts it on its card if the card is still there. */
+    private void copyAutoReplyPicture(android.net.Uri uri, int index) {
+        if (autoReplyList == null || index < 0 || index >= autoReplyList.getChildCount()) return;
+        View card = autoReplyList.getChildAt(index);
+        TextView status = card.findViewWithTag("auto_reply_picture_status");
+        if (status != null) status.setText(text.get("auto_reply_picture_copying"));
+        Context app = getApplicationContext();
+        Thread worker = new Thread(() -> {
+            String name;
+            try {
+                name = AutoReplyPicture.copy(app, uri);
+            } catch (java.io.IOException | RuntimeException | OutOfMemoryError failed) {
+                android.util.Log.w("HushMessenger", "auto_reply: the picked picture couldn't be copied, " + failed.getClass().getName());
+                name = null;
+            }
+            String copied = name;
+            runOnUiThread(() -> placeAutoReplyPicture(card, copied));
+        }, "HushAutoReplyPicture");
+        worker.setDaemon(true);
+        worker.start();
+    }
+
+    private void placeAutoReplyPicture(View card, String name) {
+        if (isDestroyed() || autoReplyList == null || autoReplyList.indexOfChild(card) < 0) {
+            // The card went while the copy ran, so nothing can hold this file.
+            java.io.File orphan = name == null ? null : AutoReplyPicture.fileFor(getApplicationContext(), name);
+            if (orphan != null && !orphan.delete()) android.util.Log.w("HushMessenger", "auto_reply: an unused picture couldn't be deleted");
+            return;
+        }
+        if (name == null) feedback(text.get("auto_reply_picture_failed"), Toast.LENGTH_LONG);
+        setAutoReplyPicture(card, name == null ? autoReplyPictures.get(card) : name);
     }
 
     private void refreshReplyCount() {
@@ -2269,6 +2542,9 @@ public final class SettingsActivity extends Activity {
         };
         when.addTextChangedListener(clearError);
         reply.addTextChangedListener(clearError);
+        // Without the row the card still carries its picture, so Save doesn't drop it and prune doesn't delete the file.
+        if (AutoReplyPicture.supported()) autoReplyPictureRow(card, rule.picture);
+        else setAutoReplyPicture(card, rule.picture);
         LinearLayout row = ui.row();
         row.setGravity(Gravity.END);
         Button remove = ui.button(text.get("auto_reply_remove"));
@@ -2309,12 +2585,14 @@ public final class SettingsActivity extends Activity {
     private Bundle autoReplyDraft() {
         if (autoReplyDialog == null || autoReplyList == null) return null;
         Bundle draft = new Bundle();
-        ArrayList<String> words = new ArrayList<>(), replies = new ArrayList<>();
+        ArrayList<String> words = new ArrayList<>(), replies = new ArrayList<>(), pictures = new ArrayList<>();
         for (int i = 0; i < autoReplyList.getChildCount(); i++) {
             View card = autoReplyList.getChildAt(i);
             EditText when = card.findViewWithTag("auto_reply_when"), reply = card.findViewWithTag("auto_reply_reply");
             words.add(when.getText().toString());
             replies.add(reply.getText().toString());
+            String picture = autoReplyPictures.get(card);
+            pictures.add(picture == null ? "" : picture);
             EditText focused = when.hasFocus() ? when : reply.hasFocus() ? reply : null;
             if (focused != null) {
                 draft.putInt("focus_index", i);
@@ -2325,6 +2603,8 @@ public final class SettingsActivity extends Activity {
         }
         draft.putStringArrayList("words", words);
         draft.putStringArrayList("replies", replies);
+        draft.putStringArrayList("pictures", pictures);
+        draft.putInt("picture_for", autoReplyPictureFor);
         draft.putBoolean("groups", autoReplyGroups.isChecked());
         draft.putInt("scroll", autoReplyScroll.getScrollY());
         return draft;
@@ -2343,27 +2623,58 @@ public final class SettingsActivity extends Activity {
         if (!job.notified) {
             job.notified = true;
             feedback(text.get(job.cleared ? "message_log_cleared" : "message_log_clear_failed"), Toast.LENGTH_LONG);
+            // Undo gets the only copy of what went, and nothing is offered after a failed or empty clear.
+            List<MessageLog.Entry> removed = job.removed;
+            job.removed = null;
+            if (started && job.undoable && job.cleared && removed != null && !removed.isEmpty()) {
+                offerUndo(text.format("message_log_clear"), () -> restoreMessageLog(removed));
+                messageLogUndo = true;
+            }
         }
         if (messageLogList != null) loadMessageLog();
     }
+
+    /** Undo for Clear log: writes back the copy the clear kept, off the main thread, ahead of anything logged since. */
+    private void restoreMessageLog(List<MessageLog.Entry> removed) {
+        MESSAGE_LOG_WORK.execute(() -> {
+            boolean restored = MessageLog.restore(removed);
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                feedback(text.get(restored ? "message_log_restored" : "message_log_restore_failed"), Toast.LENGTH_LONG);
+                if (messageLogList != null) loadMessageLog();
+            });
+        });
+    }
+
+    /** Clears and their Undos run one at a time in the order they were tapped, so a Clear right after Undo stays cleared. */
+    private static final java.util.concurrent.ExecutorService MESSAGE_LOG_WORK = java.util.concurrent.Executors.newSingleThreadExecutor(work -> {
+        Thread thread = new Thread(work, "HushMessageLogWork");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     /** Only the work and its outcome survive rotation. The worker never owns a screen or chat text. */
     private static final class MessageLogClearJob {
         java.lang.ref.WeakReference<SettingsActivity> owner;
         boolean finished, cleared, notified;
+        /** Cleared when settings stop while this runs, so coming back before it ends doesn't bring Undo back. */
+        boolean undoable = true;
+        /** What the clear took, until the page hands it to Undo. */
+        List<MessageLog.Entry> removed;
 
         MessageLogClearJob(SettingsActivity activity) { owner = new java.lang.ref.WeakReference<>(activity); }
 
         void start() {
-            new Thread(() -> {
-                boolean result = MessageLog.clear();
+            MESSAGE_LOG_WORK.execute(() -> {
+                MessageLog.Cleared result = MessageLog.clearForUndo();
                 new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                    cleared = result;
+                    cleared = result.cleared;
+                    removed = result.removed;
                     finished = true;
                     SettingsActivity activity = owner.get();
                     if (activity != null) activity.messageLogCleared(this);
                 });
-            }, "HushMessageLogClear").start();
+            });
         }
     }
 
@@ -2419,14 +2730,14 @@ public final class SettingsActivity extends Activity {
     private void restoreChoices(Map<String, Boolean> choices) {
         java.util.Set<String> known = new java.util.HashSet<>();
         for (String[] spec : CONTROLS) known.add(spec[0]);
-        known.add(Settings.BUBBLE_CHAT_HEADS);
-        known.add(Settings.KEEP_FACEBOOK_PROFILE);
+        known.addAll(Settings.SUB_SWITCHES.keySet());
         Map<String, Boolean> supported = new java.util.LinkedHashMap<>();
         int unknown = 0, unavailable = 0;
         for (Map.Entry<String, Boolean> choice : choices.entrySet()) {
             String key = choice.getKey();
-            if ("paused".equals(key) || (known.contains(key) && Settings.installed.contains(Settings.BUBBLE_CHAT_HEADS.equals(key) ? "bubbles"
-                : Settings.KEEP_FACEBOOK_PROFILE.equals(key) ? "facebook" : key))) supported.put(key, choice.getValue());
+            String owner = Settings.SUB_SWITCHES.get(key);
+            if ("paused".equals(key) || (known.contains(key) && Settings.installed.contains(owner != null ? owner : key)))
+                supported.put(key, choice.getValue());
             else if (known.contains(key)) unavailable++;
             else unknown++;
         }
@@ -2442,13 +2753,30 @@ public final class SettingsActivity extends Activity {
             restoreResult(autoReplyLeftOff ? text.get("import_auto_reply_off") : text.get("import_no_choices"), skipped);
             return;
         }
+        // Every choice starts off, so a value the backup shares with this phone isn't news, and the count says so. The
+        // pause isn't a choice; it gets its own sentence.
+        int changed = 0, total = 0;
+        boolean wasPaused = Settings.preferences.getBoolean("paused", false);
         SharedPreferences.Editor editor = Settings.preferences.edit();
-        for (Map.Entry<String, Boolean> choice : supported.entrySet()) editor.putBoolean(choice.getKey(), choice.getValue());
+        for (Map.Entry<String, Boolean> choice : supported.entrySet()) {
+            if (!"paused".equals(choice.getKey())) {
+                total++;
+                if (Settings.preferences.getBoolean(choice.getKey(), false) != choice.getValue()) changed++;
+            }
+            editor.putBoolean(choice.getKey(), choice.getValue());
+        }
         editor.apply();
         refreshChoices();
-        // A backup can carry the pause, and a restored pause is easy to miss, so it stays in the toast.
-        String paused = Boolean.TRUE.equals(supported.get("paused")) ? " " + text.get("changes_paused") + "." : "";
-        restoreResult(text.count("imported", supported.size()) + paused, autoReply + skipped);
+        // A backup can carry the pause, and a restored pause is easy to miss, so it stays in the toast, and so does a
+        // pause the backup lifted.
+        Boolean pause = supported.get("paused");
+        String paused = Boolean.TRUE.equals(pause) ? " " + text.get("changes_paused") + "."
+            : Boolean.FALSE.equals(pause) && wasPaused ? " " + text.get("changes_resumed") + "." : "";
+        // The choices only match the backup when nothing in it was skipped, held back or left the pause different.
+        boolean whole = total > 0 && skipped.isEmpty() && autoReply.isEmpty() && (pause == null || pause == wasPaused);
+        String headline = changed == 0 ? text.get(whole ? "import_same" : "import_none_changed")
+            : changed == total ? text.count("imported", changed) : text.get("imported_partial", changed, total);
+        restoreResult(headline + paused, autoReply + skipped);
     }
 
     /**
@@ -2464,6 +2792,24 @@ public final class SettingsActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == PICK_AUTO_REPLY_PICTURE) {
+            int index = autoReplyPictureFor;
+            autoReplyPictureFor = -1;
+            if (result != RESULT_OK || data == null || data.getData() == null) return;
+            android.net.Uri picked = data.getData();
+            // Only a provider grant, never a path read with Messenger's own access.
+            if (!"content".equals(picked.getScheme())) {
+                feedback(text.get("auto_reply_picture_failed"), Toast.LENGTH_LONG);
+                return;
+            }
+            if (autoReplyList == null) {
+                pendingAutoReplyPicture = picked;
+                pendingAutoReplyPictureFor = index;
+            } else {
+                copyAutoReplyPicture(picked, index);
+            }
+            return;
+        }
         if (request == PICK_FONT) {
             // Cancelled: nothing to do and nothing to say.
             if (result != RESULT_OK || data == null || data.getData() == null) return;
@@ -2862,7 +3208,7 @@ public final class SettingsActivity extends Activity {
             boolean selected = tab.getTag().equals("tab_" + page);
             tab.setSelected(selected);
             tab.setTextColor(selected ? ui.selectedText : ui.muted);
-            tab.setBackground(ui.interactive(selected ? ui.accent : ui.surface, 0, 10, selected ? ui.outline : ui.accent));
+            tab.setBackground(ui.interactive(selected ? ui.accent : ui.surface, 0, 10));
         }
     }
 
@@ -2894,16 +3240,18 @@ public final class SettingsActivity extends Activity {
         // Every word typed, in any order, with accents and case ignored (SettingsSearch).
         List<String> terms = SettingsSearch.terms(query);
         clearQuery.setVisibility(query.isEmpty() ? View.GONE : View.VISIBLE);
-        String drawerWords = "hide app drawer icon launcher settings menu row " + text.get("hide_drawer_icon") + " " + text.get("hide_menu_row");
+        String drawerWords = "hide app drawer icon launcher settings menu row shortcuts " + text.get("hide_drawer_icon") + " "
+            + text.get("hide_menu_row") + " " + text.get("hide_icon_shortcuts") + " " + text.get("hide_logo_press");
         // One letter matches almost anything, so the link waits for a second one.
         drawerSearchLink.setVisibility(controlRows.isEmpty() || (query.trim().length() >= 2 && SettingsSearch.matches(terms, drawerWords)) ? View.VISIBLE : View.GONE);
         int visible = 0;
         for (int i = 0; i < controlRows.size(); i++) {
             String[] spec = installedControls.get(i);
             String bucket = "inbox".equals(spec[3]) ? "inbox" :
-                ("conversations".equals(spec[3]) || "stickers".equals(spec[3])) ? "chats" : "more";
+                ("conversations".equals(spec[3]) || "photos_videos".equals(spec[3]) || "stickers".equals(spec[3])) ? "chats" : "more";
             // A switch inside a control's block is found by its own words too.
             String inside = "facebook".equals(spec[0]) ? text.get("facebook_keep_profile") + " " + text.get("facebook_keep_profile_help") : "";
+            if (Settings.TAB_BADGES.equals(spec[0])) for (String keep : Settings.KEEP_BADGES.values()) inside += " " + text.get(keep);
             boolean match = ("all".equals(category) || category.equals(bucket)) && SettingsSearch.matches(terms, spec[1], spec[2],
                 SettingsText.english(spec[3]), text.display(text.control(spec, 1)), text.display(text.control(spec, 2)), text.get(spec[3]), inside);
             controlRows.get(i).setVisibility(match ? View.VISIBLE : View.GONE);
@@ -2921,8 +3269,7 @@ public final class SettingsActivity extends Activity {
             boolean selected = button.getTag().equals("category_" + category);
             button.setSelected(selected);
             button.setTextColor(selected ? ui.selectedText : ui.muted);
-            button.setBackground(ui.interactive(selected ? ui.selected : ui.background, selected ? 0 : ui.outline, 12,
-                selected ? ui.outline : ui.accent));
+            button.setBackground(ui.interactive(selected ? ui.selected : ui.background, selected ? 0 : ui.outline, 12));
             button.setPadding(ui.dp(4), ui.dp(8), ui.dp(4), ui.dp(8));
         }
         searchStatus.setText(controlRows.isEmpty() ? text.get("none_installed") :

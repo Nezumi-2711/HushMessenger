@@ -117,7 +117,7 @@ def check_build(args, code, expected_hash, names):
             )
         report = json.loads(report_path.read_text(encoding="utf-8"))
         applied = [patch["name"] for patch in report["appliedPatches"]]
-        steps = report["patchingSteps"]
+        steps = report.get("stepResults", report.get("patchingSteps")) or []
         if (
             len(applied) != len(names)
             or set(applied) != names

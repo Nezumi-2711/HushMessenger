@@ -17,7 +17,7 @@ try {
     # The receipt a walk of that bundle writes. -Change bends one field.
     function Write-Walk([hashtable]$Change = @{}) {
         $walk = New-WalkReceipt -Result PASS -Full $true -Serial 'TESTPHONE01' -Device 'SM-S908U1' -AppVersion '583.0.0.29.95' `
-            -BundleSha256 (Get-FileHash -LiteralPath $bundle -Algorithm SHA256).Hash -InstalledApkSha256 ('4' * 64) `
+            -BundleSha256 (Get-FileHash -LiteralPath $bundle -Algorithm SHA256).Hash -PatchedApkSha256 ('4' * 64) -InstalledApkSha256 ('4' * 64) `
             -Started '2026-10-21T16:00:00Z' -Finished '2026-10-21T16:30:00Z' -Screens 40 -Crashes 0
         foreach ($key in $Change.Keys) { $walk[$key] = $Change[$key] }
         [IO.File]::WriteAllText($walkPath, ($walk | ConvertTo-Json -Depth 4))
@@ -41,6 +41,13 @@ try {
             @(@{ device = 'Pixel 9' }, "*Pixel 9 isn't one of the release walk phones*"),
             @(@{ device = 'Pixel 9'; emulator = $true }, "*Pixel 9 isn't one of the release walk phones*"),
             @(@{ bundleSha256 = ('5' * 64) }, '*patched with bundle*and this one is*'),
+            # A -SkipPatch walk of whatever was installed, with nothing tying it to this bundle.
+            @(@{ patchedApkSha256 = '' }, "*doesn't name the APK patched from this bundle*"),
+            @(@{ patchedApkSha256 = $null }, "*doesn't name the APK patched from this bundle*"),
+            @(@{ patchedApkSha256 = ('4' * 64) + "`n"; installedApkSha256 = ('4' * 64) + "`n" }, "*doesn't name the APK patched from this bundle*"),
+            @(@{ installedApkSha256 = ('6' * 64) }, "*the walk ran APK '6666*', not '4444*', the one patched from this bundle*"),
+            @(@{ installedApkSha256 = '' }, '*the walk ran APK*the one patched from this bundle*'),
+            @(@{ installedApkSha256 = '/system/bin/sh: sha256sum: not found' }, '*the walk ran APK*the one patched from this bundle*'),
             @(@{ schema = 2 }, "*isn't schema 1*"))) {
         Write-Walk $badWalk[0]
         $bad = Test-WalkReceipt -Path $walkPath -BundlePath $bundle

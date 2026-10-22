@@ -218,6 +218,10 @@ class CatalogToolTest {
             "Bold and italic text"
         assertTrue("people" in CatalogTool.validateDefinitions(patch, ui, manifest, names))
         assertFailsWith<IllegalArgumentException> { CatalogTool.validateDefinitions(patch.replace("controlPatch(\"people\"", "controlPatch(\"changed\""), ui, manifest, names) }
+        val constantKey = assertFailsWith<IllegalArgumentException> {
+            CatalogTool.validateDefinitions(patch.replace("controlPatch(\"people\"", "controlPatch(PEOPLE"), ui, manifest, names)
+        }
+        assertContains(constantKey.message!!, "string literal")
         assertFailsWith<IllegalArgumentException> { CatalogTool.validateDefinitions(patch, ui.replace("{\"people\",", "{\"changed\","), manifest, names) }
         assertFailsWith<IllegalArgumentException> { CatalogTool.validateDefinitions(patch, ui, manifest.replace("hush.feature.people", "hush.feature.changed"), names) }
         assertFailsWith<IllegalArgumentException> { CatalogTool.validateDefinitions(patch, ui, manifest.replace("hush.feature.people", "hush.feature.growth"), names) }

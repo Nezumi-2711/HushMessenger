@@ -359,6 +359,34 @@ public class SettingsScreenshotTest {
         }
     }
 
+    /** A Quick setup's Undo at the top of settings, and Clear log's on the emptied log and behind it. */
+    @Test public void captureUndoOffers() throws Exception {
+        MessageLog.write(Settings.appContext, java.util.List.of(new MessageLog.Entry(System.currentTimeMillis(), "t", "A saved message")));
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = screen.get().getWindow().getDecorView();
+            SettingsText text = new SettingsText(screen.get());
+            layout(root);
+            required(root, "quick_privacy").performClick();
+            layout(root);
+            visibleTarget(required(root, "undo"));
+            write(root, "settings-undo-quick-setup");
+
+            Dialog dialog = openDialog(root, "message_log_view");
+            View sheet = dialog.getWindow().getDecorView();
+            awaitText(sheet, "A saved message");
+            required(sheet, "message_log_dialog_clear").performClick();
+            awaitText(sheet, text.get("undo"));
+            layoutDialog(dialog);
+            visibleTarget(required(sheet, "message_log_undo"));
+            write(sheet, "settings-message-log-undo");
+            dialog.dismiss();
+            layout(root);
+            assertEquals(text.get("undo_action", text.format("message_log_clear")), ((TextView) required(root, "undo")).getText().toString());
+            visibleTarget(required(root, "undo"));
+            write(root, "settings-undo-clear-log");
+        }
+    }
+
     private void captureDialog(View page, String action, String loadedText, String name) throws Exception {
         Dialog dialog = openDialog(page, action);
         try {

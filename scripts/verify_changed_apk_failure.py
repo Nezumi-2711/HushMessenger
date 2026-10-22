@@ -125,7 +125,7 @@ def check(args: argparse.Namespace) -> int:
         if not isinstance(report, dict):
             raise TypeError("Desktop did not write a patch result object")
         failed = report.get("failedPatches")
-        steps = report.get("patchingSteps")
+        steps = report.get("stepResults", report.get("patchingSteps"))
         if (
             not isinstance(failed, list)
             or any(

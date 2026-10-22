@@ -186,7 +186,7 @@ public class ChoiceBackupTest {
                 clipboard(raw);
                 screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
                 assertEquals(raw.substring(0, Math.min(60, raw.length())), before, Settings.preferences.getAll());
-                assertTrue(ShadowToast.getTextOfLatestToast().startsWith("Not a valid"));
+                assertTrue(ShadowToast.getTextOfLatestToast().startsWith("Not a choices backup"));
             }
         }
     }
@@ -241,13 +241,45 @@ public class ChoiceBackupTest {
             clipboard(backup.toString());
             screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
             String toast = ShadowToast.getTextOfLatestToast();
-            assertEquals("Restored 12 choices. Changes paused.", toast);
+            // The eleven switches restore off, as they already were, and the pause has its own sentence.
+            assertEquals("None of your choices changed. Changes paused.", toast);
             assertTrue(toast, ToastLengthTest.lines(toast) <= 2);
             TextView result = screen.get().getWindow().getDecorView().findViewWithTag("choices_restore_status");
             SettingsText words = new SettingsText(screen.get());
             assertEquals(toast + " " + words.get("import_auto_reply_off") + " " + words.count("import_unknown", 2) + " " +
                 words.count("import_unavailable", 1), result.getText().toString());
             assertTrue(result.getText().toString(), ToastLengthTest.lines(result.getText().toString()) > 2);
+        }
+    }
+
+    /** A backup's values often match this phone's already, so the restore counts only the choices it changed. */
+    @Test public void aRestoreCountsOnlyTheChoicesItChanged() {
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            Settings.installed = new HashSet<>(Set.of("stories", "typing", "people"));
+            Settings.preferences.edit().putBoolean("stories", true).commit();
+            clipboard(ChoiceCodec.HEADER + "\nstories=true\ntyping=false\n");
+            screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
+            assertEquals("Your choices already match that backup.", ShadowToast.getTextOfLatestToast());
+            clipboard(ChoiceCodec.HEADER + "\nstories=true\ntyping=true\npeople=false\n");
+            screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
+            assertTrue(Settings.preferences.getBoolean("typing", false));
+            assertEquals("Changed 1 of 3 choices.", ShadowToast.getTextOfLatestToast());
+            clipboard(ChoiceCodec.HEADER + "\nstories=false\ntyping=false\n");
+            screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
+            assertFalse(Settings.preferences.getBoolean("stories", true));
+            assertEquals("Restored 2 choices.", ShadowToast.getTextOfLatestToast());
+
+            // A skipped entry or a pause the backup lifts means the backup and this phone don't match after all.
+            clipboard(ChoiceCodec.HEADER + "\nstories=false\nnew_control=true\n");
+            screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
+            assertEquals("None of your choices changed.", ShadowToast.getTextOfLatestToast());
+            Settings.preferences.edit().putBoolean("paused", true).commit();
+            clipboard(ChoiceCodec.HEADER + "\nstories=false\npaused=false\n");
+            screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
+            assertFalse(Settings.preferences.getBoolean("paused", true));
+            assertEquals("None of your choices changed. Changes resumed.", ShadowToast.getTextOfLatestToast());
+            screen.get().getWindow().getDecorView().findViewWithTag("import_choices").performClick();
+            assertEquals("Your choices already match that backup.", ShadowToast.getTextOfLatestToast());
         }
     }
 
@@ -377,7 +409,7 @@ public class ChoiceBackupTest {
                 ShadowToast.reset();
                 activity.onActivityResult(SettingsActivity.READ_CHOICES, Activity.RESULT_OK, new Intent().setData(uri));
                 // A document that can't be read gets different advice from one that isn't a backup.
-                awaitToast("unreadable".equals(data) ? "Couldn't read that file" : "Not a valid");
+                awaitToast("unreadable".equals(data) ? "Couldn't read that file" : "Not a choices backup");
                 assertEquals(before, Settings.preferences.getAll());
             }
         }
@@ -409,7 +441,7 @@ public class ChoiceBackupTest {
             ShadowToast.reset();
             activity.getWindow().getDecorView().findViewWithTag("save_choices_file").performClick();
             activity.onActivityResult(SettingsActivity.SAVE_CHOICES, Activity.RESULT_OK, new Intent().setData(uri));
-            awaitToast("Couldn't export");
+            awaitToast("Couldn't back up");
             assertArrayEquals(original, Files.readAllBytes(file.toPath()));
         }
     }
@@ -454,7 +486,7 @@ public class ChoiceBackupTest {
             assertEquals(before, Settings.preferences.getAll());
             activity.getWindow().getDecorView().findViewWithTag("save_choices_file").performClick();
             activity.onActivityResult(SettingsActivity.SAVE_CHOICES, Activity.RESULT_OK, new Intent().setData(uri));
-            awaitToast("Couldn't export");
+            awaitToast("Couldn't back up");
             assertEquals(0, output.size());
         }
     }
@@ -494,7 +526,7 @@ public class ChoiceBackupTest {
                 ShadowToast.reset();
                 activity.getWindow().getDecorView().findViewWithTag("save_choices_file").performClick();
                 activity.onActivityResult(SettingsActivity.SAVE_CHOICES, Activity.RESULT_OK, new Intent().setData(uri));
-                awaitToast("Couldn't export");
+                awaitToast("Couldn't back up");
                 assertEquals(0, output.size());
             }
         }
@@ -526,7 +558,7 @@ public class ChoiceBackupTest {
                     boolean ordinaryOldDocument = android.os.Build.VERSION.SDK_INT == 28 && authority.equals("com.android.externalstorage.documents");
                     boolean allowed = ordinaryOldDocument || android.os.Build.VERSION.SDK_INT >= 29 && owner.equals("org.example.files");
                     startFile(screen.get(), true, uri);
-                    awaitToast(allowed ? "Choices file saved" : "Couldn't export");
+                    awaitToast(allowed ? "Choices file saved" : "Couldn't back up");
                     finishWorkers();
                     assertEquals(allowed ? 1 : 0, opens.get());
                     if (!allowed) assertArrayEquals(original, output.toByteArray());
@@ -718,7 +750,8 @@ public class ChoiceBackupTest {
             Shadows.shadowOf(activity.getContentResolver()).registerInputStream(uri,
                 new ByteArrayInputStream((ChoiceCodec.HEADER + "\npaused=true\n").getBytes(StandardCharsets.UTF_8)));
             startFile(activity, false, uri);
-            awaitToast("Restored 1 choice");
+            // The backup only pauses, and the pause isn't a choice.
+            awaitToast("None of your choices changed. Changes paused.");
             assertTrue(Settings.preferences.getBoolean("paused", false));
         } finally {
             release.countDown();
@@ -867,7 +900,7 @@ public class ChoiceBackupTest {
              ParcelFileDescriptor descriptor = ParcelFileDescriptor.open(file.toFile(), ParcelFileDescriptor.MODE_READ_WRITE)) {
             DocumentResolver.opener = (uri, signal) -> new AssetFileDescriptor(descriptor, 7, 5);
             startFile(screen.get(), true, Uri.parse("content://choices/short-slice"));
-            awaitToast("Couldn't export");
+            awaitToast("Couldn't back up");
             finishWorkers();
             assertArrayEquals(original, Files.readAllBytes(file));
         } finally { Files.deleteIfExists(file); }

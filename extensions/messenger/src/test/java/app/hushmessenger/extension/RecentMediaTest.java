@@ -44,12 +44,12 @@ public class RecentMediaTest {
         }
     }
 
-    @Test public void theSwitchSitsUnderConversationsAndStartsOff() {
+    @Test public void theSwitchSitsUnderPhotosAndVideosAndStartsOff() {
         String[] spec = null;
         for (String[] control : SettingsActivity.CONTROLS) if (control[0].equals("recent_media")) spec = control;
         assertNotNull(spec);
         assertEquals("Hide the recent photo card", spec[1]);
-        assertEquals("conversations", spec[3]);
+        assertEquals("photos_videos", spec[3]);
         assertTrue(Settings.installed.contains("recent_media"));
         assertFalse(Settings.preferences.getBoolean("recent_media", false));
     }

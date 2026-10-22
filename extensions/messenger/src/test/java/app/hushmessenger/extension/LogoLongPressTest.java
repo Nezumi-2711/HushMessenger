@@ -100,6 +100,59 @@ public class LogoLongPressTest {
         assertNotNull(Settings.hookErrors.get("menu_row"));
     }
 
+    /**
+     * HushFacebook#146: Ignore the logo long press leaves the press to Messenger, and only a press that opened settings
+     * proves the logo is a way back in.
+     */
+    @Test public void aTurnedOffLogoPressIsLeftToMessenger() {
+        Settings.preferences.edit().putBoolean(Settings.HIDE_LOGO_PRESS, true).commit();
+        try (var chats = Robolectric.buildActivity(Activity.class).setup()) {
+            Settings.logoLongPressed(toolbar(chats.get()));
+            assertNull(Shadows.shadowOf(chats.get()).getNextStartedActivity());
+        }
+        Settings.preferences.edit().putBoolean(Settings.HIDE_LOGO_PRESS, false).commit();
+        Settings.logoLongPressed(new ContextWrapper(RuntimeEnvironment.getApplication()) {
+            @Override public void startActivity(Intent intent) {
+                throw new ActivityNotFoundException("refused");
+            }
+        });
+        Application app = RuntimeEnvironment.getApplication();
+        assertFalse(Settings.logoPressProven(app));
+        try (var chats = Robolectric.buildActivity(Activity.class).setup()) {
+            Settings.logoLongPressed(toolbar(chats.get()));
+            assertNotNull(Shadows.shadowOf(chats.get()).getNextStartedActivity());
+        }
+        assertTrue(Settings.logoPressProven(app));
+        // A press on an earlier install proves nothing after an update or a repatch, and neither does one under another
+        // HushMessenger version, since a Root Mount repatch keeps Messenger's install time.
+        long install = Settings.installedAt(app);
+        Settings.preferences.edit().putString(Settings.LOGO_USED, (install - 1) + "/" + BuildConfig.VERSION_NAME).commit();
+        assertFalse(Settings.logoPressProven(app));
+        Settings.preferences.edit().putString(Settings.LOGO_USED, install + "/" + BuildConfig.VERSION_NAME + ".1").commit();
+        assertFalse(Settings.logoPressProven(app));
+        Settings.preferences.edit().putString(Settings.LOGO_USED, install + "/" + BuildConfig.VERSION_NAME).commit();
+        assertTrue(Settings.logoPressProven(app));
+    }
+
+    /** With the icon shortcuts hidden, a refused launch doesn't point at them. */
+    @Test public void aRefusedLaunchLeavesOutHiddenIconShortcuts() {
+        java.util.Set<String> installed = Settings.installed;
+        Settings.installed = java.util.Set.of(Settings.LOGO_LONG_PRESS);
+        try {
+            Settings.preferences.edit().putBoolean(Settings.HIDE_ICON_SHORTCUTS, true).commit();
+            int before = ShadowToast.shownToastCount();
+            Settings.logoLongPressed(new ContextWrapper(RuntimeEnvironment.getApplication()) {
+                @Override public void startActivity(Intent intent) {
+                    throw new ActivityNotFoundException("refused");
+                }
+            });
+            assertEquals(before + 1, ShadowToast.shownToastCount());
+            assertEquals("Couldn't open HushMessenger settings.", ShadowToast.getTextOfLatestToast());
+        } finally {
+            Settings.installed = installed;
+        }
+    }
+
     @Test public void aPressWithNoContextIsLeftAlone() {
         Settings.logoLongPressed(null);
         assertNull(Shadows.shadowOf(RuntimeEnvironment.getApplication()).getNextStartedActivity());

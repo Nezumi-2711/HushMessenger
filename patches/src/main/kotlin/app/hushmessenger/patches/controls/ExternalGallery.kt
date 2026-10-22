@@ -31,8 +31,10 @@ internal const val GALLERY_ACTIVITY = "app.hushmessenger.extension.GalleryActivi
 internal const val ACTIVATE_GALLERY = "Lcom/facebook/xapp/messaging/composer/gallery/event/ActivateGalleryEvent;"
 internal const val EDIT_GALLERY_ITEM = "Lcom/facebook/xapp/messaging/composer/gallery/event/EditGalleryItemEvent;"
 internal const val COMPOSER_EVENT = "Lcom/facebook/xapp/messaging/composer/event/ComposerEvent;"
+internal const val ACTIVITY_RESULT_EVENT = "Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;"
 private const val CHAT_GALLERY_CALL = "$SETTINGS->chatGallery()Landroid/os/Bundle;"
 private const val MEDIA_RESULT_CALL = "$SETTINGS->externalMediaResult(IILandroid/content/Intent;)V"
+private const val GALLERY_ITEMS_CALL = "$SETTINGS->galleryItems(Ljava/lang/Object;Landroid/content/Intent;)Z"
 private const val PROVIDER_GET = "get()Ljava/lang/Object;"
 
 /** A gallery event handler, its field holding the chat camera launcher's provider, and that provider's interface. */
@@ -40,9 +42,11 @@ internal data class GalleryHandler(val id: String, val provider: String, val pro
 
 /**
  * How the chat's gallery button reaches the chat camera's launcher, read at discovery: the handlers, then the launcher
- * class that runs the start, the start, and the chat's result reader.
+ * class that runs the start, the start, the chat's result reader, and the chat's handler for a photo from another app
+ * with the result event's intent field it reads.
  */
-internal data class GalleryRoute(val handlers: List<GalleryHandler>, val launcher: String, val start: String, val reader: String)
+internal data class GalleryRoute(val handlers: List<GalleryHandler>, val launcher: String, val start: String, val reader: String,
+    val items: String, val itemsIntent: String)
 
 /** Set by [findExternalGallery] and cleared once the controls are in. */
 internal var galleryRoute: GalleryRoute? = null
@@ -249,26 +253,60 @@ private fun Method.startsFromProvider(providerType: String, start: String): Bool
     return false
 }
 
+/** The p-number of this method's one parameter of [type], or null when it has none or several. */
+private fun Method.onlyParameter(type: String): Int? {
+    val types = parameterTypes.map { it.toString() }
+    if (types.count { it == type } != 1) return null
+    return types.take(types.indexOf(type)).sumOf { if (it == "J" || it == "D") 2 else 1 } +
+        if (AccessFlags.STATIC.isSet(accessFlags)) 0 else 1
+}
+
 /**
- * The chat's gallery event handlers, the chat camera launcher's start and the chat's result reader, or none. A handler
- * hands the launcher a marked bundle, and the start swaps that launch for the phone's gallery app, so a pick comes back
- * to the chat that asked under the request code Messenger reads a photo from another app under. The reader takes the
- * pick's type from the result, and a gallery app often sends none, so the hook there fills it in first. That needs the
- * chat camera's launcher exactly as the camera switch finds it, the one way each handler's Edit branch reaches it, and
- * both reachable from that handler. There's at most one handler of each kind, and every one found must route, or a
- * gallery button would still open Messenger's gallery with the switch on.
+ * The chat's handler for a photo or video picked in another app, and the result event's intent field it reads, or null.
+ * It's static, handed the chat's thread and the result event, checks for [EXTERNAL_MEDIA_REQUEST], and opens Messenger's
+ * editor with the intent's one item:
+ *
+ *     iget vRequest, pEvent, <event>->A00:I
+ *     const/16 v0, 0x458
+ *     ...
+ *     iget-object vIntent, pEvent, <event>->A02:Landroid/content/Intent;
+ */
+private fun Method.galleryItemsIntent(byType: Map<String, ClassDef>): FieldReference? {
+    if (!AccessFlags.STATIC.isSet(accessFlags) || returnType != "V" || onlyParameter(THREAD_KEY_TYPE) == null) return null
+    val code = implementation?.instructions?.toList() ?: return null
+    val event = parameterRegister(onlyParameter(ACTIVITY_RESULT_EVENT) ?: return null)
+    if (code.none { (it as? NarrowLiteralInstruction)?.narrowLiteral == EXTERNAL_MEDIA_REQUEST } || code.any { it.galleryWrites(event) }) return null
+    val intent = code.filter { it.opcode == Opcode.IGET_OBJECT && (it as TwoRegisterInstruction).registerB == event }
+        .mapNotNull { it.galleryField() }.filter { it.definingClass == ACTIVITY_RESULT_EVENT && it.type == "Landroid/content/Intent;" }
+        .distinctBy { it.toString() }.singleOrNull() ?: return null
+    byType[ACTIVITY_RESULT_EVENT]?.fields?.singleOrNull { it.name == intent.name && it.type == intent.type && !AccessFlags.STATIC.isSet(it.accessFlags) }
+        ?: return null
+    return intent
+}
+
+/**
+ * The chat's gallery event handlers, the chat camera launcher's start, the chat's result reader and its handler for a
+ * photo from another app, or none. A gallery handler hands the launcher a marked bundle, and the start swaps that launch
+ * for the phone's gallery app, so a pick comes back to the chat that asked under the request code Messenger reads a photo
+ * from another app under. The reader takes the pick's type from the result, and a gallery app often sends none, so the
+ * hook there fills it in first. The photo handler opens one item in Messenger's editor, so the hook there sends a pick of
+ * several to the Send to sheet instead. That needs the chat camera's launcher exactly as the camera switch finds it, the
+ * one way each handler's Edit branch reaches it, and both reachable from that handler. There's at most one handler of
+ * each kind, and every one found must route, or a gallery button would still open Messenger's gallery with the switch on.
  */
 internal fun findExternalGallery(classes: Iterable<ClassDef>): List<Method> {
     galleryRoute = null
     val all = classes.toList()
     val methods = all.flatMap { it.methods }
+    val byType = all.associateBy { it.type }
     val readers = methods.filter { it.isComposerResult() }
     val reader = readers.singleOrNull() ?: return emptyList()
     if (AccessFlags.STATIC.isSet(reader.accessFlags) ||
         reader.implementation!!.instructions.none { (it as? NarrowLiteralInstruction)?.narrowLiteral == CHAT_CAMERA_REQUEST }) return emptyList()
+    val (items, itemsIntent) = methods.mapNotNull { method -> method.galleryItemsIntent(byType)?.let { method to it } }.singleOrNull()
+        ?: return emptyList()
     val factory = methods.filter { it.isChatCameraFactory() }.singleOrNull() ?: return emptyList()
     val launcher = factory.chatCameraLauncherType() ?: return emptyList()
-    val byType = all.associateBy { it.type }
     val launcherClass = byType[launcher] ?: return emptyList()
     if (!launcherClass.galleryImplements(factory.returnType, byType)) return emptyList()
     val start = launcherClass.methods.filter { it.isLauncherStart() }.singleOrNull() ?: return emptyList()
@@ -287,8 +325,20 @@ internal fun findExternalGallery(classes: Iterable<ClassDef>): List<Method> {
             (!AccessFlags.PUBLIC.isSet(start.accessFlags) && launcher.galleryPackage() != home)) return emptyList()
         GalleryHandler(handler.hookId(), provider.toString(), provider.type)
     }
-    galleryRoute = GalleryRoute(routed.sortedBy { it.id }, target.type, start.hookId(), reader.hookId())
-    return handlers + listOf(start, reader)
+    galleryRoute = GalleryRoute(routed.sortedBy { it.id }, target.type, start.hookId(), reader.hookId(), items.hookId(), itemsIntent.toString())
+    return handlers + listOf(start, reader, items)
+}
+
+/**
+ * The photo handler's thread and result event registers. The hook reads the event's intent into v0 before anything in
+ * the handler runs, so it needs one local, and both parameters where a plain iget and invoke reach them.
+ */
+private fun Method.galleryItemsRegisters(): Pair<Int, Int> {
+    val thread = onlyParameter(THREAD_KEY_TYPE)?.let(::parameterRegister)
+    val event = onlyParameter(ACTIVITY_RESULT_EVENT)?.let(::parameterRegister)
+    if (thread == null || event == null || parameterRegister(0) < 1 || maxOf(thread, event) > 15)
+        galleryChanged("the photo result handler's registers")
+    return thread to event
 }
 
 /** Where a handler's gallery branch starts, and three locals that branch writes before it reads them. */
@@ -325,6 +375,7 @@ internal fun MutableMethod.validateExternalGallery(): Int {
         in route.handlers.map { it.id } -> gallerySite().at
         // The result reader's own parameters, before anything in it runs.
         route.reader -> if (!AccessFlags.STATIC.isSet(accessFlags) && implementation != null) 0 else galleryChanged("the result reader")
+        route.items -> galleryItemsRegisters().let { 0 }
         else -> throw PatchException("Messenger controls: unexpected gallery hook ${hookId()}")
     }
 }
@@ -343,6 +394,17 @@ internal fun MutableMethod.injectExternalGallery() {
     }
     if (hookId() == route.reader) {
         addInstructions(at, "invoke-static/range {p1 .. p3}, $MEDIA_RESULT_CALL")
+        return
+    }
+    if (hookId() == route.items) {
+        val (thread, event) = galleryItemsRegisters()
+        addInstructionsWithLabels(at, """
+            iget-object v0, v$event, ${route.itemsIntent}
+            invoke-static {v$thread, v0}, $GALLERY_ITEMS_CALL
+            move-result v0
+            if-eqz v0, :stock_items
+            return-void
+        """.trimIndent(), ExternalLabel("stock_items", getInstruction(at)))
         return
     }
     val handler = route.handlers.single { it.id == hookId() }

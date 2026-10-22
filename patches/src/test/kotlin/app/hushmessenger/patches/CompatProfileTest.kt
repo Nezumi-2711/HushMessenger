@@ -147,4 +147,17 @@ class CompatProfileTest {
         assertContains(output, "Install beside Meta apps: expected 6 permission loads, found 0")
         assertEquals(emptyList(), saved.listDirectoryEntries())
     }
+
+    @Test fun saveRefusesAnApkWhoseSignerIsntProvenStock(@TempDir dir: Path) {
+        val apk = dir.resolve("unsigned.apk")
+        ZipOutputStream(Files.newOutputStream(apk)).use { it.putNextEntry(ZipEntry("resources.arsc")); it.closeEntry() }
+        val saved = dir.resolve("saved").createDirectories()
+        val (exit, output) = compatReport(apk.toString(), "--save", saved.toString())
+        assertEquals(1, exit, output)
+        assertContains(output, "[FAIL] Signer: apksigner couldn't read it, and --save records only an APK signed by Facebook or Meta")
+        assertEquals(emptyList(), saved.listDirectoryEntries())
+        // Without --save the report only reads the APK, so the signer stays a warning there.
+        val (_, report) = compatReport(apk.toString())
+        assertFalse("[FAIL] Signer" in report, report)
+    }
 }

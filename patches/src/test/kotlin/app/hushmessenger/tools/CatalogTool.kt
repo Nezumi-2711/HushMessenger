@@ -128,8 +128,12 @@ object CatalogTool {
                 it.getAttribute("android:name").removePrefix("hush.feature.")
             }
         val keys = declarations.map { it.first }
+        val unreadable = Regex("""(?<!fun )controlPatch\((?!")""").findAll(patchSource).count()
+        require(unreadable == 0) { "$unreadable controlPatch call(s) give the key as a constant; write it as a string literal so this check can read it" }
         require(keys.isNotEmpty() && keys.distinct().size == keys.size) { "Expected distinct patch control keys" }
-        require(uiKeys.size == keys.size && uiKeys.toSet() == keys.toSet()) { "Extension control keys differ from patches" }
+        require(uiKeys.size == keys.size && uiKeys.toSet() == keys.toSet()) {
+            "Extension control keys differ from patches (settings only: ${uiKeys.toSet() - keys.toSet()}, patches only: ${keys.toSet() - uiKeys.toSet()})"
+        }
         require(manifestKeys.size == keys.size && manifestKeys.toSet() == keys.toSet()) { "Manifest capabilities differ from patches" }
         require(declarations.map { it.second }.toSet().size == keys.size &&
             names == declarations.map { it.second }.toSet() + NON_CONTROL_PATCHES) { "Built patch names differ from control declarations" }

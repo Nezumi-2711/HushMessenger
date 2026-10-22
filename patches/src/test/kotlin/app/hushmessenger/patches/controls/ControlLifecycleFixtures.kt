@@ -139,6 +139,9 @@ internal fun lifecycleApk(directory: Path, classes: List<ClassDef>, manifestExtr
         fixtureCall(shortcuts, "setPackageBlock", pkg)
         fixtureCall(shortcuts, "parse", parser.invoke(null, StringReader("""
             <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+              <shortcut android:shortcutId="stock_compose">
+                <intent android:action="android.intent.action.VIEW" android:targetPackage="com.facebook.orca" android:targetClass="stock.Main"/>
+              </shortcut>
               <share-target android:targetClass="com.facebook.messenger.intents.ShareIntentHandler">
                 <category android:name="stock.share"/><data android:mimeType="*/*"/>
               </share-target>

@@ -5,6 +5,7 @@ import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.util.proxy.mutableTypes.MutableClass
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.iface.ClassDef
+import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -30,7 +31,7 @@ class ControlDiscoveryTest {
     )
 
     private fun completeFixture(): List<MutableClass> {
-        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS, XHE_AUDIO, XHE_TRANSCODE, DISAPPEARING_SWIPE, RECENT_MEDIA, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, PINNED_CHATS, NEARBY_SCANS, WIFI_IDENTITY, PHONE_ID_SYNC, STORY_HOLD, MARK_READ_BAR, MARK_READ_CLICK, TEXT_STYLE, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, EXTERNAL_GALLERY, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
+        val methods = syntheticHooks.filter { it.key !in setOf("unsent_indicator", "delta_unsent", "ai_sticker_cell", "ai_sticker_grid", "screenshot_viewers", COMMUNITY_INBOX, EMOJI_DRAWER, EMOJI_SEARCH, TAB_BADGES, FACEBOOK_BADGE, TAB_CONFIG, AI_MENTIONS, AI_COMMANDS, AI_SEARCH_HINT, AI_MENTION_ROWS, XHE_AUDIO, XHE_TRANSCODE, DISAPPEARING_SWIPE, RECENT_MEDIA, ANALYTICS_UPLOADS, ATTRIBUTION_UPLOADS, AD_EVENTS, MQTT_TELEMETRY, PINNED_CHATS, NEARBY_SCANS, WIFI_IDENTITY, PHONE_ID_SYNC, STORY_HOLD, QUIET_CALL_RING, QUIET_CALL_NOTIFICATION, MARK_READ_BAR, MARK_READ_CLICK, TEXT_STYLE, MESSAGE_LOG, AUTO_REPLY, SYSTEM_CAMERA, EXTERNAL_GALLERY, HIDE_READ_RECEIPTS, REPLY_READ) + CUSTOM_FONT_HOOKS }.flatMap { (key, ids) ->
             ids.map { id ->
                 if (key == "people_jewel") return@map peopleJewelMethod()
                 if (key == "people_tab") return@map peopleTabMethod()
@@ -122,7 +123,7 @@ class ControlDiscoveryTest {
             fixtureMethod("$IMMUTABLE_LIST->copyOf(Ljava/util/Collection;)$IMMUTABLE_LIST",
                 "const/4 v0, 0x0\nreturn-object v0", flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value),
         )), peopleJewelKeyHolder(), storyCardKeyHolder(), debugDumperFixture(), messageWrapperFixture(type = "LX/K1Y;"), searchFieldFixture()) +
-            aiStickerCellFixture() + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + aiMentionsFixture() + searchBarFixture() + aiMentionRowsFixture() + shareCopyFixture() + disappearingSwipeFixture() + recentMediaFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + pinnedChatLimitFixture() + nearbyScansFixture() + phoneIdFixture() + storyHoldFixture() + markReadFixture(immutableList = false) + textFieldFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + externalGalleryFixture() + customFontFixture() +
+            aiStickerCellFixture(grid = true) + communityInboxFixture().filter { it.type != IMMUTABLE_LIST } + emojiDrawerFixture() + emojiSearchFixture() + tabBadgesFixture() + tabConfigFixture() + aiMentionsFixture() + searchBarFixture() + aiMentionRowsFixture() + shareCopyFixture() + disappearingSwipeFixture() + recentMediaFixture() + analyticsUploadFixture() + attributionUploadFixture() + adEventsFixture() + mqttClientFixture() + pinnedChatLimitFixture() + nearbyScansFixture() + phoneIdFixture() + storyHoldFixture() + quietCallsFixture() + markReadFixture(immutableList = false) + textFieldFixture() + messageLogFixture() + readReceiptsFixture() + systemCameraFixture() + externalGalleryFixture() + customFontFixture() +
             syntheticHooks.getValue("screenshot_viewers").map { screenshotViewerFixture(it) }
                 .groupBy { it.definingClass }.map { (type, group) -> fixtureClass(type, group) })
         .let { classes ->
@@ -306,6 +307,21 @@ class ControlDiscoveryTest {
         assertEquals(listOf("LX/1iN;->A0D(LX/1iN;)Z"), found.getValue(TAB_PEOPLE).map { it.hookId() })
         assertEquals(listOf("LX/1iN;->A08(LX/1iN;)Z"), found.getValue(TAB_NOTIFICATIONS).map { it.hookId() })
         validateControls(found, setOf(TAB_PEOPLE, TAB_NOTIFICATIONS, "ai_tab"))
+    }
+
+    // Some accounts get MUSE, an AI agent tab, where the Meta AI tab goes. The bar builds it behind a gate of its own,
+    // so Hide Meta AI takes that gate too, with the same held answer as the Meta AI tab.
+    @Test fun hideMetaAiTakesTheMuseTabsGateAsWellAsTheMetaAiTabs() {
+        val found = mirroredControls(completeFixture())
+        assertEquals(listOf("LX/1iN;->A01(LX/1iN;)Z"), found.getValue(AI_MUSE_TAB).map { it.hookId() })
+        assertEquals(listOf("LX/1iN;->A02(LX/1iN;)Z"), found.getValue("ai_tab").map { it.hookId() })
+        validateControls(found, setOf("ai_tab", AI_MUSE_TAB))
+        assertTrue(listOf("ai_tab", AI_MUSE_TAB, TAB_CONFIG).all { it in controlHooks.getValue("meta_ai") })
+        val gate = fixtureMethod("LX/1iN;->A01(LX/1iN;)Z", pluginBody(pluginGates.getValue(AI_MUSE_TAB).anchors.single()),
+            flags = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value)
+        injectControl("meta_ai", mapOf(AI_MUSE_TAB to listOf(gate)))
+        val first = gate.implementation!!.instructions.first() as ReferenceInstruction
+        assertEquals("$SETTINGS->hideMetaAiTab()Z", first.reference.toString())
     }
 
     // Messenger's Menu tab gives Meta's subscriptions (Facebook Plus, Meta Verified, Meta One) a section of their own next to

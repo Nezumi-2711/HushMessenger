@@ -223,6 +223,7 @@ public final class XheAudio {
             Context context = Settings.appContext;
             File copy = context == null ? null : convertPicked(context, source);
             if (copy == null) return source;
+            pruneLater(context);
             return source.startsWith("/") ? copy.getPath() : Uri.fromFile(copy).toString();
         } catch (OverBudget | InterruptedIOException | ClosedByInterruptException skipped) {
             android.util.Log.w("HushMessenger", "Sent the picked video as it is: " + skipped.getMessage());
@@ -391,6 +392,66 @@ public final class XheAudio {
                 if (age > KEEP_MS || (file.getName().startsWith(SCRATCH) && age > scratch)) file.delete();
             }
         }
+    }
+
+    /** Where {@link #pruneLater} clears the cache, off the thread that asked. Tests run it in place. */
+    static java.util.concurrent.Executor pruneWork = work -> {
+        Thread thread = new Thread(work, "HushXhePrune");
+        thread.setDaemon(true);
+        thread.start();
+    };
+
+    /** How long after a file is due a later clear runs, so one clear takes the files that fall due close together. */
+    static final long PRUNE_SLACK_MS = 60_000;
+
+    /** When the later clear that's waiting is due, in uptime, 0 when none is. Guarded by {@link #ROOM}; tests reset it. */
+    static long pruneAt;
+
+    /**
+     * Clears what {@link #prune} would in the picked-video cache now, off this thread, and again once the next file left
+     * there is due, so a day's copies don't wait for another pick. Messenger's start and every handed-out copy call it.
+     */
+    static void pruneLater(Context context) {
+        pruneWork.execute(() -> pruneNow(new File(context.getCacheDir(), PICKED)));
+    }
+
+    private static void pruneNow(File folder) {
+        try {
+            long now = System.currentTimeMillis();
+            prune(folder, now);
+            long due = nextPrune(folder, now);
+            if (due == 0) return;
+            // Handler time stops while the phone sleeps, so this can run later than due, never sooner.
+            long at = SystemClock.uptimeMillis() + due - now + PRUNE_SLACK_MS;
+            synchronized (ROOM) {
+                if (pruneAt != 0 && pruneAt <= at) return;
+                pruneAt = at;
+            }
+            new android.os.Handler(Looper.getMainLooper()).postAtTime(() -> {
+                synchronized (ROOM) {
+                    if (pruneAt == at) pruneAt = 0;
+                }
+                pruneWork.execute(() -> pruneNow(folder));
+            }, at);
+        } catch (Throwable error) {
+            android.util.Log.w("HushMessenger", "Can't clear old converted videos", error);
+        }
+    }
+
+    /**
+     * When {@link #prune} next has a file in [folder] to delete, in wall time, or 0 when it has none. A file already
+     * due at [now] is one a clear just failed to delete, which the next start tries again.
+     */
+    static long nextPrune(File folder, long now) {
+        File[] files = folder.listFiles();
+        if (files == null) return 0;
+        long next = Long.MAX_VALUE;
+        long scratch = 2 * limits.workMs;
+        for (File file : files) {
+            long due = file.lastModified() + (file.getName().startsWith(SCRATCH) ? scratch : KEEP_MS);
+            if (due >= now) next = Math.min(next, due);
+        }
+        return next == Long.MAX_VALUE ? 0 : next;
     }
 
     /** Whether [name] is a finished converted copy's, as {@link #copyAndName} names them. */

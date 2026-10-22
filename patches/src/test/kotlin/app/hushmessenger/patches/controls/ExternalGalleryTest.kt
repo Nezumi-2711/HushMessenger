@@ -14,6 +14,7 @@ import com.android.tools.smali.dexlib2.iface.instruction.Instruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.immutable.ImmutableClassDef
 import com.android.tools.smali.dexlib2.immutable.ImmutableField
 import java.nio.file.Files
@@ -33,6 +34,20 @@ private const val GALLERY_PROVIDER = "LX/6CC;->A0L:LX/0c8;"
 internal const val GALLERY_PLUGIN = "LX/5SC;->BkE(Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/5uL;LX/5WP;${COMPOSER_EVENT})V"
 private const val PLUGIN_PROVIDER = "LX/5SC;->A0M:LX/0c8;"
 private const val COMPOSER_RESULT = "LX/7Rm;->onActivityResult(IILandroid/content/Intent;)V"
+internal const val GALLERY_ITEMS = "LX/B5V;->A00($ANDROIDX_FRAGMENT$FB_USER_SESSION$THREAD_KEY_TYPE${ACTIVITY_RESULT_EVENT}LX/6NI;)V"
+private const val ITEMS_INTENT = "$ACTIVITY_RESULT_EVENT->A02:Landroid/content/Intent;"
+
+/** The chat's handler for a photo from another app, cut down to its request check and the intent it reads. Parameters start at v8. */
+private val GALLERY_ITEMS_BODY = """
+    iget v0, p3, $ACTIVITY_RESULT_EVENT->A00:I
+    const/16 v1, $EXTERNAL_MEDIA_REQUEST
+    if-ne v0, v1, :other
+    iget v0, p3, $ACTIVITY_RESULT_EVENT->A01:I
+    iget-object v2, p3, $ITEMS_INTENT
+    invoke-static {p0, p2, v2}, LX/B5V;->A01(${ANDROIDX_FRAGMENT}${THREAD_KEY_TYPE}Landroid/content/Intent;)V
+    :other
+    return-void
+""".trimIndent()
 
 /** The chat composer's event handler, cut down to its Edit and gallery branches. Parameters start at v9. */
 private val GALLERY_HANDLER_BODY = """
@@ -129,12 +144,26 @@ private fun handlerClass(body: String = GALLERY_HANDLER_BODY, registers: Int = 1
         ImmutableField("LX/6CC;", name, type, AccessFlags.FINAL.value, null, null, null)
     }, flags = AccessFlags.PUBLIC.value or AccessFlags.FINAL.value)
 
-/** Both handlers, Edit's helper and the provider interface. The chat camera's launcher comes from [systemCameraFixture]. */
+private fun itemsClass(body: String = GALLERY_ITEMS_BODY, id: String = GALLERY_ITEMS, registers: Int = 13, flags: Int = STATIC) =
+    fixtureClass(id.substringBefore("->"), listOf(fixtureMethod(id, body, registers = registers, flags = flags)))
+
+private fun resultEventClass(intentFlags: Int = AccessFlags.FINAL.value, intentName: String = "A02", secondIntent: String? = null) =
+    fixtureClass(ACTIVITY_RESULT_EVENT, extraFields = (listOf("A00" to "I", "A01" to "I", intentName to "Landroid/content/Intent;") +
+        listOfNotNull(secondIntent?.let { it to "Landroid/content/Intent;" })).map { (name, type) ->
+        ImmutableField(ACTIVITY_RESULT_EVENT, name, type, if (type == "I") AccessFlags.FINAL.value else intentFlags, null, null, null)
+    }, flags = AccessFlags.PUBLIC.value or AccessFlags.FINAL.value)
+
+/**
+ * Both handlers, Edit's helper, the provider interface, and the photo result handler with its event. The chat camera's
+ * launcher comes from [systemCameraFixture].
+ */
 internal fun externalGalleryFixture(): List<MutableClass> = listOf(
     handlerClass(),
     pluginClass(),
     fixtureClass("LX/5JN;", listOf(fixtureMethod(GALLERY_EDITOR, galleryEditorBody(), registers = 5, flags = STATIC))),
     fixtureClass("LX/0c8;", flags = INTERFACE),
+    itemsClass(),
+    resultEventClass(),
 )
 
 private fun Method.code() = implementation!!.instructions.toList()
@@ -193,6 +222,32 @@ private fun assertReaderHook(reader: MutableMethod, message: String) {
     assertEquals("$SETTINGS->externalMediaResult(IILandroid/content/Intent;)V", (ask as ReferenceInstruction).reference.toString(), message)
 }
 
+/**
+ * The photo result handler hands the chat's thread and the event's intent to the extension before anything in it runs,
+ * and only its yes skips the stock code.
+ */
+private fun assertItemsHook(items: MutableMethod, message: String) {
+    val types = items.parameterTypes.map { it.toString() }
+    assertTrue(types.none { it == "J" || it == "D" }, message)
+    val first = items.implementation!!.registerCount - types.size
+    val before = items.code()
+    items.injectExternalGallery()
+    val after = items.code()
+    assertEquals(before.unpadded(), after.drop(5).unpadded(), message)
+    assertEquals(Opcode.IGET_OBJECT, after[0].opcode, message)
+    val read = after[0] as TwoRegisterInstruction
+    assertEquals(listOf(0, first + types.indexOf(ACTIVITY_RESULT_EVENT)), listOf(read.registerA, read.registerB), message)
+    assertEquals(galleryRoute!!.itemsIntent, (after[0] as ReferenceInstruction).reference.toString(), message)
+    assertEquals(Opcode.INVOKE_STATIC, after[1].opcode, message)
+    val ask = after[1] as FiveRegisterInstruction
+    assertEquals("$SETTINGS->galleryItems(Ljava/lang/Object;Landroid/content/Intent;)Z", (ask as ReferenceInstruction).reference.toString(), message)
+    assertEquals(listOf(first + types.indexOf(THREAD_KEY_TYPE), 0), listOf(ask.registerC, ask.registerD).take(ask.registerCount), message)
+    assertEquals(listOf(Opcode.MOVE_RESULT, Opcode.IF_EQZ, Opcode.RETURN_VOID), after.slice(2..4).map { it.opcode }, message)
+    assertEquals(0, (after[3] as OneRegisterInstruction).registerA, message)
+    assertEquals(5, after.branchTarget(3), message)
+    assertEquals(before[0], after[5], message)
+}
+
 /** The camera and gallery switches both hook the launcher's start. Either order leaves one swap in it. */
 private fun assertSharedStart(classes: List<ClassDef>, message: String) {
     for (cameraFirst in listOf(true, false)) {
@@ -228,9 +283,9 @@ class ExternalGalleryTest {
 
     @Test fun theGalleryButtonHandsTheChatCameraLauncherAMarkedBundle() {
         val found = findExternalGallery(galleryClasses())
-        assertEquals(setOf(GALLERY_HANDLER, GALLERY_PLUGIN, CHAT_CAMERA_START, COMPOSER_RESULT), found.map { it.hookId() }.toSet())
+        assertEquals(setOf(GALLERY_HANDLER, GALLERY_PLUGIN, CHAT_CAMERA_START, COMPOSER_RESULT, GALLERY_ITEMS), found.map { it.hookId() }.toSet())
         assertEquals(GalleryRoute(listOf(GalleryHandler(GALLERY_PLUGIN, PLUGIN_PROVIDER, "LX/0c8;"), GalleryHandler(GALLERY_HANDLER, GALLERY_PROVIDER, "LX/0c8;")),
-            "LX/5xZ;", CHAT_CAMERA_START, COMPOSER_RESULT), galleryRoute)
+            "LX/5xZ;", CHAT_CAMERA_START, COMPOSER_RESULT, GALLERY_ITEMS, ITEMS_INTENT), galleryRoute)
         validateControls(mapOf(EXTERNAL_GALLERY to found), setOf(EXTERNAL_GALLERY))
         // Right after the gallery event's cast, with the first three locals every way on from there writes before it
         // reads. The plugin's throw reads v2.
@@ -243,11 +298,29 @@ class ExternalGalleryTest {
             assertGalleryHook(before, handler.code(), site.at, id, id)
         }
         assertReaderHook(MutableMethod(found.single { it.hookId() == COMPOSER_RESULT }), COMPOSER_RESULT)
+        assertItemsHook(MutableMethod(found.single { it.hookId() == GALLERY_ITEMS }), GALLERY_ITEMS)
+    }
+
+    @Test fun aPhotoHandlerTheHookCantReachRefusesBeforeMutation() {
+        // No local for the intent, or the thread past v15 where the hook's plain invoke can't reach it. CompatReport has to
+        // refuse both as well, or it would pass a build the patch then stops on.
+        val threadLast = "LX/B5V;->A00($ACTIVITY_RESULT_EVENT${ANDROIDX_FRAGMENT}${FB_USER_SESSION}LX/6NI;$THREAD_KEY_TYPE)V"
+        val eventFirst = GALLERY_ITEMS_BODY.replace("p3", "p0").lines().filterNot { it.startsWith("invoke-static") }.joinToString("\n")
+        for ((id, cls) in listOf(GALLERY_ITEMS to itemsClass(registers = 5), threadLast to itemsClass(eventFirst, threadLast, registers = 20))) {
+            val found = mirroredControls(galleryClasses(cls)).getValue(EXTERNAL_GALLERY)
+            assertEquals(id, galleryRoute!!.items, id)
+            val items = MutableMethod(found.single { it.hookId() == id })
+            assertFailsWith<PatchException> { items.validateHook(EXTERNAL_GALLERY) }
+            val before = items.code()
+            val refused = assertFailsWith<PatchException> { items.injectExternalGallery() }
+            assertTrue("photo result handler's registers" in refused.message.orEmpty(), "$id ${refused.message}")
+            assertEquals(before, items.code(), id)
+        }
     }
 
     @Test fun anAbstractLauncherHandsTheBundleOnlyToTheSubclassThatRunsItsStart() {
         val found = findExternalGallery(galleryClasses(*abstractLauncher()))
-        assertEquals(setOf(GALLERY_HANDLER, GALLERY_PLUGIN, CHAT_CAMERA_START, COMPOSER_RESULT), found.map { it.hookId() }.toSet())
+        assertEquals(setOf(GALLERY_HANDLER, GALLERY_PLUGIN, CHAT_CAMERA_START, COMPOSER_RESULT, GALLERY_ITEMS), found.map { it.hookId() }.toSet())
         assertEquals("LX/5xY;", galleryRoute!!.launcher)
         val handler = found.single { it.hookId() == GALLERY_HANDLER } as MutableMethod
         val before = handler.code()
@@ -260,7 +333,7 @@ class ExternalGalleryTest {
         for (at in listOf(site.at + 8, site.at + 10)) assertEquals("LX/5xY;", (after[at] as ReferenceInstruction).reference.toString())
         // 584's two plain subclasses both inherit the start, so every object runs it and the abstract launcher is the target.
         val twoPlain = abstractLauncher().dropLast(1) + fixtureClass("LX/5xW;", superclass = "LX/5xZ;", flags = FINAL_CLASS)
-        assertEquals(setOf(GALLERY_HANDLER, GALLERY_PLUGIN, CHAT_CAMERA_START, COMPOSER_RESULT),
+        assertEquals(setOf(GALLERY_HANDLER, GALLERY_PLUGIN, CHAT_CAMERA_START, COMPOSER_RESULT, GALLERY_ITEMS),
             findExternalGallery(galleryClasses(*twoPlain.toTypedArray())).map { it.hookId() }.toSet())
         assertEquals("LX/5xZ;", galleryRoute!!.launcher)
         // Only subclasses that bring their own start leave no one class to check for.
@@ -327,13 +400,32 @@ class ExternalGalleryTest {
         val notInterface = fixtureClass("LX/0c8;")
         // A static result reader has no p1 to p3 the hook can hand over as they are.
         val staticReader = fixtureClass("LX/7Rm;", listOf(fixtureMethod(COMPOSER_RESULT, composerResultBody(), flags = STATIC)))
+        // The photo handler has to be the one static method handed a thread and a result event that checks for the
+        // request and reads one intent field the event class has, from an event register it never overwrites.
+        val itemsTwin = itemsClass(GALLERY_ITEMS_BODY.replace("LX/B5V;", "LX/B5W;"), GALLERY_ITEMS.replace("LX/B5V;", "LX/B5W;"))
+        val itemsOverwritten = itemsClass(GALLERY_ITEMS_BODY.replace(":other\nreturn-void", ":other\nconst/4 p3, 0x0\nreturn-void"))
+        // Two intent fields the event class really has, read ahead of the usual one, so only the one-field rule refuses.
+        val itemsTwoIntents = itemsClass(GALLERY_ITEMS_BODY.replace("iget-object v2, p3, $ITEMS_INTENT",
+            "iget-object v3, p3, $ACTIVITY_RESULT_EVENT->A03:Landroid/content/Intent;\niget-object v2, p3, $ITEMS_INTENT"))
+        val itemsNoRequest = itemsClass(GALLERY_ITEMS_BODY.replace("const/16 v1, $EXTERNAL_MEDIA_REQUEST", "const/16 v1, 0x457"))
+        // The same handler as an instance method, its parameters one register later, so only the static rule refuses.
+        val itemsNotStatic = itemsClass(GALLERY_ITEMS_BODY.replace("p3", "p4").replace("p2", "p3").replace("p0", "p1"),
+            flags = AccessFlags.PUBLIC.value, registers = 14)
+        val noThread = GALLERY_ITEMS.replace(THREAD_KEY_TYPE, "Ljava/lang/Object;")
+        val itemsNoThread = itemsClass(GALLERY_ITEMS_BODY.replace("LX/B5V;->A01(${ANDROIDX_FRAGMENT}$THREAD_KEY_TYPE", "LX/B5V;->A01(${ANDROIDX_FRAGMENT}Ljava/lang/Object;"), noThread)
         for ((case, classes) in listOf("other field" to galleryClasses(otherField), "other start" to galleryClasses(otherStart),
             "twin" to galleryClasses() + twin, "plugin twin" to galleryClasses() + pluginTwin,
             "plugin other field" to galleryClasses(pluginOtherField), "plugin jumped in" to galleryClasses(pluginJumpedIn),
             "override" to galleryClasses() + overriding,
             "override below" to galleryClasses() + middle + below, "not an interface" to galleryClasses(notInterface),
-            "static reader" to galleryClasses(staticReader))) {
-            assertTrue(findExternalGallery(classes).isEmpty(), case)
+            "static reader" to galleryClasses(staticReader), "items twin" to galleryClasses() + itemsTwin,
+            "items event overwritten" to galleryClasses(itemsOverwritten), "items two intents" to galleryClasses(itemsTwoIntents, resultEventClass(secondIntent = "A03")),
+            "items no request" to galleryClasses(itemsNoRequest), "items not static" to galleryClasses(itemsNotStatic),
+            "items no thread" to galleryClasses(itemsNoThread), "items no handler" to galleryClasses().filterNot { it.type == "LX/B5V;" },
+            "items field missing" to galleryClasses(resultEventClass(intentName = "A03")),
+            "items field static" to galleryClasses(resultEventClass(intentFlags = STATIC)),
+            "items no event class" to galleryClasses().filterNot { it.type == ACTIVITY_RESULT_EVENT })) {
+            assertTrue(mirroredControls(classes).getValue(EXTERNAL_GALLERY).isEmpty(), case)
             assertEquals(null, galleryRoute, case)
         }
         // And without the chat camera's launcher there's nothing to hand the gallery button to.
@@ -378,8 +470,9 @@ class ExternalGalleryTest {
             val found = findExternalGallery(classes)
             assertEquals(activeProfile.hooks.getValue(EXTERNAL_GALLERY), found.map { it.hookId() }.toSet(), code)
             validateControls(mapOf(EXTERNAL_GALLERY to found), setOf(EXTERNAL_GALLERY))
-            // The composer plugin a chat's gallery button goes through, and the older by-name handler.
-            assertEquals(4, found.size, code)
+            // The composer plugin a chat's gallery button goes through, the older by-name handler, the launcher's start,
+            // the result reader and the photo result handler.
+            assertEquals(5, found.size, code)
             assertEquals(listOf(1, 1), galleryRoute!!.handlers.partition { COMPOSER_EVENT in it.id }.toList().map { it.size }, code)
             for (routed in galleryRoute!!.handlers) {
                 val handler = MutableMethod(found.single { it.hookId() == routed.id })
@@ -394,6 +487,8 @@ class ExternalGalleryTest {
             assertTrue(classes.none { it.superclass == galleryRoute!!.launcher &&
                 it.methods.any { method -> method.hookId().substringAfter("->") == start.substringAfter("->") } }, code)
             assertReaderHook(MutableMethod(found.single { it.hookId() == galleryRoute!!.reader }), code)
+            assertEquals(ITEMS_INTENT, galleryRoute!!.itemsIntent, code)
+            assertItemsHook(MutableMethod(found.single { it.hookId() == galleryRoute!!.items }), code)
             assertSharedStart(classes, code)
         }
     }

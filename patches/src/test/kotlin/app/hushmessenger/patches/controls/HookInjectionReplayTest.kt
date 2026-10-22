@@ -51,6 +51,13 @@ class HookInjectionReplayTest {
                         markReadSocketBuilder(markReadStub(), markReadRecipe!!)
                         markReadBuilder(markReadButtonStub(), markReadRecipe!!)
                     }
+                    // Auto reply also builds the extension's picture send from this build's media factory.
+                    if (key == AUTO_REPLY) {
+                        val recipe = autoReplyPictureRecipe ?: error("no picture recipe")
+                        autoReplyMessagesBuilder(autoReplyMessagesStub(), recipe)
+                        autoReplySendBuilder(autoReplySendStub(), recipe)
+                        autoReplyPicturesFlag(autoReplyPicturesStub())
+                    }
                 } catch (error: Exception) {
                     refused += "$code $key: ${error.javaClass.simpleName} ${error.message}"
                 }

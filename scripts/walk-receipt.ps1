@@ -10,7 +10,9 @@
 
     The walk writes walk-receipt.json with New-WalkReceipt. It names the SHA-256 of the .mpp the
     walked APK was patched with, and publish holds that to the signed bundle it's about to upload,
-    so a walk of any other build can't stand in for this one.
+    so a walk of any other build can't stand in for this one. It also names the APK patched from
+    that bundle and the one the device ran, and the two must match, so a walk of whatever was
+    already installed can't stand in either.
 #>
 
 # The phones release walks run on, by ro.product.model. An emulator passes by its serial.
@@ -28,6 +30,8 @@ function New-WalkReceipt {
         [Parameter(Mandatory = $true)][string]$Device,
         [AllowEmptyString()][string]$AppVersion,
         [Parameter(Mandatory = $true)][string]$BundleSha256,
+        # The APK patched from that bundle, and the one the device was running. '' when unknown.
+        [AllowEmptyString()][string]$PatchedApkSha256,
         [AllowEmptyString()][string]$InstalledApkSha256,
         [Parameter(Mandatory = $true)][DateTimeOffset]$Started,
         [Parameter(Mandatory = $true)][DateTimeOffset]$Finished,
@@ -38,7 +42,8 @@ function New-WalkReceipt {
     return [ordered]@{
         schema = 1; result = $Result; full = $Full
         serial = $Serial; device = $Device; emulator = $Serial.StartsWith('emulator-', [StringComparison]::Ordinal)
-        appVersion = $AppVersion; bundleSha256 = $BundleSha256.ToLowerInvariant(); installedApkSha256 = $InstalledApkSha256
+        appVersion = $AppVersion; bundleSha256 = $BundleSha256.ToLowerInvariant()
+        patchedApkSha256 = $PatchedApkSha256; installedApkSha256 = $InstalledApkSha256
         started = $Started.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ'); finished = $Finished.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')
         screens = $Screens; crashes = $Crashes; problems = @($Problems)
     }
@@ -79,6 +84,13 @@ function Test-WalkReceipt {
     $bundleSha256 = (Get-FileHash -LiteralPath $BundlePath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($receipt.bundleSha256 -isnot [string] -or $receipt.bundleSha256 -cne $bundleSha256) {
         return Fail "the walked APK was patched with bundle '$($receipt.bundleSha256)', and this one is '$bundleSha256'"
+    }
+    # \z, not $: $ also matches before a final newline.
+    if ($receipt.patchedApkSha256 -isnot [string] -or $receipt.patchedApkSha256 -cnotmatch '^[0-9a-f]{64}\z') {
+        return Fail "the walk receipt doesn't name the APK patched from this bundle, so nothing shows the walked app came from it"
+    }
+    if ($receipt.installedApkSha256 -isnot [string] -or $receipt.installedApkSha256 -cne $receipt.patchedApkSha256) {
+        return Fail "the walk ran APK '$($receipt.installedApkSha256)', not '$($receipt.patchedApkSha256)', the one patched from this bundle"
     }
     return [pscustomobject]@{ Valid = $true; Reason = $null; Receipt = $receipt }
 }

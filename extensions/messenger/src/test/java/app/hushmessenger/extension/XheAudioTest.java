@@ -43,6 +43,7 @@ import static org.junit.Assert.*;
 @Config(sdk = {28, 36})
 public class XheAudioTest {
     @Rule public TemporaryFolder folder = new TemporaryFolder();
+    private java.util.concurrent.Executor pruneWork;
 
     @Before public void reset() {
         Settings.initialize(RuntimeEnvironment.getApplication());
@@ -50,9 +51,15 @@ public class XheAudioTest {
         Settings.activeAt.clear();
         Settings.hookErrors.clear();
         CrashGuard.resetForTests();
+        // The clear that follows a handed-out copy runs in place, so it can't touch a later test's cache.
+        pruneWork = XheAudio.pruneWork;
+        XheAudio.pruneWork = Runnable::run;
+        XheAudio.pruneAt = 0;
     }
 
     @After public void restoreLimits() {
+        XheAudio.pruneWork = pruneWork;
+        XheAudio.pruneAt = 0;
         XheAudio.limits = new XheAudio.Limits();
         assertEquals("every conversion slot is given back", XheAudio.SLOTS, XheAudio.WORKERS.availablePermits());
         assertEquals("every claim on the disk and the cache is given back", 0, XheAudio.claimed());
@@ -799,6 +806,52 @@ public class XheAudioTest {
         assertEquals(Arrays.asList(copy.getName(), working.getName()), Arrays.asList(names));
     }
 
+    /** A day's copies go without another pick: once as Messenger starts, then when the next one left falls due. */
+    @Test public void oldCopiesAreClearedAtStartAndWhenTheNextOneFallsDue() throws Exception {
+        boolean started = HostScreens.started, failed = HostScreens.failed;
+        java.util.Set<String> installed = Settings.installed;
+        try {
+            File cache = pickedCache();
+            assertTrue(cache.isDirectory() || cache.mkdirs());
+            long now = System.currentTimeMillis();
+            File stale = new File(cache, finishedName('a'));
+            File later = new File(cache, finishedName('b'));
+            for (File file : new File[] {stale, later}) Files.write(file.toPath(), new byte[] {1});
+            assertTrue(stale.setLastModified(now - XheAudio.KEEP_MS - 60_000));
+            assertTrue("due in ten minutes", later.setLastModified(now - XheAudio.KEEP_MS + 600_000));
+            HostScreens.started = false;
+            HostScreens.failed = false;
+            Settings.installed = java.util.Set.of(XheAudio.KEY);
+            HostScreens.start(RuntimeEnvironment.getApplication());
+            assertEquals(Arrays.asList(later.getName()), Arrays.asList(cache.list()));
+            // Its day runs out with Messenger still open, so only the clear that waits for it can take it.
+            assertTrue(later.setLastModified(now - XheAudio.KEEP_MS - 1));
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofMillis(600_000));
+            assertTrue("not before it's due", later.exists());
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofMillis(2 * XheAudio.PRUNE_SLACK_MS));
+            assertFalse(later.exists());
+            assertEquals("nothing left to wait for", 0, XheAudio.pruneAt);
+        } finally {
+            HostScreens.started = started;
+            HostScreens.failed = failed;
+            Settings.installed = installed;
+            CrashGuard.resetForTests();
+        }
+    }
+
+    @Test public void aCopyUsedTodayStaysAndTheClearWaitsADayForIt() throws Exception {
+        File cache = pickedCache();
+        assertTrue(cache.isDirectory() || cache.mkdirs());
+        File fresh = new File(cache, finishedName('c'));
+        Files.write(fresh.toPath(), new byte[] {1});
+        assertTrue(fresh.setLastModified(System.currentTimeMillis()));
+        long before = android.os.SystemClock.uptimeMillis();
+        XheAudio.pruneLater(RuntimeEnvironment.getApplication());
+        assertTrue(fresh.exists());
+        long wait = XheAudio.pruneAt - before;
+        assertTrue("waits " + wait, wait > XheAudio.KEEP_MS - 60_000 && wait <= XheAudio.KEEP_MS + XheAudio.PRUNE_SLACK_MS);
+    }
+
     @Test public void filesAConversionLeftBesideASharedCopyAreCleared() throws Exception {
         byte[] plain = "plain".getBytes(StandardCharsets.US_ASCII);
         File shared = folder.newFile("orca_share_media46.mp4");
@@ -1083,11 +1136,11 @@ public class XheAudioTest {
         assertEquals("a second of sound when the track doesn't say", 1000 + 2 * secondOfSound, XheAudio.converting(untimed));
     }
 
-    @Test public void theSwitchSitsUnderConversationsAndStartsOff() {
+    @Test public void theSwitchSitsUnderPhotosAndVideosAndStartsOff() {
         assertTrue(Settings.installed.contains(XheAudio.KEY));
         String[] row = Arrays.stream(SettingsActivity.CONTROLS).filter(c -> c[0].equals(XheAudio.KEY)).findFirst().orElseThrow();
         assertEquals("Fix videos that won't send", row[1]);
-        assertEquals("conversations", row[3]);
+        assertEquals("photos_videos", row[3]);
         assertFalse(Settings.preferences.contains(XheAudio.KEY));
         assertFalse(Settings.wouldUse(XheAudio.KEY));
     }

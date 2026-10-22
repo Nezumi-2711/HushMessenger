@@ -103,7 +103,7 @@ def verify(apk, bundle, desktop, java, names, apk_sha256, aapt2):
             )
         report = json.loads(result.read_text(encoding="utf-8"))
         applied = [patch["name"] for patch in report["appliedPatches"]]
-        steps = report["patchingSteps"]
+        steps = report.get("stepResults", report.get("patchingSteps")) or []
         if (
             len(applied) != len(names)
             or set(applied) != set(names)

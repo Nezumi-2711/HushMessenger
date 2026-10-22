@@ -69,6 +69,20 @@ class ControlProfileTest {
         assertFailsWith<PatchException> { validateControls(base, setOf("ad_context_banner")) }
     }
 
+    @Test fun theSameClassesPassDiscoveryAndValidationOnlyForTheBuildTheyMatch() {
+        val banner = pluginGates.getValue(AD_CONTEXT_BANNER).anchors.single()
+        val gate = fixtureMethod(SYNTHETIC_AD_BANNER_GATE, pluginBody(banner))
+        val classes = listOf(fixtureClass(gate.definingClass, listOf(gate)))
+        for (profile in listOf(SYNTHETIC_PROFILE, BASE_PROFILE)) {
+            activeProfile = profile
+            val found = findControls(classes)
+            assertEquals(BASE_PROFILE.hooks.keys, found.keys)
+            assertEquals(listOf(SYNTHETIC_AD_BANNER_GATE), found.getValue(AD_CONTEXT_BANNER).map { it.hookId() })
+            if (profile === SYNTHETIC_PROFILE) validateControls(found, setOf(AD_CONTEXT_BANNER))
+            else assertFailsWith<PatchException> { validateControls(found, setOf(AD_CONTEXT_BANNER)) }
+        }
+    }
+
     private val builder = "Lcom/google/common/collect/ImmutableList${'$'}Builder;"
     private val copy = "$builder->addAll(Ljava/lang/Iterable;)$builder"
     private val build = "LX/32c;->A00($builder)Lcom/google/common/collect/ImmutableList;"

@@ -212,6 +212,9 @@ class PatchHeapChecks(unittest.TestCase):
     def test_complete_and_failed_runs_keep_stock_and_remove_temporary_outputs(self):
         for case in (
             "valid",
+            "step-results",
+            "step-results-failed-step",
+            "step-results-no-steps",
             "missing-theme",
             "wrong-counts",
             "missing-patch",
@@ -304,27 +307,29 @@ class PatchHeapChecks(unittest.TestCase):
                         stock.write_bytes(b"patcher changed input")
                     if case == "changed-bundle":
                         args.bundle.write_bytes(b"changed frozen input")
-                    report.write_text(
-                        json.dumps(
-                            {
-                                "appliedPatches": [{"name": "Material You theme"}]
-                                + (
-                                    []
-                                    if case == "missing-patch"
-                                    else [{"name": "Other patch"}]
-                                ),
-                                "failedPatches": [],
-                                "patchingSteps": [
-                                    {"step": "PATCHING", "success": True},
-                                    {
-                                        "step": "REBUILDING",
-                                        "success": case != "failed-step",
-                                    },
-                                ],
-                            }
+                    outcome = {
+                        "appliedPatches": [{"name": "Material You theme"}]
+                        + (
+                            []
+                            if case == "missing-patch"
+                            else [{"name": "Other patch"}]
                         ),
-                        encoding="utf-8",
-                    )
+                        "failedPatches": [],
+                        "patchingSteps": [
+                            {"step": "PATCHING", "success": True},
+                            {
+                                "step": "REBUILDING",
+                                "success": case
+                                not in ("failed-step", "step-results-failed-step"),
+                            },
+                        ],
+                    }
+                    # Desktop 1.19.0 renamed patchingSteps to stepResults.
+                    if case.startswith("step-results"):
+                        steps = outcome.pop("patchingSteps")
+                        if case != "step-results-no-steps":
+                            outcome["stepResults"] = steps
+                    report.write_text(json.dumps(outcome), encoding="utf-8")
                     count = 613 if case == "wrong-counts" else 614
                     owners = 24 if case == "wrong-classes" else 23
                     log = (
@@ -337,7 +342,7 @@ class PatchHeapChecks(unittest.TestCase):
                     )
 
                 with patch.object(checker, "run_bounded", side_effect=run):
-                    if case == "valid":
+                    if case in ("valid", "step-results"):
                         self.assertIn(
                             "PASS 123: 2 patches, 1024 MB",
                             checker.check_build(

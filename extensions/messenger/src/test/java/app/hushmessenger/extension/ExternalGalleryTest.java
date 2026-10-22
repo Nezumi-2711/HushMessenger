@@ -68,6 +68,50 @@ public class ExternalGalleryTest {
         assertEquals(Arrays.asList("image/*", "video/*"), Arrays.asList(pick.getStringArrayExtra(Intent.EXTRA_MIME_TYPES)));
     }
 
+    /** A gallery app as Android's own resolver needs to see it before it asks which app to use. */
+    private ResolveInfo gallery(String packageName) {
+        ResolveInfo gallery = new ResolveInfo();
+        gallery.activityInfo = new ActivityInfo();
+        gallery.activityInfo.packageName = packageName;
+        gallery.activityInfo.name = packageName + ".Pick";
+        gallery.activityInfo.applicationInfo = new android.content.pm.ApplicationInfo();
+        gallery.activityInfo.applicationInfo.packageName = packageName;
+        return gallery;
+    }
+
+    /**
+     * #64: with two gallery apps and no default Android asks which one to use. The photo pick kept the contacts app off
+     * that list but left Samsung's Gallery showing photos only, so the any-type pick now asks with the photo pick as the
+     * selector, which Android lists the apps and records Always by.
+     */
+    @Test public void whenAndroidAsksWhichGalleryThePickedOneStillShowsPhotosAndVideos() {
+        var packages = shadowOf(app.getPackageManager());
+        packages.setShouldShowActivityChooser(true);
+        ResolveInfo samsung = gallery("com.example.gallery"), photos = gallery("com.example.photos");
+        Intent photoPick = new Intent(Intent.ACTION_PICK).setType("image/*");
+        packages.addResolveInfoForIntent(photoPick, samsung);
+        packages.addResolveInfoForIntent(photoPick, photos);
+        // No contacts app here: Robolectric matches a registered pick by its action alone, so one would answer the photo
+        // pick too. On a phone the contacts picker answers an any-type pick but not a photo pick, so the selector keeps it out.
+        packages.addResolveInfoForIntent(new Intent(Intent.ACTION_PICK).setType("*/*").setPackage("com.example.gallery"), samsung);
+        String asks = app.getPackageManager().resolveActivity(photoPick, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+            .activityInfo.packageName;
+        assertFalse("Android picked " + asks + " without asking", Arrays.asList("com.example.gallery", "com.example.photos").contains(asks));
+
+        assertEquals("A gallery that can't take an any-type pick keeps the photo pick", "image/*", GalleryPicker.pickIntent(app).getType());
+        packages.addResolveInfoForIntent(new Intent(Intent.ACTION_PICK).setType("*/*").setPackage("com.example.photos"), photos);
+        Intent pick = GalleryPicker.pickIntent(app);
+        assertEquals("*/*", pick.getType());
+        assertNull(pick.getPackage());
+        assertNull(pick.getComponent());
+        assertEquals(Arrays.asList("image/*", "video/*"), Arrays.asList(pick.getStringArrayExtra(Intent.EXTRA_MIME_TYPES)));
+        Intent selector = pick.getSelector();
+        assertNotNull("Without the selector the contacts app is on the list", selector);
+        assertEquals(Intent.ACTION_PICK, selector.getAction());
+        assertEquals("image/*", selector.getType());
+        assertNull(selector.getPackage());
+    }
+
     /** The chat camera launcher's start: its own extras, then the ones it's handed, on a new intent for its screen. */
     private Intent launch(Bundle handed) {
         Intent intent = new Intent().setClassName(app.getPackageName(), CAMERA_SCREEN).putExtra("trigger2", "thread");
@@ -245,5 +289,130 @@ public class ExternalGalleryTest {
             assertEquals(Activity.RESULT_CANCELED, screen.getResultCode());
             assertEquals(new SettingsText(app).get("gallery_missing"), ShadowToast.getTextOfLatestToast());
         }
+    }
+
+    /** #64 and #82: the gallery app lets the person pick several photos and videos at once, in either pick. */
+    @Test public void bothPicksLetThePersonTakeSeveralItems() {
+        ResolveInfo gallery = installGallery();
+        assertTrue(GalleryPicker.pickIntent(app).getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false));
+        shadowOf(app.getPackageManager()).addResolveInfoForIntent(
+            new Intent(Intent.ACTION_PICK).setType("*/*").setPackage("com.example.gallery"), gallery);
+        Intent anyType = GalleryPicker.pickIntent(app);
+        assertEquals("*/*", anyType.getType());
+        assertTrue(anyType.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false));
+    }
+
+    private static android.content.ClipData clipOf(Uri... items) {
+        android.content.ClipData clip = android.content.ClipData.newRawUri("picked", items[0]);
+        for (int i = 1; i < items.length; i++) clip.addItem(new android.content.ClipData.Item(items[i]));
+        return clip;
+    }
+
+    private static Intent withClip(Intent intent, Uri... items) {
+        intent.setClipData(clipOf(items));
+        return intent;
+    }
+
+    private static java.util.List<Uri> urisOf(android.content.ClipData clip) {
+        java.util.List<Uri> uris = new java.util.ArrayList<>();
+        for (int i = 0; i < clip.getItemCount(); i++) uris.add(clip.getItemAt(i).getUri());
+        return uris;
+    }
+
+    @Test public void severalPickedItemsComeBackTogetherMarkedWithTheFirstAsTheResult() {
+        String authority = "com.example.gallery.picked";
+        Robolectric.setupContentProvider(PickedProvider.class, authority);
+        Uri photo = Uri.parse("content://" + authority + "/image/7"), video = Uri.parse("content://" + authority + "/video/8");
+        // Samsung's Gallery sends a pick of several in the clip alone, and some apps put the first in the data too.
+        for (Intent picked : new Intent[] {new Intent(), new Intent().setData(photo)}) {
+            picked.setClipData(clipOf(photo, video));
+            Intent result = GalleryPicker.handBack(app, picked);
+            assertEquals(photo, result.getData());
+            assertEquals("image/jpeg", result.getType());
+            assertEquals(Arrays.asList(photo, video), urisOf(result.getClipData()));
+            assertEquals(Arrays.asList("image/jpeg", "video/mp4"),
+                Arrays.asList(result.getClipData().getDescription().getMimeType(0), result.getClipData().getDescription().getMimeType(1)));
+            assertTrue(result.getBooleanExtra(GalleryPicker.ITEMS_MARK, false));
+            assertNotEquals(0, result.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        // One item in the clip alone is an ordinary pick, so Messenger's editor opens it as before.
+        Intent single = GalleryPicker.handBack(app, withClip(new Intent(), video));
+        assertEquals(video, single.getData());
+        assertEquals("video/mp4", single.getType());
+        assertNull(single.getClipData());
+        assertFalse(single.hasExtra(GalleryPicker.ITEMS_MARK));
+        // The same item twice is one item.
+        Intent twice = GalleryPicker.handBack(app, withClip(new Intent().setData(photo), photo));
+        assertNull(twice.getClipData());
+        assertFalse(twice.hasExtra(GalleryPicker.ITEMS_MARK));
+        assertTrue(Settings.hookErrors.isEmpty());
+    }
+
+    @Test public void thePickScreenHandsSeveralItemsBackToTheChat() {
+        installGallery();
+        String authority = "com.example.gallery.picked";
+        Robolectric.setupContentProvider(PickedProvider.class, authority);
+        Uri photo = Uri.parse("content://" + authority + "/image/7"), video = Uri.parse("content://" + authority + "/video/8");
+        try (ActivityController<GalleryActivity> controller = Robolectric.buildActivity(GalleryActivity.class).setup()) {
+            ShadowActivity screen = shadowOf(controller.get());
+            Intent pick = screen.getNextStartedActivityForResult().intent;
+            screen.receiveResult(pick, Activity.RESULT_OK, withClip(new Intent(), photo, video).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));
+            assertEquals(Activity.RESULT_OK, screen.getResultCode());
+            Intent result = screen.getResultIntent();
+            assertEquals(photo, result.getData());
+            assertEquals(Arrays.asList(photo, video), urisOf(result.getClipData()));
+            assertTrue(result.getBooleanExtra(GalleryPicker.ITEMS_MARK, false));
+            assertNotEquals(0, result.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+    }
+
+    /** The chat's photo handler with a marked pick of several: Messenger's Send to sheet, with the chat on top. */
+    @Test public void aPickOfSeveralGoesToTheSendToSheetWithTheChatOnTop() {
+        String authority = "com.example.gallery.picked";
+        Robolectric.setupContentProvider(PickedProvider.class, authority);
+        Uri photo = Uri.parse("content://" + authority + "/image/7"), video = Uri.parse("content://" + authority + "/video/8");
+        Uri png = Uri.parse("content://" + authority + "/image/9");
+        Uri thread = Uri.parse("thread://100000000000042");
+        var started = shadowOf(app);
+        Intent mixed = GalleryPicker.handBack(app, withClip(new Intent(), photo, video));
+        assertFalse("Off leaves the pick to Messenger", Settings.galleryItems(thread, mixed));
+        assertNull(started.getNextStartedActivity());
+
+        Settings.preferences.edit().putBoolean(GalleryPicker.KEY, true).commit();
+        assertTrue(Settings.galleryItems(thread, mixed));
+        assertTrue(Settings.lastActive(GalleryPicker.KEY) > 0);
+        Intent send = started.getNextStartedActivity();
+        assertEquals(new ComponentName(app.getPackageName(), GalleryPicker.SHARE_HANDLER), send.getComponent());
+        assertEquals(Intent.ACTION_SEND_MULTIPLE, send.getAction());
+        assertEquals("*/*", send.getType());
+        assertEquals(Arrays.asList(photo, video), send.getParcelableArrayListExtra(Intent.EXTRA_STREAM));
+        assertEquals(Arrays.asList(photo, video), urisOf(send.getClipData()));
+        assertEquals(Arrays.asList(thread), send.getParcelableArrayListExtra(GalleryPicker.SHARE_TARGETS));
+        int flags = Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK;
+        assertEquals(flags, send.getFlags() & flags);
+        // Messenger's second caller with the same result takes it without a second sheet.
+        assertTrue(Settings.galleryItems(thread, mixed));
+        assertNull(started.getNextStartedActivity());
+
+        // All photos is a photo share, and a thread that can't ride along leaves the sheet without a pinned chat.
+        for (Object noPin : new Object[] {null, "100000000000042"}) {
+            Intent photos = GalleryPicker.handBack(app, withClip(new Intent(), photo, png));
+            assertTrue(Settings.galleryItems(noPin, photos));
+            Intent unpinned = started.getNextStartedActivity();
+            assertEquals("image/*", unpinned.getType());
+            assertFalse(unpinned.hasExtra(GalleryPicker.SHARE_TARGETS));
+        }
+
+        // One item, an unmarked clip, a cancel and Pause stay with Messenger's editor.
+        Intent single = GalleryPicker.handBack(app, new Intent().setData(photo));
+        Intent unmarked = withClip(new Intent().setData(photo), photo, video);
+        for (Intent stock : new Intent[] {single, unmarked, null}) {
+            assertFalse(Settings.galleryItems(thread, stock));
+            assertNull(started.getNextStartedActivity());
+        }
+        Settings.preferences.edit().putBoolean("paused", true).commit();
+        assertFalse("Pause leaves the pick to Messenger", Settings.galleryItems(thread, mixed));
+        assertNull(started.getNextStartedActivity());
+        assertTrue(Settings.hookErrors.isEmpty());
     }
 }

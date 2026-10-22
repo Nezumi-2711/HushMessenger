@@ -5,6 +5,7 @@ import android.content.res.ColorStateList;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.view.Gravity;
@@ -74,7 +75,8 @@ final class SettingsUi {
     }
 
     TextView heading(String value) {
-        TextView view = text(value.toUpperCase(context.getResources().getConfiguration().getLocales().get(0)), 13, muted, true);
+        // The text is English on every phone, so English capitals: a Turkish phone's own would dot the I.
+        TextView view = text(value.toUpperCase(java.util.Locale.ROOT), 13, muted, true);
         view.setLetterSpacing(0.06f);
         view.setAccessibilityHeading(true);
         return view;
@@ -90,11 +92,25 @@ final class SettingsUi {
 
     Drawable interactive(int fill, int border, int radius) { return interactive(fill, border, radius, accent); }
 
-    /** An accent-filled control needs a different focus color, or its ring disappears. */
+    /** focus colors the ring around a focused control, except on an accent fill, which always gets its own two rings. */
     Drawable interactive(int fill, int border, int radius, int focus) {
         StateListDrawable states = new StateListDrawable();
-        GradientDrawable focused = shape(fill, focus, radius);
-        focused.setStroke(dp(2), focus);
+        Drawable focused;
+        if (fill == accent) {
+            // No one color stands out from both the accent fill and the page, so an accent control gets two
+            // rings: the outer one in the text color against the page, the inner one in the fill's own text color.
+            GradientDrawable outer = shape(fill, 0, radius);
+            outer.setStroke(dp(4), text);
+            GradientDrawable inner = shape(0, 0, Math.max(0, radius - 2));
+            inner.setStroke(dp(2), selectedText);
+            LayerDrawable rings = new LayerDrawable(new Drawable[] {outer, inner});
+            rings.setLayerInset(1, dp(2), dp(2), dp(2), dp(2));
+            focused = rings;
+        } else {
+            GradientDrawable ring = shape(fill, focus, radius);
+            ring.setStroke(dp(2), focus);
+            focused = ring;
+        }
         states.addState(new int[] {-android.R.attr.state_enabled}, shape(fill == accent ? track : fill, border == 0 ? 0 : line, radius));
         states.addState(new int[] {android.R.attr.state_focused}, focused);
         states.addState(new int[] {android.R.attr.state_hovered}, shape(fill == accent ? fill : infoSurface, border, radius));
@@ -123,7 +139,7 @@ final class SettingsUi {
         Button view = button(title);
         view.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
         view.setTextColor(new ColorStateList(new int[][] {{-android.R.attr.state_enabled}, {}}, new int[] {muted, selectedText}));
-        view.setBackground(interactive(accent, 0, 12, outline));
+        view.setBackground(interactive(accent, 0, 12));
         return view;
     }
 
