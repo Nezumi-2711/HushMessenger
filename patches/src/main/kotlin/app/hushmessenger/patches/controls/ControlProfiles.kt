@@ -54,6 +54,7 @@ internal val PROFILE_346814894 = ControlProfile(
         "ai_search" to setOf("LX/9ig;->A0A(LX/9ig;)Z", "LX/9ig;->A0B(LX/9ig;)Z"),
         "ai_search_chip" to setOf("LX/CDF;->render(LX/2DF;)LX/1J7;"),
         "ai_search_hint" to setOf("LX/28z;->A00(LX/1S0;LX/1yn;Lcom/facebook/mig/scheme/interfaces/MigColorScheme;Z)LX/1J7;"),
+        "ai_search_screen_hint" to setOf("LX/HqR;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/HqR;)V"),
         "ai_sticker_cell" to setOf("LX/CVr;->render(LX/2DF;)LX/1J7;"),
         "ai_sticker_grid" to setOf("LX/CZ2;->render(LX/2DF;)LX/1J7;"),
         "ai_stickers" to setOf("LX/NPE;->A03(LX/NPE;)Z", "LX/NPj;->A07(LX/NPj;)Z"),

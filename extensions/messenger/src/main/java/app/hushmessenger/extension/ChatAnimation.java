@@ -144,10 +144,34 @@ public final class ChatAnimation {
         return now;
     }
 
+    /** A frame this long after the one before it, slower than 40 a second, would jump on any screen. */
+    static final long LATE = FRAME + FRAME / 2;
+    /** How long a slide waits at its first position, at most, for Messenger to draw on time. */
+    static final long WAIT = 250;
+
+    /**
+     * Messenger's first frames for a chat often come late, most of all after a cold start, and a late frame early on
+     * lands in the slide's fastest part. Until a frame comes on time, a late one starts the slide over at that frame.
+     * Every frame before it drew the slide's first position, with the chat wholly off screen (or wholly on it, sliding
+     * out), so the wait shows as a short pause instead of a jump (#28). Returns whether the slide is under way.
+     */
+    static boolean underWay(Animation animation, long lastFrame, long now, long firstFrame, long frame) {
+        if (lastFrame <= 0) return false;
+        if (now - lastFrame <= LATE) {
+            // On time for any screen, though a faster screen's own frame still decides whether this one stalled.
+            steady(animation, lastFrame, now, frame);
+            return true;
+        }
+        animation.setStartTime(now);
+        return now - firstFrame >= WAIT;
+    }
+
     static final class Slide extends TranslateAnimation {
         private final boolean in;
         private final long frame = frame();
         private long lastFrame;
+        private long firstFrame;
+        private boolean underWay;
 
         Slide(boolean in, float side) {
             super(RELATIVE_TO_SELF, in ? side : 0f, RELATIVE_TO_SELF, in ? 0f : side, ABSOLUTE, 0f, ABSOLUTE, 0f);
@@ -155,7 +179,13 @@ public final class ChatAnimation {
         }
 
         @Override public boolean getTransformation(long now, Transformation out) {
-            lastFrame = steady(this, lastFrame, now, frame);
+            if (underWay) {
+                lastFrame = steady(this, lastFrame, now, frame);
+            } else {
+                if (lastFrame <= 0) firstFrame = now;
+                underWay = underWay(this, lastFrame, now, firstFrame, frame);
+                lastFrame = now;
+            }
             boolean more = super.getTransformation(now, out);
             if (in) slidingInUntil = more ? now + KEEP : 0;
             return more;

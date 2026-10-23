@@ -173,7 +173,7 @@ public class CompatReport {
         PATCHES.put("Hide Mark as read", List.of("mark_read_action"));
         PATCHES.put("Pin more chats", List.of("pinned_chats"));
         PATCHES.put("Hide Facebook shortcuts", List.of("facebook", "facebook_profile"));
-        PATCHES.put("Hide Meta AI", List.of("ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_muse_tab", "ai_search", "ai_search_chip", "ai_mentions", "ai_commands", "ai_search_hint", "ai_mention_rows", "tab_config"));
+        PATCHES.put("Hide Meta AI", List.of("ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_muse_tab", "ai_search", "ai_search_chip", "ai_mentions", "ai_commands", "ai_search_hint", "ai_search_screen_hint", "ai_mention_rows", "tab_config"));
         PATCHES.put("Hide Chat Moments", List.of("moments"));
         PATCHES.put("Hide Reels badge", List.of("reels_badge"));
         PATCHES.put("Hide People tab", List.of("tab_people", "tab_config"));
@@ -3728,28 +3728,82 @@ public class CompatReport {
             var code = instructions(method);
             if (code.stream().noneMatch(i -> i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr &&
                 "search_bar".equals(sr.getString()))) continue;
-            for (int pick = 7; pick < code.size(); pick++) {
-                if (code.get(pick).getOpcode() != Opcode.INVOKE_VIRTUAL ||
-                    !"Landroid/content/res/Resources;->getString(I)Ljava/lang/String;".equals(ref(code.get(pick)))) continue;
-                var get = (FiveRegisterInstruction) code.get(pick);
-                if (!(code.get(pick - 7) instanceof ReferenceInstruction ci && ci.getReference() instanceof MethodReference check) ||
-                    (code.get(pick - 7).getOpcode() != Opcode.INVOKE_VIRTUAL && code.get(pick - 7).getOpcode() != Opcode.INVOKE_INTERFACE) || !"Z".equals(check.getReturnType()) ||
-                    check.getParameterTypes().size() != 1 ||
-                    !"Lcom/facebook/auth/usersession/FbUserSession;".equals(check.getParameterTypes().get(0).toString())) continue;
-                int held = register(code.get(pick - 6));
-                if (code.get(pick - 6).getOpcode() != Opcode.MOVE_RESULT ||
-                    !(code.get(pick - 5) instanceof ReferenceInstruction rr && rr.getReference() instanceof MethodReference resources) ||
-                    !"Landroid/content/res/Resources;".equals(resources.getReturnType()) ||
-                    code.get(pick - 4).getOpcode() != Opcode.MOVE_RESULT_OBJECT || register(code.get(pick - 4)) != get.getRegisterC() ||
-                    code.get(pick - 3).getOpcode() != Opcode.CONST || register(code.get(pick - 3)) != get.getRegisterD() ||
-                    code.get(pick - 1).getOpcode() != Opcode.CONST || register(code.get(pick - 1)) != get.getRegisterD() ||
-                    code.get(pick - 2).getOpcode() != Opcode.IF_EQZ || register(code.get(pick - 2)) != held ||
-                    !jumpsTo(code, pick - 2, pick)) continue;
-                builders.add(method);
-                break;
-            }
+            if (searchBarPick(code) >= 0) builders.add(method);
         }
         return builders.size() == 1 ? builders : List.of();
+    }
+
+    /** Index of the bar's getString call, with the check 7 lines up, the plain id 3 up and the Meta AI id 1 up, or -1. */
+    static int searchBarPick(List<Instruction> code) {
+        for (int pick = 7; pick < code.size(); pick++) {
+            if (code.get(pick).getOpcode() != Opcode.INVOKE_VIRTUAL ||
+                !"Landroid/content/res/Resources;->getString(I)Ljava/lang/String;".equals(ref(code.get(pick)))) continue;
+            var get = (FiveRegisterInstruction) code.get(pick);
+            if (!(code.get(pick - 7) instanceof ReferenceInstruction ci && ci.getReference() instanceof MethodReference check) ||
+                (code.get(pick - 7).getOpcode() != Opcode.INVOKE_VIRTUAL && code.get(pick - 7).getOpcode() != Opcode.INVOKE_INTERFACE) || !"Z".equals(check.getReturnType()) ||
+                check.getParameterTypes().size() != 1 ||
+                !"Lcom/facebook/auth/usersession/FbUserSession;".equals(check.getParameterTypes().get(0).toString())) continue;
+            int held = register(code.get(pick - 6));
+            if (code.get(pick - 6).getOpcode() != Opcode.MOVE_RESULT ||
+                !(code.get(pick - 5) instanceof ReferenceInstruction rr && rr.getReference() instanceof MethodReference resources) ||
+                !"Landroid/content/res/Resources;".equals(resources.getReturnType()) ||
+                code.get(pick - 4).getOpcode() != Opcode.MOVE_RESULT_OBJECT || register(code.get(pick - 4)) != get.getRegisterC() ||
+                code.get(pick - 3).getOpcode() != Opcode.CONST || register(code.get(pick - 3)) != get.getRegisterD() ||
+                code.get(pick - 1).getOpcode() != Opcode.CONST || register(code.get(pick - 1)) != get.getRegisterD() ||
+                code.get(pick - 2).getOpcode() != Opcode.IF_EQZ || register(code.get(pick - 2)) != held ||
+                !jumpsTo(code, pick - 2, pick)) continue;
+            return pick;
+        }
+        return -1;
+    }
+
+    /**
+     * ai_search_screen_hint: the search screen's header, which reads the inbox bar's own Meta AI check and, within a few
+     * lines that leave the answer alone, picks between the bar's two hint ids with if-nez right before reading the string.
+     * Counted only when the bar is unambiguous and exactly one method matches. Mirrors AiSearchHint.kt.
+     */
+    static List<Method> searchScreenHints(List<ClassDef> classes, List<Method> bars) {
+        if (bars.size() != 1) return List.of();
+        var bar = instructions(bars.get(0));
+        int pick = searchBarPick(bar);
+        if (pick < 0) return List.of();
+        String check = ref(bar.get(pick - 7));
+        int plain = ((NarrowLiteralInstruction) bar.get(pick - 3)).getNarrowLiteral();
+        int metaAi = ((NarrowLiteralInstruction) bar.get(pick - 1)).getNarrowLiteral();
+        var screens = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods())
+            if (searchScreenHintSite(instructions(method), check, plain, metaAi)) screens.add(method);
+        return screens.size() == 1 ? screens : List.of();
+    }
+
+    static boolean searchScreenHintSite(List<Instruction> code, String check, int plain, int metaAi) {
+        for (int result = 1; result < code.size(); result++) {
+            var call = code.get(result - 1);
+            if (code.get(result).getOpcode() != Opcode.MOVE_RESULT ||
+                (call.getOpcode() != Opcode.INVOKE_VIRTUAL && call.getOpcode() != Opcode.INVOKE_INTERFACE) || !check.equals(ref(call))) continue;
+            int held = register(code.get(result));
+            for (int ai = result + 1; ai <= Math.min(result + 7, code.size() - 4); ai++) {
+                if (ai > result + 1 && writesRegister(code.get(ai - 1), held)) break;
+                var hint = code.get(ai);
+                var branch = code.get(ai + 1);
+                var other = code.get(ai + 2);
+                if (hint.getOpcode() != Opcode.CONST || branch.getOpcode() != Opcode.IF_NEZ || other.getOpcode() != Opcode.CONST ||
+                    register(hint) == held || register(other) != register(hint) || register(branch) != held || !jumpsTo(code, ai + 1, ai + 3) ||
+                    ((NarrowLiteralInstruction) hint).getNarrowLiteral() != metaAi || ((NarrowLiteralInstruction) other).getNarrowLiteral() != plain ||
+                    !readsHint(code.get(ai + 3), register(hint))) continue;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Resources.getString(id), or a static (Resources, I)String helper, with the id in [hint]. */
+    static boolean readsHint(Instruction i, int hint) {
+        if (!(i instanceof FiveRegisterInstruction call) || call.getRegisterCount() != 2 || call.getRegisterD() != hint ||
+            !(i instanceof ReferenceInstruction ri && ri.getReference() instanceof MethodReference target)) return false;
+        return (i.getOpcode() == Opcode.INVOKE_VIRTUAL && "Landroid/content/res/Resources;->getString(I)Ljava/lang/String;".equals(target.toString())) ||
+            (i.getOpcode() == Opcode.INVOKE_STATIC && "Ljava/lang/String;".equals(target.getReturnType()) &&
+                refParams(target).equals(List.of("Landroid/content/res/Resources;", "I")));
     }
 
     /** 584's numbering of the @ list row flags. Meta renumbers them with each release. Mirrors AiMentionRows.kt. */
@@ -5013,7 +5067,9 @@ public class CompatReport {
         found.get("tab_config").addAll(tabConfigurations(classes));
         found.get("ai_mentions").addAll(aiMentionDispatchers(classes));
         found.get("ai_commands").addAll(aiCommandLists(classes));
-        found.get("ai_search_hint").addAll(searchBarBuilders(classes));
+        var searchBars = searchBarBuilders(classes);
+        found.get("ai_search_hint").addAll(searchBars);
+        found.get("ai_search_screen_hint").addAll(searchScreenHints(classes, searchBars));
         found.get("ai_mention_rows").addAll(aiMentionRowChecks(classes));
         found.get("xhe_audio").addAll(shareCopies(classes));
         found.get("disappearing_swipe").addAll(disappearingSwipeStarts(classes));

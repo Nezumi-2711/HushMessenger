@@ -183,8 +183,9 @@ public final class Settings {
     }
 
     /**
-     * The inbox search bar reads "Ask Meta AI or search" when Messenger's Meta AI search check is true. With the switch on
-     * the check reads false, the answer accounts without Meta AI in search get, so the bar shows the plain hint.
+     * The inbox search bar, and the search screen it opens, read "Ask Meta AI or search" when Messenger's Meta AI search
+     * check is true. With the switch on the check reads false, the answer accounts without Meta AI in search get, so both
+     * boxes show the plain hint.
      */
     public static boolean metaAiSearchHint(boolean original) {
         if (!original) return false;

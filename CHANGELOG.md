@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed and fixed
+
+- **Hide Meta AI** now reaches the search screen too. Tap the search bar and the box at the top used to say "Ask Meta AI or search" even with the switch on. Now it shows the plain search hint, like the bar on the Chats list. Search still finds people and chats the same way.
+- With **Slide chats in and out** on, a chat whose first frames come late no longer jumps partway in. That happened most on the first chat you open after starting Messenger. The chat now waits off screen until Messenger draws on time (a quarter second at most), then slides in from the edge. Going back works the same way.
+
+## 0.26.0 (2026-10-22)
+
 ### Reported issues
 
 - [#69](https://github.com/SysAdminDoc/HushMessenger/issues/69) New **Quiet incoming calls** switch under Conversations. Calls still come in, but Messenger doesn't ring, vibrate or pop the call up over what you're doing. The call waits in the notification shade with its Answer and Decline buttons, and a call you miss still shows up in the chat. If the Facebook app is on your phone, it can still ring for the same call. It starts off.

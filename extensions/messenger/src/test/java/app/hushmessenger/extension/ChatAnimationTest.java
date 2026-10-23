@@ -214,8 +214,10 @@ public class ChatAnimationTest {
         Transformation frame = new Transformation();
         assertTrue(open.getTransformation(start, frame));
         assertEquals(100f, x(frame), 0.01f);
+        // One frame on time gets the slide under way (a late one before that only delays its start).
+        assertTrue(open.getTransformation(start + 16, frame));
         // Messenger builds the chat on the main thread, so the next frame comes 120 ms late.
-        assertTrue(open.getTransformation(start + 120, frame));
+        assertTrue(open.getTransformation(start + 136, frame));
         Animation plain = new TranslateAnimation(Animation.RELATIVE_TO_SELF, 1f, Animation.RELATIVE_TO_SELF, 0f,
             Animation.ABSOLUTE, 0f, Animation.ABSOLUTE, 0f);
         plain.setDuration(ChatAnimation.SLIDE_IN);
@@ -223,12 +225,13 @@ public class ChatAnimationTest {
         plain.initialize(100, 100, 100, 100);
         Transformation skipped = new Transformation();
         plain.getTransformation(start, skipped);
-        plain.getTransformation(start + 120, skipped);
-        // Only one frame of the slide went by, where a plain slide would be most of the way in.
+        plain.getTransformation(start + 16, skipped);
+        plain.getTransformation(start + 136, skipped);
+        // Only two frames of the slide went by, where a plain slide would be most of the way in.
         assertTrue(x(frame) > 2 * x(skipped));
         // Steady frames after that finish it within the slide's own length.
-        long now = start + 120;
-        while (open.getTransformation(now += 16, frame)) assertTrue(now < start + 120 + ChatAnimation.SLIDE_IN);
+        long now = start + 136;
+        while (open.getTransformation(now += 16, frame)) assertTrue(now < start + 136 + ChatAnimation.SLIDE_IN);
         assertEquals(0f, x(frame), 0.01f);
     }
 
@@ -280,6 +283,65 @@ public class ChatAnimationTest {
             assertTrue(now <= start + ChatAnimation.SLIDE_IN + 2 * ChatAnimation.FRAME);
         }
         assertEquals(0f, x(frame), 0.01f);
+    }
+
+    @Test public void aLateFrameBeforeTheChatMovesWaitsOffScreenInsteadOfJumping() {
+        on();
+        long t = SystemClock.uptimeMillis();
+        // A warm open on the S22 at 60 Hz: the chat's second frame came 34 ms after its first, which the stall check
+        // lets through, so a plain slide jumps a fifth of the way in at once.
+        float[] late = slideAndPlain(t, t + 34);
+        assertEquals("still wholly off screen", 100f, late[0], 0.01f);
+        assertTrue(late[1] < 90f);
+        // The next frame on time moves it one frame on from the late one.
+        float[] oneFrame = slideAndPlain(t, t + 17);
+        assertEquals(oneFrame[1], slideAndPlain(t, t + 34, t + 51)[0], 0.01f);
+        // Frames on time from the first never wait.
+        assertEquals(oneFrame[1], oneFrame[0], 0.01f);
+
+        // Sliding out, it waits wholly on screen.
+        Object chat = new Object();
+        ChatAnimation.create(chat, CHAT, true, THREAD_ENTER);
+        Animation close = ChatAnimation.create(chat, CHAT, false, 0);
+        close.initialize(100, 100, 100, 100);
+        Transformation frame = new Transformation();
+        close.getTransformation(t, frame);
+        close.getTransformation(t + 34, frame);
+        assertEquals(0f, x(frame), 0.01f);
+        close.getTransformation(t + 51, frame);
+        assertTrue(x(frame) > 0f);
+    }
+
+    @Test public void aChatThatKeepsDrawingLateSlidesAfterAShortWait() {
+        on();
+        long start = SystemClock.uptimeMillis();
+        Animation open = ChatAnimation.create(new Object(), CHAT, true, THREAD_ENTER);
+        open.initialize(100, 100, 100, 100);
+        Transformation frame = new Transformation();
+        // A slow phone drawing every 30 ms never comes on time, so the chat waits off screen only so long.
+        long now = start;
+        for (; now - start < ChatAnimation.WAIT; now += 30) {
+            assertTrue(open.getTransformation(now, frame));
+            assertEquals(100f, x(frame), 0.01f);
+        }
+        // When the wait runs out it slides from the edge, its full length.
+        assertTrue(open.getTransformation(now, frame));
+        assertEquals(100f, x(frame), 0.01f);
+        while (open.getTransformation(now += 30, frame)) {
+            assertTrue(now <= start + ChatAnimation.WAIT + ChatAnimation.SLIDE_IN + 3 * 30);
+        }
+        assertEquals(0f, x(frame), 0.01f);
+    }
+
+    @Test public void aSecondFrameOnTimeFor60HzStillCountsAsAStallAt120() {
+        on();
+        shadowOf(ShadowDisplay.getDefaultDisplay()).setRefreshRate(120f);
+        long t = SystemClock.uptimeMillis();
+        // 20 ms is on time for the wait, which goes by a 60 Hz screen, but it's two of a 120 Hz screen's 8 ms frames
+        // missed, so the slide goes one frame on instead of taking the whole gap at its fastest part.
+        float[] stalled = slideAndPlain(t, t + 20);
+        assertEquals(slideAndPlain(t, t + 8)[1], stalled[0], 0.01f);
+        assertTrue(stalled[0] > stalled[1] + 3);
     }
 
     @Test public void theInboxStaysDrawnUntilTheChatHasSlidOverIt() {

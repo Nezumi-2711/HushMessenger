@@ -473,4 +473,26 @@ public class AutoReplyPictureTest {
         assertEquals(PICTURE, saved.picture);
         assertTrue(file.exists());
     }
+
+    /** With the row hidden the picture can't be seen, so a card emptied of both texts goes like any blank card. */
+    @Test @Config(sdk = 36) @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void aBlankCardWhereThePictureRowIsHiddenSavesAway() throws IOException {
+        File file = picture(new File(AutoReplyPicture.directory(context), PICTURE), 80, 60, Bitmap.CompressFormat.JPEG);
+        reply(PICTURE);
+        AutoReplyPicture.bridge = () -> false;
+        boolean preview = Settings.preview;
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            Settings.preview = false;
+            assertFalse(AutoReplyPicture.supported());
+            View root = openReplies(screen.get());
+            ((EditText) root.findViewWithTag("auto_reply_reply")).setText("");
+            root.findViewWithTag("auto_reply_save").performClick();
+            assertEquals(View.GONE, root.findViewWithTag("auto_reply_error").getVisibility());
+            assertFalse(ShadowDialog.getLatestDialog().isShowing());
+        } finally {
+            Settings.preview = preview;
+        }
+        assertTrue(AutoReply.rules(Settings.preferences).isEmpty());
+        assertFalse(file.exists());
+    }
 }

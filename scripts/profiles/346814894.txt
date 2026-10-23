@@ -24,6 +24,7 @@ hook ai_search LX/9ig;->A0A(LX/9ig;)Z
 hook ai_search LX/9ig;->A0B(LX/9ig;)Z
 hook ai_search_chip LX/CDF;->render(LX/2DF;)LX/1J7;
 hook ai_search_hint LX/28z;->A00(LX/1S0;LX/1yn;Lcom/facebook/mig/scheme/interfaces/MigColorScheme;Z)LX/1J7;
+hook ai_search_screen_hint LX/HqR;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/HqR;)V
 hook ai_sticker_cell LX/CVr;->render(LX/2DF;)LX/1J7;
 hook ai_sticker_grid LX/CZ2;->render(LX/2DF;)LX/1J7;
 hook ai_stickers LX/NPE;->A03(LX/NPE;)Z

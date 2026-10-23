@@ -26,6 +26,9 @@ class ProfilePatchChecks(unittest.TestCase):
             "step_results",
             "step_results_failed_step",
             "step_results_no_steps",
+            "desktop_1_19",
+            "desktop_1_19_failed_patch",
+            "desktop_1_19_missing_patch",
             "exit",
             "missing_report",
             "missing_apk",
@@ -124,6 +127,22 @@ class ProfilePatchChecks(unittest.TestCase):
                         report["stepResults"] = report.pop("patchingSteps")
                     if case == "step_results_no_steps":
                         report.pop("patchingSteps")
+                    # Desktop 1.19.0 writes PatchEngine.Result: plain names, {name, error} failures, stepResults.
+                    if case.startswith("desktop_1_19"):
+                        report = {
+                            "success": True,
+                            "packageName": "com.facebook.orca",
+                            "packageVersion": "584.0.0.49.98",
+                            "appliedPatches": [p["name"] for p in report["appliedPatches"]],
+                            "failedPatches": [],
+                            "stepResults": [
+                                dict(step, error=None) for step in report["patchingSteps"]
+                            ],
+                        }
+                    if case == "desktop_1_19_failed_patch":
+                        report["failedPatches"] = [{"name": names[0], "error": "boom"}]
+                    if case == "desktop_1_19_missing_patch":
+                        report["appliedPatches"].pop()
                     if case != "missing_report":
                         result.write_text(
                             "{" if case == "bad_json" else json.dumps(report),
@@ -159,7 +178,7 @@ class ProfilePatchChecks(unittest.TestCase):
                         ),
                     ) as validate,
                 ):
-                    if case in ("valid", "step_results"):
+                    if case in ("valid", "step_results", "desktop_1_19"):
                         self.assertEqual(
                             "Desktop applied and rebuilt all 2 patches",
                             check.verify(
@@ -185,7 +204,7 @@ class ProfilePatchChecks(unittest.TestCase):
                                 check.digest(apk),
                                 Path("aapt2"),
                             )
-                    if case in ("valid", "step_results", "malformed_apk"):
+                    if case in ("valid", "step_results", "desktop_1_19", "malformed_apk"):
                         validate.assert_called_once_with(
                             scratch[0] / "patched.apk", Path("java"), Path("aapt2")
                         )

@@ -241,8 +241,10 @@ class ReleaseStages(unittest.TestCase):
                     walk.write_text(written)
                 result = self.run_stage("publish", () if written is None else ("-Walk", str(walk)))
                 self.assertNotEqual(0, result.returncode)
-                # pwsh wraps a long error at the console width, behind "| " on each line.
-                said = re.sub(r"\s*\n\s*\|\s*", " ", result.stderr + result.stdout)
+                # pwsh wraps a long error at the console width, behind "| " on each line, and colors
+                # the error view when TERM is set (Git Bash), which puts escape codes inside the wrap.
+                plain = re.sub(r"\x1b\[[0-9;]*m", "", result.stderr + result.stdout)
+                said = re.sub(r"\s*\n\s*\|\s*", " ", plain)
                 self.assertIn(expected, said)
                 self.assertFalse((self.public_state.parent / "notes.md").exists())
                 tags = subprocess.run(

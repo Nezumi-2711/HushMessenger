@@ -2346,7 +2346,9 @@ public final class SettingsActivity extends Activity {
                 View card = list.getChildAt(i);
                 EditText when = card.findViewWithTag("auto_reply_when"), reply = card.findViewWithTag("auto_reply_reply");
                 AutoReply.Rule rule = new AutoReply.Rule(when.getText().toString(), reply.getText().toString(), autoReplyPictures.get(card));
-                if ((!rule.when.isEmpty() || rule.picture != null) && rule.reply.isEmpty()) {
+                // A picture only asks for a reply where its row shows. Without the row the card looks blank and goes like one.
+                boolean pictureShown = rule.picture != null && card.findViewWithTag("auto_reply_picture_thumb") != null;
+                if ((!rule.when.isEmpty() || pictureShown) && rule.reply.isEmpty()) {
                     TextView error = card.findViewWithTag("auto_reply_error");
                     error.setVisibility(View.VISIBLE);
                     reply.setBackground(ui.interactive(ui.surface, ui.error, 12, ui.error));
