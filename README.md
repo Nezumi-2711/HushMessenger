@@ -208,6 +208,8 @@ python -m unittest discover -s scripts/tests -v
 
 The bundle lands in `patches/build/libs/`, and clean builds from the same source give the same checksum. `:patches:check` wants the exact stock APK of every supported build in a folder named by `HUSH_NATIVE_FIXTURES`, each file named with its version code after the last dash, like `messenger-584-346814894.apk`. `:patches:test` runs without them and skips the tests that replay on those APKs.
 
+The development bundle names its discovery stages in the patch log and reports their elapsed time. To compare Wi-Fi finder time, allocation and heap peaks against the previous implementation on one stock APK, run `:patches:benchmarkWifiIdentity -PapkPath=<apk>`.
+
 To exercise Messenger itself, use ARM64 Android or an emulator image with ARM translation. Messenger `584/346814894` was checked on the Android 12L Google APIs x86_64 image with `libndk_translation.so`. Keep separate emulator data directories for Meta-signed stock and re-signed builds. Android users and work profiles share the installed APK and its signing key.
 
 For a low-RAM check, verify `ActivityManager.isLowRamDevice()` inside the app. A userdebug image can apply `debug.force_low_ram` temporarily after a framework restart. Reducing the emulator's RAM alone doesn't establish that classification. Restore the property and verify the original result afterward.
