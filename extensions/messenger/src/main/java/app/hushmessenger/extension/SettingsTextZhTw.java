@@ -301,6 +301,8 @@ final class SettingsTextZhTw {
         {"auto_reply_picture_thumb", "此回覆隨附的圖片"},
         {"auto_reply_picture_copying", "正在複製圖片…"},
         {"auto_reply_picture_failed", "無法使用該圖片。請嘗試其他圖片。"},
+        {"auto_reply_picture_too_big", "這張圖片太大了。請選擇較小的圖片。"},
+        {"auto_reply_picture_too_slow", "圖片載入太久了。請再試一次，或選擇其他圖片。"},
         {"auto_reply_picture_no_picker", "沒有可挑選圖片的應用程式"},
         {"font_file_choose", "選擇字型檔案"},
         {"font_phone", "使用手機字型"},

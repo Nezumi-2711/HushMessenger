@@ -387,6 +387,8 @@ final class SettingsText {
         ENGLISH.put("auto_reply_picture_thumb", "The picture sent with this reply");
         ENGLISH.put("auto_reply_picture_copying", "Copying the picture...");
         ENGLISH.put("auto_reply_picture_failed", "Couldn't use that picture. Try another one.");
+        ENGLISH.put("auto_reply_picture_too_big", "That picture is too big. Pick a smaller one.");
+        ENGLISH.put("auto_reply_picture_too_slow", "That picture took too long to load. Try again or pick another one.");
         ENGLISH.put("auto_reply_picture_no_picker", "No app here can pick a picture");
         ENGLISH.put("font_file_choose", "Choose a font file");
         ENGLISH.put("font_phone", "Use your phone's font");

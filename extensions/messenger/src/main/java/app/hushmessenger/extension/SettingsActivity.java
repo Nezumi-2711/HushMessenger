@@ -2041,7 +2041,9 @@ public final class SettingsActivity extends Activity {
     /** The picture each reply card holds, by card, until Save. */
     private final java.util.WeakHashMap<View, String> autoReplyPictures = new java.util.WeakHashMap<>();
     private final java.util.WeakHashMap<View, String> autoReplyCardIds = new java.util.WeakHashMap<>();
-    private final java.util.Map<View, Object> autoReplyPictureOps = new java.util.HashMap<>();
+    private final java.util.Map<View, AutoReplyPicture.Import> autoReplyPictureOps = new java.util.HashMap<>();
+    /** Each copy's deadline, posted with its Import as the token. */
+    private final android.os.Handler autoReplyDeadlines = new android.os.Handler(android.os.Looper.getMainLooper());
     private Button autoReplySave;
     /** The card whose picture is being picked, by position, or -1. */
     private int autoReplyPictureFor = -1;
@@ -2508,8 +2510,8 @@ public final class SettingsActivity extends Activity {
         }
         if (autoReplyList == null || index < 0 || index >= autoReplyList.getChildCount()) return;
         View card = autoReplyList.getChildAt(index);
-        Object operation = new Object();
-        autoReplyPictureOps.put(card, operation);
+        AutoReplyPicture.Import operation = new AutoReplyPicture.Import();
+        cancelAutoReplyImport(autoReplyPictureOps.put(card, operation));
         updateAutoReplySave();
         TextView status = card.findViewWithTag("auto_reply_picture_status");
         if (status != null) status.setText(text.get("auto_reply_picture_copying"));
@@ -2517,21 +2519,35 @@ public final class SettingsActivity extends Activity {
         if (clear != null) clear.setVisibility(View.VISIBLE);
         Context app = getApplicationContext();
         Runnable worker = () -> {
-            String name;
+            String name = null;
+            AutoReplyPicture.Failure.Kind why = null;
             try {
-                name = AutoReplyPicture.copy(app, uri);
+                name = AutoReplyPicture.copy(app, uri, operation);
+            } catch (AutoReplyPicture.Failure failed) {
+                android.util.Log.w("HushMessenger", "auto_reply: the picked picture wasn't copied, " + failed.getMessage());
+                why = failed.kind;
             } catch (java.io.IOException | RuntimeException | OutOfMemoryError failed) {
                 android.util.Log.w("HushMessenger", "auto_reply: the picked picture couldn't be copied, " + failed.getClass().getName());
-                name = null;
+                why = AutoReplyPicture.Failure.Kind.UNREADABLE;
             }
             String copied = name;
-            runOnUiThread(() -> placeAutoReplyPicture(card, operation, copied));
+            AutoReplyPicture.Failure.Kind reason = why;
+            runOnUiThread(() -> placeAutoReplyPicture(card, operation, copied, reason));
         };
-        try { AutoReplyPicture.copies.execute(worker); }
-        catch (java.util.concurrent.RejectedExecutionException busy) { placeAutoReplyPicture(card, operation, null); }
+        // The worker checks the same deadline, but a picker stuck in open() only stops when this gives up on it.
+        autoReplyDeadlines.postAtTime(() -> {
+            if (autoReplyPictureOps.get(card) != operation) return;
+            operation.cancel();
+            placeAutoReplyPicture(card, operation, null, AutoReplyPicture.Failure.Kind.TOO_SLOW);
+        }, operation, android.os.SystemClock.uptimeMillis() + AutoReplyPicture.DEADLINE_MS);
+        try { AutoReplyPicture.submit(operation, worker); }
+        catch (java.util.concurrent.RejectedExecutionException busy) {
+            placeAutoReplyPicture(card, operation, null, AutoReplyPicture.Failure.Kind.TOO_SLOW);
+        }
     }
 
-    private void placeAutoReplyPicture(View card, Object operation, String name) {
+    private void placeAutoReplyPicture(View card, AutoReplyPicture.Import operation, String name, AutoReplyPicture.Failure.Kind why) {
+        autoReplyDeadlines.removeCallbacksAndMessages(operation);
         if (isFinishing() || isDestroyed() || autoReplyList == null || autoReplyList.indexOfChild(card) < 0 ||
                 autoReplyPictureOps.get(card) != operation) {
             discardAutoReplyPicture(name);
@@ -2539,8 +2555,16 @@ public final class SettingsActivity extends Activity {
         }
         autoReplyPictureOps.remove(card);
         updateAutoReplySave();
-        if (name == null) feedback(text.get("auto_reply_picture_failed"), Toast.LENGTH_LONG);
+        if (name == null) feedback(text.get(why == AutoReplyPicture.Failure.Kind.TOO_BIG ? "auto_reply_picture_too_big"
+            : why == AutoReplyPicture.Failure.Kind.TOO_SLOW ? "auto_reply_picture_too_slow" : "auto_reply_picture_failed"), Toast.LENGTH_LONG);
         setAutoReplyPicture(card, name == null ? autoReplyPictures.get(card) : name);
+    }
+
+    /** Stops a replaced or abandoned copy, so it drops its queue slot, its picker stream and the card it holds. */
+    private void cancelAutoReplyImport(AutoReplyPicture.Import operation) {
+        if (operation == null) return;
+        autoReplyDeadlines.removeCallbacksAndMessages(operation);
+        operation.cancel();
     }
 
     private void updateAutoReplySave() {
@@ -2548,7 +2572,7 @@ public final class SettingsActivity extends Activity {
     }
 
     private void invalidateAutoReplyImport(View card) {
-        autoReplyPictureOps.remove(card);
+        cancelAutoReplyImport(autoReplyPictureOps.remove(card));
         if (autoReplyPictureId != null && autoReplyPictureId.equals(autoReplyCardIds.get(card))) {
             autoReplyPictureId = null;
             autoReplyPictureFor = -1;
@@ -2557,6 +2581,7 @@ public final class SettingsActivity extends Activity {
     }
 
     private void invalidateAutoReplyImports() {
+        for (AutoReplyPicture.Import operation : autoReplyPictureOps.values()) cancelAutoReplyImport(operation);
         autoReplyPictureOps.clear();
         autoReplyPictureFor = -1;
         autoReplyPictureId = null;
