@@ -169,7 +169,8 @@ public class SettingsLocaleTest {
     }
 
     @Test public void pseudoTextKeepsShortWindowsAndKeyboardNavigationReachable() {
-        for (String locale : new String[] {"en-rXA", "ar-rXB"}) for (int width : new int[] {320, 640})
+        // zh-rTW is the shipped Traditional Chinese table, so its real text gets the same short-window check.
+        for (String locale : new String[] {"en-rXA", "ar-rXB", "zh-rTW"}) for (int width : new int[] {320, 640})
                 for (boolean light : new boolean[] {false, true}) {
             RuntimeEnvironment.setQualifiers(locale + "-w" + width + "dp-h360dp-mdpi");
             RuntimeEnvironment.setFontScale(2f);

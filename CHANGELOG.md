@@ -5,6 +5,7 @@
 ### New
 
 - **Custom launcher icon** is a new patch that starts unselected. It turns Messenger's home screen icon white on black, or black on white if you pick that style, using Messenger's own logo. Themed icons on Android 13 and up still work. Patch again without it to get the normal icon back. Refs #107.
+- HushMessenger's settings speak Traditional Chinese when your phone is set to it, in Taiwan, Hong Kong or Macau. Simplified Chinese still shows English for now. Thanks to @JhouHank for the translation. Refs #98.
 
 ### Changed and fixed
 
