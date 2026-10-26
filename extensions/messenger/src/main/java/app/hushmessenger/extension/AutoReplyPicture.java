@@ -33,6 +33,12 @@ final class AutoReplyPicture {
     private static final String PARTIAL = ".part";
     static final int MAX_EDGE = 2048;
     static final int QUALITY = 90;
+    static java.util.concurrent.Executor copies = work -> {
+        Thread thread = new Thread(work, "HushAutoReplyPicture");
+        thread.setDaemon(true);
+        thread.start();
+    };
+    private static long nextPictureName;
     /** How long Messenger gets to build the photo message, then to take it for sending. */
     static final long BUILD_SECONDS = 20;
     static final long SEND_SECONDS = 10;
@@ -172,7 +178,7 @@ final class AutoReplyPicture {
         }
         Bitmap upright = upright(decoded, orientation);
         File folder = directory(context);
-        if (!folder.isDirectory() && !folder.mkdirs()) throw new IOException("can't make the picture folder");
+        if (!folder.mkdirs() && !folder.isDirectory()) throw new IOException("can't make the picture folder");
         File partial = File.createTempFile("PIC_", PARTIAL, folder);
         try {
             try (FileOutputStream output = new FileOutputStream(partial)) {
@@ -222,10 +228,11 @@ final class AutoReplyPicture {
         return Bitmap.createBitmap(source, 0, 0, source.getWidth(), source.getHeight(), matrix, true);
     }
 
-    private static File freshName(File folder) {
-        long stamp = System.currentTimeMillis();
+    private static synchronized File freshName(File folder) {
+        long stamp = Math.max(System.currentTimeMillis(), nextPictureName);
         File target;
         while ((target = new File(folder, "PIC_" + stamp + ".jpg")).exists()) stamp++;
+        nextPictureName = stamp + 1;
         return target;
     }
 
