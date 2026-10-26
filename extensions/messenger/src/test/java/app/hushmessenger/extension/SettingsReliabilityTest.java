@@ -37,6 +37,7 @@ public class SettingsReliabilityTest {
     @Before public void reset() {
         Settings.initialize(RuntimeEnvironment.getApplication());
         Settings.preferences.edit().clear().commit();
+        OpenSections.all();
     }
 
     @Test @Config(sdk = {28, 36}) public void wholeControlRowIsOneAccessibleSwitchWithLiveState() {
@@ -302,9 +303,9 @@ public class SettingsReliabilityTest {
     public void aFocusedAccentButtonsRingStandsOutFromTheButtonAndThePage() {
         for (boolean light : new boolean[] {false, true}) {
             SettingsUi ui = new SettingsUi(RuntimeEnvironment.getApplication(), light);
-            // The primary buttons, and the selected tab and category, are all accent fills.
+            // The primary buttons and the selected tab are both accent fills.
             for (android.graphics.drawable.Drawable background : new android.graphics.drawable.Drawable[] {
-                    ui.primaryButton("Save").getBackground(), ui.interactive(ui.accent, 0, 10)}) {
+                    ui.primaryButton("Save").getBackground(), ui.interactive(ui.accentFill, 0, 10)}) {
                 int[] focused = edge(ui, background, true), plain = edge(ui, background, false);
                 String theme = light ? "light" : "dark";
                 assertTrue(theme + " outer ring against the page", contrast(focused[0], ui.background) >= 3);

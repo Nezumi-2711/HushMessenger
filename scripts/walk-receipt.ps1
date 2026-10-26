@@ -39,10 +39,11 @@ $WalkSteps = @(
         Marker = '<node\b[^>]*\btext="Controls"[^>]*\bselected="true"' }
     [pscustomobject]@{ Id = 'settings-app'; Kind = 'settings'; Page = 'app'; Activity = $WalkSettingsComponent
         Marker = '<node\b[^>]*\btext="App"[^>]*\bselected="true"' }
+    # Section is the closed-by-default settings section holding the button, opened through the launch extra.
     [pscustomobject]@{ Id = 'message-log'; Kind = 'sheet'; Patch = 'Keep a message log'; Button = 'View log'; Close = 'Close'
-        Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Message log"' }
+        Section = 'privacy'; Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Message log"' }
     [pscustomobject]@{ Id = 'auto-reply'; Kind = 'sheet'; Patch = 'Auto reply'; Button = 'Edit replies'; Close = 'Cancel'
-        Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Auto replies"' }
+        Section = 'conversations'; Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Auto replies"' }
     foreach ($link in @('threads', 'active_now', 'montage', 'compose', 'settings', 'stickerstore', 'marketplace')) {
         [pscustomobject]@{ Id = $link.Replace('_', '-'); Kind = 'link'; Link = "fb-messenger://$link"
             Activity = $WalkMessengerComponent; Marker = $WalkMessengerNodes }

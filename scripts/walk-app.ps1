@@ -87,6 +87,8 @@ $ErrorActionPreference = 'Stop'
 $WalkDefaultScreens = [string[]]@($WalkSteps | Where-Object { $_.Kind -ceq 'link' } | ForEach-Object { $_.Link })
 $WalkSettingsActivity = 'app.hushmessenger.extension.SettingsActivity'
 $WalkPageExtra = 'app.hushmessenger.page'
+# SettingsActivity.OPEN_EXTRA: settings sections start closed, so a sheet step opens the one holding its button.
+$WalkSectionExtra = 'app.hushmessenger.open'
 
 function Resolve-WalkOutcome {
     <#
@@ -494,8 +496,10 @@ function Invoke-WalkApp {
             }
             return $false
         }
-        function Start-WalkSettings([string]$Page) {
-            return Invoke-WalkAdb @('shell', 'am', 'start', '-W', '--activity-clear-task', '-n', "$Package/$WalkSettingsActivity", '--es', $WalkPageExtra, $Page)
+        function Start-WalkSettings([string]$Page, [string]$Section = '') {
+            $start = @('shell', 'am', 'start', '-W', '--activity-clear-task', '-n', "$Package/$WalkSettingsActivity", '--es', $WalkPageExtra, $Page)
+            if ($Section) { $start += @('--es', $WalkSectionExtra, $Section) }
+            return Invoke-WalkAdb $start
         }
 
         function Start-WalkLink([string]$Uri) {
@@ -516,7 +520,7 @@ function Invoke-WalkApp {
             switch ($definition.Kind) {
                 'settings' { $launch = Start-WalkSettings $definition.Page }
                 'sheet' {
-                    $launch = Start-WalkSettings 'controls'
+                    $launch = Start-WalkSettings 'controls' $definition.Section
                     Start-Sleep -Seconds $SettleSeconds
                     if (-not (Invoke-WalkFindAndTap $definition.Button)) { $problem = "$($definition.Id): couldn't find its $($definition.Button) button on the Controls page" }
                 }

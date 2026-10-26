@@ -27,6 +27,7 @@ public class QuickSetupsTest {
         CrashGuard.resetForTests();
         Settings.initialize(RuntimeEnvironment.getApplication());
         Settings.preferences.edit().clear().commit();
+        OpenSections.all();
         forgetHeldAnswers();
     }
 
@@ -219,8 +220,12 @@ public class QuickSetupsTest {
         try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
             View root = screen.get().getWindow().getDecorView();
             root.findViewWithTag("tab_app").performClick();
-            assertTrue(((TextView) ((android.view.ViewGroup) root.findViewWithTag("quick_setups")).getChildAt(0))
-                .getText().toString().endsWith("Press and hold to hide this section."));
+            // The section is its header and then the card, whose first line is the help.
+            android.view.ViewGroup card = (android.view.ViewGroup) ((android.view.ViewGroup) root.findViewWithTag("quick_setups")).getChildAt(1);
+            assertTrue(((TextView) card.getChildAt(0)).getText().toString().endsWith("Press and hold to hide this section."));
+            // Holding the header hides it too.
+            assertTrue(root.findViewWithTag("section_quick_setups").performLongClick());
+            assertFalse(root.findViewWithTag("quick_setups").isShown());
         }
     }
 

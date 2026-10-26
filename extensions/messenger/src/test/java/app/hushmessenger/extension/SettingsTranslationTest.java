@@ -32,6 +32,7 @@ public class SettingsTranslationTest {
     @Before public void reset() {
         Settings.initialize(RuntimeEnvironment.getApplication());
         Settings.preferences.edit().clear().commit();
+        OpenSections.all();
     }
 
     private Map<String, String> shippedSpanish;

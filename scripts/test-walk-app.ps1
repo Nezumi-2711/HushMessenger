@@ -59,6 +59,15 @@ try {
         "Skipping settings and the chat with one default link and one extra should plan just those ($(@($trimmed | ForEach-Object { $_.Id }) -join ' '))."
     $noSheets = @(Get-WalkPlan -SkipSettings $false -Thread '1' -Visit $WalkDefaultScreens -AppliedPatches @('Hide Meta AI') | ForEach-Object { $_.Id })
     Assert-WalkApp ($noSheets.Count -eq 10 -and $noSheets -cnotcontains 'auto-reply') 'Without the sheet patches the sheets should not be planned.'
+    # Settings sections start closed, so each sheet step opens the one its button sits in, by the id SettingsActivity uses.
+    $settingsSource = Get-Content -Raw (Join-Path $PSScriptRoot '..\extensions\messenger\src\main\java\app\hushmessenger\extension\SettingsActivity.java')
+    Assert-WalkApp ($settingsSource -match 'OPEN_EXTRA = "app\.hushmessenger\.open"' -and $WalkSectionExtra -ceq 'app.hushmessenger.open') `
+        'The walk should open sections through the extra SettingsActivity reads.'
+    foreach ($sheet in @($WalkSteps | Where-Object { $_.Kind -ceq 'sheet' })) {
+        $key = @{ 'message-log' = 'message_log'; 'auto-reply' = 'auto_reply' }[$sheet.Id]
+        Assert-WalkApp ($settingsSource -match ('\{"' + $key + '",[^\r\n]*"' + $sheet.Section + '"\},')) `
+            "The $($sheet.Id) step should open the section holding $key, not '$($sheet.Section)'."
+    }
 
     # A screenshot counts only as a PNG.
     $pngFile = Join-Path $work 'shot.png'

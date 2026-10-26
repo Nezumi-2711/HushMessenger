@@ -63,12 +63,24 @@ public final class SettingsActivity extends Activity {
         refreshChoices();
         if (key == null || "check_updates".equals(key)) syncUpdateChoice(true);
     };
-    private String category = "all", page = "controls";
+    private String page = "controls";
     private final List<View> controlRows = new ArrayList<>();
     private final List<String[]> installedControls = new ArrayList<>();
     private final List<LinearLayout> groups = new ArrayList<>();
-    private final List<Button> categories = new ArrayList<>();
     private final List<Button> tabs = new ArrayList<>();
+    /**
+     * HushFacebook's accordion: every section starts closed, and the ones a person opens stay open, a restart included.
+     * Kept in a store of its own, so opening one isn't a settings change and never reaches a backup.
+     */
+    static final String SECTIONS_STORE = "hushmessenger_sections", OPEN_SECTIONS = "open";
+    /** A section to open on arrival, for a link or a check that has to reach a row inside it. */
+    static final String OPEN_EXTRA = "app.hushmessenger.open";
+    private final Set<String> openSections = new java.util.LinkedHashSet<>();
+    /** Each section's header row and body, by id. */
+    private final Map<String, LinearLayout[]> sections = new java.util.LinkedHashMap<>();
+    /** True while a search is typed: a Controls section with a match shows it, open or not. */
+    private boolean searching;
+    private final Set<String> searchClosed = new java.util.HashSet<>();
     private TextView searchStatus, enabledCount, setupNote;
     private Button safeModeAction, clearQuery;
     private Button drawerSearchLink;
@@ -122,8 +134,9 @@ public final class SettingsActivity extends Activity {
     private final Map<String, LinearLayout> wayControls = new java.util.LinkedHashMap<>();
     private final Map<String, String> wayBuilt = new java.util.HashMap<>();
     /** The Quick setups heading and panel, hidden by a long press on either, and the line that says which way the choice is. */
-    private TextView quickHeading, quickHomeStatus;
-    private LinearLayout quickPanel;
+    private TextView quickHomeStatus;
+    /** The Quick setups card, and the section around it that a long press hides. */
+    private LinearLayout quickPanel, quickSection;
     /** The App tab's line on how to get back here, which names the Menu row only while it shows. */
     private TextView accessHelp;
     private String accessHelpId;
@@ -250,14 +263,16 @@ public final class SettingsActivity extends Activity {
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         if (state != null) {
             page = "app".equalsIgnoreCase(state.getString("page", "controls")) ? "app" : "controls";
-            category = state.getString("category", "all").toLowerCase(Locale.ROOT);
-            if (!java.util.Arrays.asList("all", "inbox", "chats", "more").contains(category)) category = "all";
             restoreControlsScroll = state.getInt("controls_scroll");
             restoreAppScroll = state.getInt("app_scroll");
         } else {
             // Reopened after a restart asked for here: back on the page it was asked from.
             page = SettingsReopen.page(getIntent().getStringExtra(SettingsReopen.EXTRA));
         }
+        String saved = sectionStore().getString(OPEN_SECTIONS, "");
+        for (String id : saved.split(",")) if (!id.isEmpty()) openSections.add(id);
+        String asked = getIntent().getStringExtra(OPEN_EXTRA);
+        if (state == null && asked != null && !asked.isEmpty() && openSections.add(asked)) saveSections();
         // What Messenger read as it started, as near as settings can tell, so the restart row knows what changed since.
         RestartWaiting.baseline(Settings.preferences, readAtStart());
         LinearLayout root = new LinearLayout(this) {
@@ -315,7 +330,7 @@ public final class SettingsActivity extends Activity {
         controlsContent = pageContent(controlsScroll);
         buildControls(controlsContent);
         reminder = ui.text(text.get("reopen"), 12, ui.muted, false);
-        reminder.setPadding(ui.dp(20), ui.dp(12), ui.dp(20), ui.dp(40));
+        reminder.setPadding(ui.dp(16), ui.dp(12), ui.dp(16), ui.dp(32));
         ui.add(controlsPage, reminder, 0);
         appPage = ui.column();
         appPage.setTag("app_page");
@@ -408,8 +423,7 @@ public final class SettingsActivity extends Activity {
     /** Shows or hides the Quick setups section to match the saved choice, and words the restore button's line. */
     private void showQuickSetups() {
         int shown = quickSetupsHidden() ? View.GONE : View.VISIBLE;
-        if (quickHeading != null) quickHeading.setVisibility(shown);
-        if (quickPanel != null) quickPanel.setVisibility(shown);
+        if (quickSection != null) quickSection.setVisibility(shown);
         if (quickHomeStatus != null) quickHomeStatus.setText(text.get(quickSetupsHidden() ? "quick_setups_home_hidden" : "quick_setups_home_shown"));
     }
 
@@ -514,12 +528,12 @@ public final class SettingsActivity extends Activity {
         if (compact == next && scrollHeader == nextScrollHeader) return;
         compact = next;
         scrollHeader = nextScrollHeader;
-        // Content pages already pad 20dp, so a header or reminder moved inside them adds none.
-        header.setPadding(ui.dp(scrollHeader ? 0 : 20), ui.dp(compact ? 8 : 24), ui.dp(scrollHeader ? 0 : 20), 0);
+        // Content pages already pad 16dp, so a header or reminder moved inside them adds none.
+        header.setPadding(ui.dp(scrollHeader ? 0 : 16), ui.dp(compact ? 4 : 8), ui.dp(scrollHeader ? 0 : 16), 0);
         placeBrand();
         placeHeader();
         ((ViewGroup) reminder.getParent()).removeView(reminder);
-        reminder.setPadding(ui.dp(compact ? 0 : 20), ui.dp(12), ui.dp(compact ? 0 : 20), ui.dp(compact ? 16 : 40));
+        reminder.setPadding(ui.dp(compact ? 0 : 16), ui.dp(12), ui.dp(compact ? 0 : 16), ui.dp(compact ? 16 : 32));
         ui.add(compact ? controlsContent : controlsPage, reminder, 0);
     }
 
@@ -529,7 +543,7 @@ public final class SettingsActivity extends Activity {
         if (brand.getParent() == parent) return;
         ((ViewGroup) brand.getParent()).removeView(brand);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.bottomMargin = ui.dp(compact ? 24 : 0);
+        params.bottomMargin = ui.dp(compact ? 12 : 0);
         parent.addView(brand, 0, params);
     }
 
@@ -541,33 +555,36 @@ public final class SettingsActivity extends Activity {
     }
 
     private void buildHeader(LinearLayout root) {
+        // A toolbar, like HushFacebook's: the name, Open and the two tabs, with no banner above the settings.
         header = ui.column();
-        header.setPadding(ui.dp(20), ui.dp(24), ui.dp(20), 0);
+        header.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), 0);
         ui.add(root, header, 0);
         brand = ui.row();
         if (ui.largeText) brand.setOrientation(LinearLayout.VERTICAL);
         LinearLayout wordmark = ui.column();
-        TextView title = ui.text("HushMessenger", 26, ui.text, true);
+        TextView title = ui.text("HushMessenger", 20, ui.text, true);
         title.setTag("wordmark");
         title.setAccessibilityHeading(true);
         // Linear font scaling on Android 13 and older could otherwise split the wordmark mid-word.
         title.setMaxLines(1);
-        title.setAutoSizeTextTypeUniformWithConfiguration(18, 26, 1, TypedValue.COMPLEX_UNIT_SP);
+        title.setAutoSizeTextTypeUniformWithConfiguration(14, 20, 1, TypedValue.COMPLEX_UNIT_SP);
         ui.add(wordmark, title, 0);
-        TextView subtitle = ui.text(text.get(Settings.preview ? "preview_notice" : "tagline"), 14,
-            Settings.preview ? ui.warning : ui.muted, false);
-        if (Settings.preview) subtitle.setTag("preview_notice");
-        ui.add(wordmark, subtitle, 5);
+        // Only a preview build says anything under the name, since that's a warning.
+        if (Settings.preview) {
+            TextView notice = ui.text(text.get("preview_notice"), 13, ui.warning, false);
+            notice.setTag("preview_notice");
+            ui.add(wordmark, notice, 4);
+        }
         brand.addView(wordmark, new LinearLayout.LayoutParams(ui.largeText ? -1 : 0, -2, ui.largeText ? 0 : 1));
         Button open = ui.button(text.get("open"));
         open.setTag("open_messenger");
         open.setContentDescription(text.get("open_messenger"));
-        open.setBackground(new android.graphics.drawable.InsetDrawable(ui.interactive(ui.background, ui.accent, 12), 0, ui.dp(8), 0, ui.dp(8)));
-        open.setPadding(ui.dp(12), ui.dp(8), ui.dp(12), ui.dp(8));
+        open.setBackground(new android.graphics.drawable.InsetDrawable(ui.interactive(ui.background, ui.accent, 12), 0, ui.dp(6), 0, ui.dp(6)));
+        open.setPadding(ui.dp(12), ui.dp(6), ui.dp(12), ui.dp(6));
         open.setOnClickListener(view -> openMessenger());
         LinearLayout.LayoutParams openParams = new LinearLayout.LayoutParams(ui.largeText ? -2 : ui.dp(68), -2);
         openParams.setMarginStart(ui.dp(ui.largeText ? 0 : 12));
-        openParams.topMargin = ui.dp(ui.largeText ? 12 : 0);
+        openParams.topMargin = ui.dp(ui.largeText ? 8 : 0);
         brand.addView(open, openParams);
         ui.add(header, brand, 0);
         LinearLayout navigation = ui.row();
@@ -576,12 +593,12 @@ public final class SettingsActivity extends Activity {
         for (String name : new String[] {"controls", "app"}) {
             Button button = ui.button(text.get(name));
             button.setTag("tab_" + name);
-            button.setTextSize(16);
+            button.setTextSize(15);
             button.setOnClickListener(view -> showPage(name));
             tabs.add(button);
             navigation.addView(button, new LinearLayout.LayoutParams(0, -2, 1));
         }
-        ui.add(header, navigation, 16);
+        ui.add(header, navigation, 8);
         // In the header, so it shows on both pages the moment a restart-gated change is made, with the button right there.
         restartRow = ui.row();
         restartRow.setTag("restart_row");
@@ -601,13 +618,13 @@ public final class SettingsActivity extends Activity {
         restartParams.topMargin = ui.dp(ui.largeText ? 8 : 0);
         restartRow.addView(restartNow, restartParams);
         restartRow.setVisibility(View.GONE);
-        ui.add(header, restartRow, 12);
+        ui.add(header, restartRow, 8);
         undoButton = ui.button("");
         undoButton.setTag("undo");
         undoButton.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         undoButton.setOnClickListener(view -> undo());
         undoButton.setVisibility(View.GONE);
-        ui.add(header, undoButton, 12);
+        ui.add(header, undoButton, 8);
     }
 
     /** Shows Undo for [what] until it's tapped, its time runs out, something else takes its place or settings close. */
@@ -697,20 +714,20 @@ public final class SettingsActivity extends Activity {
 
     private LinearLayout pageContent(ScrollView scroll) {
         LinearLayout content = ui.column();
-        content.setPadding(ui.dp(20), ui.dp(16), ui.dp(20), ui.dp(24));
+        content.setPadding(ui.dp(16), ui.dp(12), ui.dp(16), ui.dp(24));
         scroll.addView(content);
         return content;
     }
 
     private void buildControls(LinearLayout content) {
+        // One small card: how many controls are on, and Pause.
         LinearLayout setup = ui.panel();
-        setup.setPadding(ui.dp(16), ui.dp(16), ui.dp(16), ui.dp(8));
-        ui.add(setup, ui.heading(text.get("setup")), 0);
-        enabledCount = ui.text("", 24, ui.text, true);
+        setup.setPadding(ui.dp(14), ui.dp(10), ui.dp(14), ui.dp(2));
+        enabledCount = ui.text("", 15, ui.text, true);
         enabledCount.setTag("enabled_count");
-        ui.add(setup, enabledCount, 12);
-        setupNote = ui.text("", 14, ui.muted, false);
-        ui.add(setup, setupNote, 10);
+        ui.add(setup, enabledCount, 0);
+        setupNote = ui.text("", 12, ui.muted, false);
+        ui.add(setup, setupNote, 4);
         safeModeAction = ui.button("");
         safeModeAction.setTag("resume_safe_mode");
         safeModeAction.setOnClickListener(view -> {
@@ -724,13 +741,12 @@ public final class SettingsActivity extends Activity {
             feedback(text.get(paused ? "safe_mode_cleared" : "changes_resumed"), Toast.LENGTH_SHORT);
         });
         ui.add(setup, safeModeAction, 8);
-        ui.rule(setup, 12);
+        ui.rule(setup, 8);
         ui.add(setup, controlRow("paused", text.format("paused"), "", false), 0);
         ui.add(content, setup, 0);
         search = ui.field(text.get("search"), 100, true);
         search.setTag("find_control");
-        search.setTextSize(16);
-        search.setMinHeight(ui.dp(52));
+        search.setBackground(ui.interactive(ui.surface, ui.outline, 8));
         search.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
         search.setOnEditorActionListener((view, action, event) -> {
             if (action != android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) return false;
@@ -746,29 +762,21 @@ public final class SettingsActivity extends Activity {
         LinearLayout.LayoutParams clearQueryParams = new LinearLayout.LayoutParams(-2, -2);
         clearQueryParams.setMarginStart(ui.dp(8));
         searchRow.addView(clearQuery, clearQueryParams);
-        ui.add(content, searchRow, 16);
-        LinearLayout filters = ui.row();
-        for (String name : new String[] {"all", "inbox", "chats", "more"}) {
-            Button button = ui.button(text.get(name));
-            button.setTag("category_" + name);
-            button.setPadding(ui.dp(4), ui.dp(8), ui.dp(4), ui.dp(8));
-            button.setOnClickListener(view -> {
-                category = name;
-                filterControls(search.getText().toString());
-            });
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1);
-            if (!categories.isEmpty()) params.setMarginStart(ui.dp(8));
-            filters.addView(button, params);
-            categories.add(button);
-        }
-        ui.add(content, filters, 12);
-        searchStatus = ui.text("", 13, ui.muted, false);
+        ui.add(content, searchRow, 10);
+        searchStatus = ui.text("", 12, ui.muted, false);
         searchStatus.setTag("search_status");
         searchStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        ui.add(content, searchStatus, 8);
+        ui.add(content, searchStatus, 6);
         drawerSearchLink = ui.button(text.get("drawer_search"));
         drawerSearchLink.setTag("find_drawer_icon");
-        drawerSearchLink.setOnClickListener(view -> showPage("app"));
+        drawerSearchLink.setOnClickListener(view -> {
+            // The drawer switches live in Quick access, so the link opens it on the way.
+            if (openSections.add("quick_access")) {
+                saveSections();
+                bindSection("quick_access");
+            }
+            showPage("app");
+        });
         ui.add(content, drawerSearchLink, 8);
         LinearLayout group = null;
         LinearLayout groupBody = null;
@@ -777,22 +785,15 @@ public final class SettingsActivity extends Activity {
             if (!Settings.installed.contains(spec[0])) continue;
             if (!last.equals(spec[3])) {
                 last = spec[3];
-                group = ui.column();
-                group.setTag(last);
-                LinearLayout heading = ui.row();
-                heading.addView(ui.heading(text.get(last)), new LinearLayout.LayoutParams(0, -2, 1));
-                heading.addView(ui.text("", 13, ui.muted, true));
-                ui.add(group, heading, 0);
                 groupBody = ui.column();
-                groupBody.setPadding(ui.dp(16), ui.dp(4), ui.dp(16), ui.dp(4));
+                groupBody.setPadding(ui.dp(14), ui.dp(2), ui.dp(14), ui.dp(2));
                 groupBody.setBackground(ui.shape(ui.surface, ui.line, 12));
                 // Lines only between shown controls: none above the first, none over the card's own border under the last.
                 android.graphics.drawable.GradientDrawable divider = ui.shape(ui.line, 0, 0);
                 divider.setSize(1, ui.dp(1));
                 groupBody.setDividerDrawable(divider);
                 groupBody.setShowDividers(LinearLayout.SHOW_DIVIDER_MIDDLE);
-                ui.add(group, groupBody, 10);
-                ui.add(content, group, 24);
+                group = section(content, last, groupBody, groups.isEmpty() ? 12 : 8);
                 groups.add(group);
             }
             LinearLayout row = controlRow(spec[0], text.control(spec, 1), text.control(spec, 2), true);
@@ -821,7 +822,6 @@ public final class SettingsActivity extends Activity {
         if (installedControls.isEmpty()) {
             // Nothing to search; the status line explains how to add controls.
             search.setVisibility(View.GONE);
-            filters.setVisibility(View.GONE);
         }
         emptyState = ui.panel();
         emptyState.setTag("empty_state");
@@ -830,7 +830,6 @@ public final class SettingsActivity extends Activity {
         Button clearSearch = ui.button(text.get("clear"));
         clearSearch.setTag("clear_filters");
         clearSearch.setOnClickListener(view -> {
-            category = "all";
             search.setText("");
             filterControls("");
         });
@@ -1360,7 +1359,7 @@ public final class SettingsActivity extends Activity {
         // A margin, since relative padding set before the row is attached stays on the right in a mirrored layout.
         if (overlay) titleSpace.setMarginEnd(ui.dp(60));
         if (ui.largeText) titleLine.setOrientation(LinearLayout.VERTICAL);
-        titleLine.addView(ui.text(text.display(title), appRow ? 14 : 16, ui.text, false), new LinearLayout.LayoutParams(-2, -2));
+        titleLine.addView(ui.text(text.display(title), appRow ? 14 : 15, ui.text, false), new LinearLayout.LayoutParams(-2, -2));
         if (EXPERIMENTAL.contains(key)) {
             TextView badge = ui.text(text.get("experimental"), 11, ui.warning, false);
             badge.setBackground(ui.shape(ui.warningSurface, 0, 4));
@@ -1370,7 +1369,7 @@ public final class SettingsActivity extends Activity {
             titleLine.addView(badge, params);
         }
         labels.addView(titleLine, titleSpace);
-        if (!description.isEmpty()) ui.add(labels, ui.text(text.display(description), appRow ? 13 : 14, ui.muted, false), appRow ? 4 : 6);
+        if (!description.isEmpty()) ui.add(labels, ui.text(text.display(description), appRow ? 12 : 13, ui.muted, false), 4);
         // A switch records a use only when Messenger reaches its screen or event, so an off switch shows nothing.
         // A failure newer than the last use means the switch isn't doing its job, so that shows instead.
         TextView activeLabel = null;
@@ -1450,7 +1449,7 @@ public final class SettingsActivity extends Activity {
         });
         // A group draws the lines between its controls, so a control's own buttons sit above the line, not below it.
         row.setBackground(ui.interactive(ui.surface, 0, 0));
-        row.setPadding(0, ui.dp(divided ? 16 : 0), 0, ui.dp(divided ? 16 : 0));
+        row.setPadding(0, ui.dp(divided ? 11 : 0), 0, ui.dp(divided ? 11 : 0));
         return row;
     }
 
@@ -1477,7 +1476,11 @@ public final class SettingsActivity extends Activity {
     }
 
     private void buildApp(LinearLayout content) {
-        ui.add(content, ui.heading(text.get("quick_access")), 0);
+        // Restart sits above the sections, so it's one tap however many are closed.
+        Button restart = ui.primaryButton(text.get("restart"));
+        restart.setTag("restart_messenger");
+        restart.setOnClickListener(view -> HostScreens.restartInto(this, page));
+        ui.add(content, restart, 0);
         LinearLayout access = ui.panel();
         access.setPadding(ui.dp(14), ui.dp(14), ui.dp(14), ui.dp(14));
         // The Menu tab row is its own patch, recorded as menu_row only when it applied.
@@ -1496,10 +1499,6 @@ public final class SettingsActivity extends Activity {
         accessHelp = ui.text(accessHelpText(), 13, ui.muted, false);
         accessHelp.setTag("access_help");
         ui.add(access, accessHelp, 0);
-        Button restart = ui.primaryButton(text.get("restart"));
-        restart.setTag("restart_messenger");
-        restart.setOnClickListener(view -> HostScreens.restartInto(this, page));
-        ui.add(access, restart, 12);
         // Without the Menu row, a launcher that has no app shortcuts would leave no way back in.
         if (menuRow && drawerAlias && !hosted) {
             ui.rule(access, 12);
@@ -1530,12 +1529,10 @@ public final class SettingsActivity extends Activity {
             sharedInstall.setBackground(ui.shape(ui.infoSurface, ui.infoBorder, 8));
             ui.add(access, sharedInstall, 12);
         }
-        ui.add(content, access, 8);
+        section(content, "quick_access", access, 12);
         if (!installedControls.isEmpty()) {
-            quickHeading = ui.heading(text.get("quick_setups"));
-            ui.add(content, quickHeading, 22);
+            // The section around it carries the "quick_setups" tag.
             LinearLayout quick = quickPanel = ui.panel();
-            quick.setTag("quick_setups");
             ui.add(quick, ui.text(text.get("quick_setups_help"), 13, ui.muted, false), 0);
             for (String name : QuickSetups.CHOICES) {
                 ui.rule(quick, 12);
@@ -1545,14 +1542,13 @@ public final class SettingsActivity extends Activity {
                 ui.add(quick, choice, 8);
                 ui.add(quick, ui.text(text.get("quick_" + name + "_help"), 13, ui.muted, false), 8);
             }
-            ui.add(content, quick, 12);
-            // A long press anywhere on the section hides it, buttons and help lines included.
-            holdToHide(quickHeading);
+            quickSection = section(content, "quick_setups", quick, 8);
+            // A long press anywhere on the section hides it, header, buttons and help lines included.
+            holdToHide(quickSection.getChildAt(0));
             holdToHide(quick);
             for (int i = 0; i < quick.getChildCount(); i++) holdToHide(quick.getChildAt(i));
             showQuickSetups();
         }
-        ui.add(content, ui.heading(text.get("appearance")), 22);
         LinearLayout appearance = ui.panel();
         appearance.setPadding(ui.dp(14), ui.dp(14), ui.dp(14), ui.dp(14));
         ui.add(appearance, controlRow("light", text.format("light"), text.format("light_help"), false), 0);
@@ -1562,15 +1558,26 @@ public final class SettingsActivity extends Activity {
         }
         ui.rule(appearance, 10);
         ui.add(appearance, ui.text(text.get("theme_help"), 13, ui.muted, false), 12);
-        ui.add(content, appearance, 12);
-        ui.add(content, ui.heading(text.get("about")), 18);
+        section(content, "appearance", appearance, 8);
         LinearLayout about = ui.panel();
         about.setPadding(ui.dp(14), ui.dp(14), ui.dp(14), ui.dp(14));
         infoRow(about, text.get("version"), BuildConfig.VERSION_NAME);
         ui.rule(about, 10);
         infoRow(about, text.get("installed"), text.number(installedControls.size()));
-        ui.add(content, about, 12);
-        ui.add(content, ui.heading(text.get("choices")), 22);
+        // Update checks sit with the version they compare against.
+        ui.rule(about, 10);
+        ui.add(about, controlRow("check_updates", text.format("check_updates"), text.format("check_updates_help"), false), 4);
+        updateStatus = ui.text("", 13, ui.muted, false);
+        updateStatus.setTag("update_status");
+        updateStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        updateStatus.setVisibility(View.GONE);
+        ui.add(about, updateStatus, 8);
+        updateCheckNow = ui.button(text.get("check_now"));
+        updateCheckNow.setTag("check_now");
+        updateCheckNow.setOnClickListener(view -> checkForUpdates());
+        ui.add(about, updateCheckNow, 8);
+        section(content, "about", about, 8);
+        syncUpdateChoice(true);
         LinearLayout choices = ui.panel();
         Button copy = ui.button(text.get("copy"));
         copy.setTag("copy_setup");
@@ -1653,29 +1660,19 @@ public final class SettingsActivity extends Activity {
             ui.add(choices, quickHomeStatus, 8);
             showQuickSetups();
         }
-        ui.add(content, choices, 12);
-        LinearLayout updates = ui.panel();
-        ui.add(updates, controlRow("check_updates", text.format("check_updates"), text.format("check_updates_help"), false), 0);
-        updateStatus = ui.text("", 13, ui.muted, false);
-        updateStatus.setTag("update_status");
-        updateStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        updateStatus.setVisibility(View.GONE);
-        ui.add(updates, updateStatus, 8);
-        updateCheckNow = ui.button(text.get("check_now"));
-        updateCheckNow.setTag("check_now");
-        updateCheckNow.setOnClickListener(view -> checkForUpdates());
-        ui.add(updates, updateCheckNow, 8);
-        ui.add(content, updates, 12);
-        syncUpdateChoice(true);
-        ui.add(content, ui.heading(text.get("usage")), 22);
-        ui.add(content, ui.text(text.get("save_help"), 14, ui.muted, false), 16);
-        ui.add(content, ui.text(text.get("pause_help"), 14, ui.muted, false), 14);
-        ui.add(content, ui.text(text.get("account_help"), 14, ui.muted, false), 14);
-        LinearLayout help = ui.panel();
-        help.setBackground(ui.shape(ui.infoSurface, ui.infoBorder, 12));
-        ui.add(help, ui.text(text.get("missing"), 16, ui.accent, true), 0);
-        ui.add(help, ui.text(text.get("missing_help"), 14, ui.muted, false), 8);
-        ui.add(content, help, 18);
+        section(content, "choices", choices, 8);
+        LinearLayout usage = ui.panel();
+        usage.setPadding(ui.dp(14), ui.dp(14), ui.dp(14), ui.dp(14));
+        ui.add(usage, ui.text(text.get("save_help"), 13, ui.muted, false), 0);
+        ui.add(usage, ui.text(text.get("pause_help"), 13, ui.muted, false), 10);
+        ui.add(usage, ui.text(text.get("account_help"), 13, ui.muted, false), 10);
+        LinearLayout help = ui.column();
+        help.setPadding(ui.dp(12), ui.dp(12), ui.dp(12), ui.dp(12));
+        help.setBackground(ui.shape(ui.infoSurface, ui.infoBorder, 8));
+        ui.add(help, ui.text(text.get("missing"), 15, ui.accent, true), 0);
+        ui.add(help, ui.text(text.get("missing_help"), 13, ui.muted, false), 6);
+        ui.add(usage, help, 12);
+        section(content, "usage", usage, 8);
         Button source = ui.button(text.get("source"));
         source.setTag("source_licenses");
         source.setOnClickListener(view -> openPage("https://github.com/SysAdminDoc/HushMessenger#research-and-credits"));
@@ -3278,6 +3275,92 @@ public final class SettingsActivity extends Activity {
         ui.add(parent, row, 0);
     }
 
+    private android.content.SharedPreferences sectionStore() { return getSharedPreferences(SECTIONS_STORE, MODE_PRIVATE); }
+
+    private void saveSections() { sectionStore().edit().putString(OPEN_SECTIONS, String.join(",", openSections)).apply(); }
+
+    /**
+     * One accordion section, HushFacebook's way: a header that opens and closes the card under it.
+     * The header holds the title, a count the Controls tab fills in and the chevron, in that order.
+     */
+    private LinearLayout section(LinearLayout parent, String id, View body, int top) {
+        LinearLayout group = ui.column();
+        group.setTag(id);
+        LinearLayout header = ui.row();
+        header.setTag("section_" + id);
+        header.setMinimumHeight(ui.dp(48));
+        header.setPadding(ui.dp(14), ui.dp(10), ui.dp(10), ui.dp(10));
+        header.setBackground(ui.interactive(ui.surface, ui.line, 12));
+        header.setClickable(true);
+        header.setFocusable(true);
+        TextView title = ui.heading(text.get(id));
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView count = ui.text("", 12, ui.muted, false);
+        LinearLayout.LayoutParams countParams = new LinearLayout.LayoutParams(-2, -2);
+        countParams.setMarginEnd(ui.dp(8));
+        header.addView(count, countParams);
+        TextView chevron = ui.text(String.valueOf((char) 0x203a), 20, ui.muted, true);
+        chevron.setGravity(android.view.Gravity.CENTER);
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        header.addView(chevron, new LinearLayout.LayoutParams(ui.dp(24), ui.dp(24)));
+        header.setOnClickListener(view -> toggleSection(id));
+        header.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            @Override public void onInitializeAccessibilityNodeInfo(View host, android.view.accessibility.AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.setClassName(Button.class.getName());
+                info.setHeading(true);
+                info.addAction(sectionShown(id) ? android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_COLLAPSE
+                    : android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_EXPAND);
+            }
+            @Override public boolean performAccessibilityAction(View host, int action, Bundle args) {
+                boolean shown = sectionShown(id);
+                if ((action == android.view.accessibility.AccessibilityNodeInfo.ACTION_EXPAND && !shown)
+                        || (action == android.view.accessibility.AccessibilityNodeInfo.ACTION_COLLAPSE && shown)) {
+                    toggleSection(id);
+                    return true;
+                }
+                return super.performAccessibilityAction(host, action, args);
+            }
+        });
+        ui.add(group, header, 0);
+        ui.add(group, body, 6);
+        ui.add(parent, group, top);
+        sections.put(id, new LinearLayout[] {group, header});
+        bindSection(id);
+        return group;
+    }
+
+    /** Open, or shown by a search that found something in it. A section closed during a search stays closed until the search changes. */
+    private boolean sectionShown(String id) {
+        LinearLayout[] parts = sections.get(id);
+        boolean found = searching && parts != null && groups.contains(parts[0]);
+        return found ? !searchClosed.contains(id) : openSections.contains(id);
+    }
+
+    private void toggleSection(String id) {
+        LinearLayout[] parts = sections.get(id);
+        if (searching && parts != null && groups.contains(parts[0])) {
+            if (!searchClosed.remove(id)) searchClosed.add(id);
+        } else {
+            if (!openSections.remove(id)) openSections.add(id);
+            saveSections();
+        }
+        bindSection(id);
+        if (parts != null) parts[1].sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_SELECTED);
+    }
+
+    private void bindSection(String id) {
+        LinearLayout[] parts = sections.get(id);
+        if (parts == null) return;
+        boolean shown = sectionShown(id);
+        LinearLayout header = parts[1];
+        parts[0].getChildAt(1).setVisibility(shown ? View.VISIBLE : View.GONE);
+        ((TextView) header.getChildAt(0)).setTextColor(shown ? ui.accent : ui.muted);
+        header.getChildAt(2).setRotation(shown ? -90 : 90);
+        header.setActivated(shown);
+        if (Build.VERSION.SDK_INT >= 30) header.setStateDescription(text.get(shown ? "section_expanded" : "section_collapsed"));
+    }
+
     private void showPage(String name) {
         if ("app".equals(name) && search.hasFocus()) {
             search.clearFocus();
@@ -3294,7 +3377,7 @@ public final class SettingsActivity extends Activity {
             boolean selected = tab.getTag().equals("tab_" + page);
             tab.setSelected(selected);
             tab.setTextColor(selected ? ui.selectedText : ui.muted);
-            tab.setBackground(ui.interactive(selected ? ui.accent : ui.surface, 0, 10));
+            tab.setBackground(ui.interactive(selected ? ui.accentFill : ui.surface, 0, 10));
         }
     }
 
@@ -3333,12 +3416,10 @@ public final class SettingsActivity extends Activity {
         int visible = 0;
         for (int i = 0; i < controlRows.size(); i++) {
             String[] spec = installedControls.get(i);
-            String bucket = "inbox".equals(spec[3]) ? "inbox" :
-                ("conversations".equals(spec[3]) || "photos_videos".equals(spec[3]) || "stickers".equals(spec[3])) ? "chats" : "more";
             // A switch inside a control's block is found by its own words too.
             String inside = "facebook".equals(spec[0]) ? text.get("facebook_keep_profile") + " " + text.get("facebook_keep_profile_help") : "";
             if (Settings.TAB_BADGES.equals(spec[0])) for (String keep : Settings.KEEP_BADGES.values()) inside += " " + text.get(keep);
-            boolean match = ("all".equals(category) || category.equals(bucket)) && SettingsSearch.matches(terms, spec[1], spec[2],
+            boolean match = SettingsSearch.matches(terms, spec[1], spec[2],
                 SettingsText.english(spec[3]), text.display(text.control(spec, 1)), text.display(text.control(spec, 2)), text.get(spec[3]), inside);
             controlRows.get(i).setVisibility(match ? View.VISIBLE : View.GONE);
             if (match) visible++;
@@ -3351,13 +3432,10 @@ public final class SettingsActivity extends Activity {
             tally.setText(text.number(count));
             tally.setContentDescription(text.count("group_count", count));
         }
-        for (Button button : categories) {
-            boolean selected = button.getTag().equals("category_" + category);
-            button.setSelected(selected);
-            button.setTextColor(selected ? ui.selectedText : ui.muted);
-            button.setBackground(ui.interactive(selected ? ui.selected : ui.background, selected ? 0 : ui.outline, 12));
-            button.setPadding(ui.dp(4), ui.dp(8), ui.dp(4), ui.dp(8));
-        }
+        // A search shows every match, so the sections it found open for as long as it's typed.
+        searching = !terms.isEmpty();
+        searchClosed.clear();
+        for (String id : sections.keySet()) bindSection(id);
         searchStatus.setText(controlRows.isEmpty() ? text.get("none_installed") :
             visible == 0 ? text.get("no_matches") : text.get(controlRows.size() == 1 ? "results_one" : "results_many", visible, controlRows.size()));
         // With nothing installed, the status line already explains what to do.
@@ -3370,7 +3448,6 @@ public final class SettingsActivity extends Activity {
         state.putBoolean("message_log_open", messageLogDialog != null && messageLogDialog.isShowing());
         state.putBoolean("message_log_clear_failed", messageLogClearFailed);
         state.putString("page", page);
-        state.putString("category", category);
         state.putString("query", search.getText().toString());
         state.putInt("selection_start", search.getSelectionStart());
         state.putInt("selection_end", search.getSelectionEnd());
