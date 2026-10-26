@@ -120,7 +120,10 @@ try {
             @(@{}, { param($w) (Step $w 'threads').activity = 'com.facebook.orca/app.hushmessenger.extension.SettingsActivity' }, '*threads reached*SettingsActivity, not its own*'),
             @(@{}, { param($w) (Step $w 'threads').activity = 'com.android.launcher3/.Launcher' }, '*threads reached com.android.launcher3/.Launcher, not its own*'),
             @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'settings-controls' (Get-WalkFixtureXml 'settings-app') }, "*settings-controls's screen doesn't show what it should*"),
-            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'auto-reply' '' }, '*auto-reply left no UI dump*'),
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'auto-reply' '' }, '*auto-reply left no UI dump'),
+            # Another app in front, as when a second session drove the phone mid-walk.
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'threads' ''; (Step $w 'threads').activity = 'com.zhiliaoapp.musically/com.ss.android.ugc.aweme.splash.SplashActivity' },
+                '*threads left no UI dump, with com.zhiliaoapp.musically in front instead of Messenger*'),
             # The same screen twice, as when a link falls back to the inbox.
             @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'stickerstore' ((Get-WalkFixtureXml 'threads').Replace('Chats', 'Chats, 2 new')) }, '*stickerstore showed the same screen as threads*'))) {
         $path = Write-Walk $badWalk[0] $badWalk[1]

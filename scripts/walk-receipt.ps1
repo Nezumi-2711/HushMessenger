@@ -118,7 +118,14 @@ function Test-WalkStepScreen {
         step's UI dump; the walk asks this while it walks and publish asks it again of the files.
     #>
     param([Parameter(Mandatory = $true)]$Definition, [AllowEmptyString()][string]$Activity, [AllowEmptyString()][string]$Xml)
-    if ([string]::IsNullOrEmpty($Xml) -or $Xml -notmatch '<hierarchy\b') { return "$($Definition.Id) left no UI dump" }
+    if ([string]::IsNullOrEmpty($Xml) -or $Xml -notmatch '<hierarchy\b') {
+        # uiautomator often can't dump another app's busy screen, so name the app that had it.
+        $front = [regex]::Match([string]$Activity, '^([\w.]+)/')
+        if ($front.Success -and $front.Groups[1].Value -cne 'com.facebook.orca') {
+            return "$($Definition.Id) left no UI dump, with $($front.Groups[1].Value) in front instead of Messenger (another app or session had the screen)"
+        }
+        return "$($Definition.Id) left no UI dump"
+    }
     foreach ($blocking in $WalkBlockingScreens) {
         if ($Xml -match $blocking.Pattern) { return "$($Definition.Id) showed $($blocking.Name) instead" }
     }
