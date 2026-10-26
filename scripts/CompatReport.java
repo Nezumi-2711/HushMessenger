@@ -396,7 +396,7 @@ public class CompatReport {
         return buildCall.getRegisterCount() == 1 && buildCall.getRegisterC() == made1;
     }
 
-    /** "584.0.0.49.98 (version code 346814894)", joined with " or " across version names. */
+    /** "584.1.0.61.98 (version code 346816935)", joined with " or " across version names. */
     static String supported(Map<String, Profile> builds) {
         var codes = new TreeMap<String, List<String>>();
         for (var build : builds.values()) codes.computeIfAbsent(build.version, v -> new ArrayList<>()).add(build.code);
@@ -516,11 +516,9 @@ public class CompatReport {
         if (first.getRegisterA() != 0 || first.getRegisterB() != registers - 1 || !Long.valueOf(1L).equals(wide(code.get(1))) ||
             !Long.valueOf(0L).equals(wide(code.get(2))) || enabled < 2 || enabled >= registers - 1 || disabled < 2 ||
             disabled >= registers - 1 || enabled == disabled) return false;
-        for (var i : code.subList(3, code.size())) {
-            if (!i.getOpcode().setsRegister() || !(i instanceof OneRegisterInstruction one)) continue;
-            int written = one.getRegisterA();
-            if (written == enabled || written == disabled ||
-                (i.getOpcode().setsWideRegister() && (written + 1 == enabled || written + 1 == disabled))) return false;
+        var rethrown = rethrowOnlyWrites(code, impl.getTryBlocks());
+        for (int k = 3; k < code.size(); k++) {
+            if (!rethrown.contains(k) && (writes(code.get(k), enabled) || writes(code.get(k), disabled))) return false;
         }
         var cache = (TwoRegisterInstruction) tail.get(0);
         var compare = (TwoRegisterInstruction) tail.get(2);
@@ -530,14 +528,52 @@ public class CompatReport {
             register(tail.get(3)) == enabled && register(tail.get(4)) == disabled;
     }
 
+    /** Whether the instruction writes the register, counting the high half of a wide write. */
+    static boolean writes(Instruction i, int register) {
+        if (!i.getOpcode().setsRegister() || !(i instanceof OneRegisterInstruction one)) return false;
+        int written = one.getRegisterA();
+        return written == register || (i.getOpcode().setsWideRegister() && written + 1 == register);
+    }
+
+    static final Set<Opcode> RETURNS = EnumSet.of(Opcode.RETURN_VOID, Opcode.RETURN, Opcode.RETURN_WIDE, Opcode.RETURN_OBJECT);
+
+    /**
+     * ControlHooks.kt's rethrowOnlyWrites: the move-exception writes that can only be rethrown. From the move-exception
+     * to the first throw nothing returns, branches or switches out, writes the caught register again or sits inside a
+     * try block, and that throw rethrows the caught register.
+     */
+    static Set<Integer> rethrowOnlyWrites(List<Instruction> code, List<? extends com.android.tools.smali.dexlib2.iface.TryBlock<?>> tryBlocks) {
+        var addresses = new int[code.size() + 1];
+        for (int k = 0; k < code.size(); k++) addresses[k + 1] = addresses[k] + code.get(k).getCodeUnits();
+        var found = new HashSet<Integer>();
+        for (int start = 0; start < code.size(); start++) {
+            if (code.get(start).getOpcode() != Opcode.MOVE_EXCEPTION) continue;
+            int caught = register(code.get(start)), end = -1;
+            for (int k = start + 1; k < code.size() && end < 0; k++) if (code.get(k).getOpcode() == Opcode.THROW) end = k;
+            if (end < 0 || register(code.get(end)) != caught) continue;
+            int from = addresses[start], to = addresses[end + 1];
+            if (tryBlocks.stream().anyMatch(b -> b.getStartCodeAddress() < to && from < b.getStartCodeAddress() + b.getCodeUnitCount())) continue;
+            boolean closed = true;
+            for (int k = start + 1; k < end && closed; k++) {
+                var i = code.get(k);
+                Integer target = i instanceof OffsetInstruction o ? addresses[k] + o.getCodeOffset() : null;
+                closed = !RETURNS.contains(i.getOpcode()) && !writes(i, caught) &&
+                    (target == null || (target >= addresses[start + 1] && target <= addresses[end]));
+            }
+            if (closed) found.add(start);
+        }
+        return found;
+    }
+
     record PreferenceRead(int index, String key, String getter) {}
 
     /** The check's register count and false-default register; it returns when the answer is on. As in ControlHooks.kt. */
-    static final int BROWSER_PREFERENCE_REGISTERS = 8, BROWSER_PREFERENCE_DEFAULT = 2;
+    static final Set<Integer> BROWSER_PREFERENCE_REGISTERS = Set.of(8, 9);
+    static final int BROWSER_PREFERENCE_DEFAULT = 2;
 
     /** The one boolean preference read the external-browser check branches on. */
     static PreferenceRead browserPreferenceRead(List<Method> browser) {
-        if (browser.size() != 1 || browser.get(0).getImplementation().getRegisterCount() != BROWSER_PREFERENCE_REGISTERS) return null;
+        if (browser.size() != 1 || !BROWSER_PREFERENCE_REGISTERS.contains(browser.get(0).getImplementation().getRegisterCount())) return null;
         var code = instructions(browser.get(0));
         PreferenceRead read = null;
         for (int k = 0; k + 3 < code.size(); k++) {
@@ -555,14 +591,14 @@ public class CompatReport {
         return read;
     }
 
-    /** The section check's register count and its false-default register, as in ControlHooks.kt. */
-    static final int PEOPLE_SECTION_REGISTERS = 10, PEOPLE_SECTION_DEFAULT = 5;
-
     /** The Notifications tab's preference key and its server-override check, checked as validatePeopleSection does. */
     static List<String> peopleSection(List<Method> jewel, String getter) {
         if (jewel.size() != 1 || jewel.get(0).getImplementation() == null) return null;
         var code = instructions(jewel.get(0));
-        Integer no = jewel.get(0).getImplementation().getRegisterCount() == PEOPLE_SECTION_REGISTERS ? PEOPLE_SECTION_DEFAULT : null;
+        // The false default is a local loaded at 9, past v0 and v1 and below the two parameters, as in ControlHooks.kt.
+        int registers = jewel.get(0).getImplementation().getRegisterCount();
+        Integer no = code.size() > 9 && code.get(9).getOpcode() == Opcode.CONST_4 && register(code.get(9)) >= 2 &&
+            register(code.get(9)) < registers - 2 ? Integer.valueOf(register(code.get(9))) : null;
         // The server flag loads at 17.
         var flags = new ArrayList<Integer>();
         for (int i = 0; i < code.size(); i++) {
@@ -571,6 +607,12 @@ public class CompatReport {
         }
         if (no == null || flags.size() != 1 || flags.get(0) != 17) return null;
         int at = flags.get(0), last = code.size() - 1;
+        // Both branches return the false default, so nothing between the getter and the server branch may overwrite it.
+        for (int i = 10; i <= Math.min(at + 3, last); i++) {
+            var opcode = code.get(i).getOpcode();
+            int target = register(code.get(i));
+            if (opcode.setsRegister() && (target == no || (opcode.setsWideRegister() && target + 1 == no))) return null;
+        }
         // Both branches land on the final return of the false default, after the "hidden" true return.
         if (code.size() < at + 7 || register(code.get(at)) != 0 ||
             code.get(at + 1).getOpcode() != Opcode.INVOKE_STATIC ||
@@ -1055,22 +1097,56 @@ public class CompatReport {
             return ref.getName().equals("<init>") && ref.getDefiningClass().equals(shortcut.getReturnType()) && index >= 0 &&
                 argument != null && Objects.equals(s.callValue(at, argument), build);
         });
-        if (containerCtor == null || !s.returns(s.key(containerCtor, s.argument(containerCtor, 0)))) return null;
-        var constructor = bubbleTarget(byType, s.reference(containerCtor)); if (constructor == null) return null;
-        var cf = new BubbleValues(constructor); Integer shortcutRegister = cf.parameter(BUBBLE_SHORTCUT);
-        if (shortcutRegister == null) return null;
-        var shortcutFields = new ArrayList<FieldReference>();
-        for (int at = 0; at < cf.code.size(); at++) {
-            var i = cf.code.get(at);
-            if (i.getOpcode() != Opcode.IPUT_OBJECT || !(i instanceof TwoRegisterInstruction write) ||
-                !(((ReferenceInstruction)i).getReference() instanceof FieldReference field)) continue;
-            if (field.getType().equals(BUBBLE_SHORTCUT) && Objects.equals(cf.key(at, write.getRegisterA()), cf.key(0, shortcutRegister)) &&
-                Objects.equals(cf.key(at, write.getRegisterB()), cf.key(0, cf.parameterStart))) shortcutFields.add(field);
+        if (containerCtor != null && s.returns(s.key(containerCtor, s.argument(containerCtor, 0)))) {
+            var constructor = bubbleTarget(byType, s.reference(containerCtor)); if (constructor == null) return null;
+            var cf = new BubbleValues(constructor); Integer shortcutRegister = cf.parameter(BUBBLE_SHORTCUT);
+            if (shortcutRegister == null) return null;
+            var shortcutFields = new ArrayList<FieldReference>();
+            for (int at = 0; at < cf.code.size(); at++) {
+                var i = cf.code.get(at);
+                if (i.getOpcode() != Opcode.IPUT_OBJECT || !(i instanceof TwoRegisterInstruction write) ||
+                    !(((ReferenceInstruction)i).getReference() instanceof FieldReference field)) continue;
+                if (field.getType().equals(BUBBLE_SHORTCUT) && Objects.equals(cf.key(at, write.getRegisterA()), cf.key(0, shortcutRegister)) &&
+                    Objects.equals(cf.key(at, write.getRegisterB()), cf.key(0, cf.parameterStart))) shortcutFields.add(field);
+            }
+            if (shortcutFields.size() == 1) return shortcutFields.get(0);
         }
-        if (shortcutFields.size() != 1) return null;
-        var shortcutField = shortcutFields.get(0);
-        return shortcutField;
+        // 584.1 armv7 builds the shortcut into a holder, then copies it onto the returned container in the
+        // container constructor. Follow the holder field through the container constructor to the field readers use.
+        var holderFields = new ArrayList<FieldReference>();
+        for (int at = 0; at < s.code.size(); at++) {
+            var i = s.code.get(at);
+            if (i.getOpcode() != Opcode.IPUT_OBJECT || !(i instanceof TwoRegisterInstruction write) ||
+                !(((ReferenceInstruction)i).getReference() instanceof FieldReference field) ||
+                !field.getType().equals(BUBBLE_SHORTCUT) || !Objects.equals(s.callValue(at, write.getRegisterA()), build)) continue;
+            holderFields.add(field);
+        }
+        if (holderFields.size() == 1) {
+            var holderField = holderFields.get(0);
+            for (int at : s.calls()) {
+                var ref = s.reference(at);
+                if (!ref.getName().equals("<init>") || !ref.getDefiningClass().equals(shortcut.getReturnType())) continue;
+                var constructor = bubbleTarget(byType, ref); if (constructor == null) continue;
+                var cf = new BubbleValues(constructor); Integer holder = cf.parameter(holderField.getDefiningClass());
+                if (holder == null) continue;
+                for (int site = 0; site < cf.code.size(); site++) {
+                    var i = cf.code.get(site);
+                    if (i.getOpcode() != Opcode.IPUT_OBJECT || !(i instanceof TwoRegisterInstruction write) ||
+                        !(((ReferenceInstruction)i).getReference() instanceof FieldReference field) ||
+                        !field.getDefiningClass().equals(shortcut.getReturnType()) || !field.getType().equals(BUBBLE_SHORTCUT)) continue;
+                    var definitions = cf.definitions(site, write.getRegisterA());
+                    if (definitions.size() != 1) continue;
+                    int definition = definitions.iterator().next();
+                    if (definition < 0 || cf.code.get(definition).getOpcode() != Opcode.IGET_OBJECT ||
+                        !holderField.toString().equals(ref(cf.code.get(definition)))) continue;
+                    int read = ((TwoRegisterInstruction) cf.code.get(definition)).getRegisterB();
+                    if (Objects.equals(cf.key(definition, read), cf.key(0, holder))) return field;
+                }
+            }
+        }
+        return null;
     }
+
     static boolean connectedBubbleValues(List<ClassDef> classes, Method shortcut, Method attachment, Method conversation, FieldReference metadata) {
         var byType = new HashMap<String, ClassDef>(); classes.forEach(c -> byType.put(c.getType(), c));
         var shortcutField = bubbleShortcutField(byType, shortcut); if (shortcutField == null) return false;
@@ -1720,8 +1796,11 @@ public class CompatReport {
     static final int GENERATE_AI_LABEL = 0x7f140559;
     // "Generate": the same cell's label when its tap opens the custom, AI and music sticker menu
     static final int GENERATE_MENU_LABEL = 0x7f141bd3;
+    // The same menu label in the 584.1 armv7 build, whose resource IDs shifted
+    static final int GENERATE_MENU_LABEL_5841 = 0x7f141bd5;
     // The viewer's onCreateDialog override, A1K in 584
     static final String EPHEMERAL_DIALOG = "A1K";
+    static final java.util.Set<String> EPHEMERAL_DIALOGS = Set.of(EPHEMERAL_DIALOG, "A1O", "A1I", "A1J");
 
     static int mediaTarget(List<Instruction> code, int at) {
         if (!(code.get(at) instanceof OffsetInstruction jump)) return -1;
@@ -1777,7 +1856,7 @@ public class CompatReport {
         var impl = method.getImplementation(); var c = instructions(method); var p = bubbleParameters(method);
         if (impl == null || AccessFlags.STATIC.isSet(method.getAccessFlags()) || !impl.getTryBlocks().isEmpty()) return List.of();
         List<Integer> sites; boolean valid, resume = false;
-        if (method.getDefiningClass().equals(EPHEMERAL_VIEWER) && EPHEMERAL_DIALOG.equals(method.getName()) &&
+        if (method.getDefiningClass().equals(EPHEMERAL_VIEWER) && EPHEMERAL_DIALOGS.contains(method.getName()) &&
                 p.equals(List.of("Landroid/os/Bundle;")) && method.getReturnType().equals("Landroid/app/Dialog;")) {
             sites = List.of(9);
             valid = impl.getRegisterCount() == 5 && c.size() == 15 && mediaResult(c, 4, "Landroid/app/Dialog;", 2) &&
@@ -1793,9 +1872,15 @@ public class CompatReport {
             if (valid) for (int i = 10; i <= 21; i++) if (mediaWrites(c.get(i), 1)) valid = false;
         } else if (method.getDefiningClass().equals(QUICKSNAP_VIEWER) && method.getName().equals("onCreateView") &&
                 p.equals(List.of("Landroid/view/LayoutInflater;", "Landroid/view/ViewGroup;", "Landroid/os/Bundle;")) && method.getReturnType().equals("Landroid/view/View;")) {
-            sites = List.of(32);
-            valid = impl.getRegisterCount() == 23 && c.size() == 451 && mediaResult(c, 26, "Landroid/app/Dialog;", 0) &&
-                mediaNull(c, 27, 0, 33) && mediaWindow(c, 28, "Landroid/app/Dialog;", 0, 1, 33) && mediaLiteral(c, 31, 0) && mediaCall(c, 32, ADD_FLAGS, 1, 0);
+            // The one addFlags call is the site, as in NativeMediaControls.kt
+            var adds = new ArrayList<Integer>();
+            for (int i = 0; i < c.size(); i++) if (ADD_FLAGS.equals(ref(c.get(i)))) adds.add(i);
+            if (adds.size() != 1 || adds.getFirst() < 6) return List.of();
+            int site = adds.getFirst();
+            sites = List.of(site);
+            valid = impl.getRegisterCount() == 23 && mediaResult(c, site - 6, "Landroid/app/Dialog;", 0) &&
+                mediaNull(c, site - 5, 0, site + 1) && mediaWindow(c, site - 4, "Landroid/app/Dialog;", 0, 1, site + 1) &&
+                mediaLiteral(c, site - 1, 0) && mediaCall(c, site, ADD_FLAGS, 1, 0);
         } else return List.of();
         var setters = new ArrayList<Integer>();
         for (int i = 0; i < c.size(); i++) if (ref(c.get(i)) != null && Set.of(SET_FLAGS, ADD_FLAGS, WINDOW + "->clearFlags(I)V").contains(ref(c.get(i)))) setters.add(i);
@@ -1813,7 +1898,11 @@ public class CompatReport {
     record AiCell(String type, String superclass, String scope, String component, int label, int sources, int size, int menu, int menuSources) {
         String render() { return type + "->render(" + scope + ")" + component; }
     }
-    static final List<AiCell> AI_CELLS = List.of(new AiCell("LX/CVr;", "LX/1Nj;", "LX/2DF;", "LX/1J7;", GENERATE_AI_LABEL, 4, 107, GENERATE_MENU_LABEL, 1));
+    static final List<AiCell> AI_CELLS = List.of(
+        new AiCell("LX/CSp;", "LX/1Nj;", "LX/2DF;", "LX/1J7;", GENERATE_AI_LABEL, 4, 107, GENERATE_MENU_LABEL, 1),
+        new AiCell("LX/CVr;", "LX/1Nj;", "LX/2DF;", "LX/1J7;", GENERATE_AI_LABEL, 4, 107, GENERATE_MENU_LABEL, 1),
+        new AiCell("LX/CPH;", "LX/1O9;", "LX/2Df;", "LX/1JX;", GENERATE_AI_LABEL, 4, 109, GENERATE_MENU_LABEL_5841, 1),
+        new AiCell("LX/CUN;", "LX/1NU;", "LX/2Ce;", "LX/1Iz;", GENERATE_AI_LABEL, 4, 109, GENERATE_MENU_LABEL, 1));
     static List<Method> findAiStickerCells(List<ClassDef> classes) {
         var result = new ArrayList<Method>();
         for (var shape : AI_CELLS) {
@@ -2118,13 +2207,21 @@ public class CompatReport {
         require(instructions(folderGetter).stream().anyMatch(i->i.getOpcode()==Opcode.SGET_OBJECT && Objects.toString(ref(i)).equals(folders.get("INBOX").toString())),"default folder is not INBOX");
         var folderOverride=single(methods(main).stream().filter(m->hasString(m,"folderName")).toList(),"main typed folder override");
         var overrideCode=instructions(folderOverride);
-        require(hasString(folderOverride,"InboxLoaderCoordinator.setFolderAndFilter") && overrideCode.size()==42 && overrideCode.get(0).getOpcode()==Opcode.INVOKE_STATIC && overrideCode.get(1).getOpcode()==Opcode.MOVE_RESULT_OBJECT && folderOverride.getParameterTypes().size()==2,"main folder switch changed");
+        // Some 584.1 arm64 builds drop a flag store and move the config's apply into a static helper: 38 instructions, not 42.
+        require(hasString(folderOverride,"InboxLoaderCoordinator.setFolderAndFilter") && (overrideCode.size()==42 || overrideCode.size()==38) && overrideCode.get(0).getOpcode()==Opcode.INVOKE_STATIC && overrideCode.get(1).getOpcode()==Opcode.MOVE_RESULT_OBJECT && folderOverride.getParameterTypes().size()==2,"main folder switch changed");
         String scopeType=folderOverride.getParameterTypes().get(1).toString();
         var scopeLabels=enumFieldNames(scopeType); var folderLabels=enumFieldNames(folderType);
         var pending=(FieldReference)ref(overrideCode.get(4)); var requests=(FieldReference)ref(overrideCode.get(2));
         require(scopeLabels.get(requests.getName()).equals("MESSAGE_REQUESTS") && folderLabels.get(pending.getName()).equals("PENDING"),"pending scope label changed");
-        require(overrideCode.get(3).getOpcode()==Opcode.IF_NE && branch(folderOverride,3)==13 && Objects.toString(ref(overrideCode.get(7))).equals(pending.toString()) && Objects.toString(ref(overrideCode.get(13))).equals(folders.get("INBOX").toString()),"main folder branches changed");
-        require(overrideCode.get(25).getOpcode()==Opcode.IPUT_OBJECT && ((TwoRegisterInstruction)overrideCode.get(25)).getRegisterA()==5 && overrideCode.get(28).getOpcode()==Opcode.IPUT_OBJECT && ((TwoRegisterInstruction)overrideCode.get(28)).getRegisterA()==4,"folder/filter config connection changed");
+        int inboxAt=branch(folderOverride,3), folderRegister=register(overrideCode.get(4));
+        require(overrideCode.get(3).getOpcode()==Opcode.IF_NE && Objects.toString(ref(overrideCode.get(7))).equals(pending.toString()) && Objects.toString(ref(overrideCode.get(inboxAt))).equals(folders.get("INBOX").toString()),"main folder branches changed");
+        // The switch's own scope parameter and the chosen folder are the two values stored into the new config.
+        java.util.function.Function<String,TwoRegisterInstruction> stores=type->(TwoRegisterInstruction)overrideCode.get(single(java.util.stream.IntStream.range(0,overrideCode.size()).boxed()
+            .filter(at->overrideCode.get(at).getOpcode()==Opcode.IPUT_OBJECT && ref(overrideCode.get(at)) instanceof FieldReference f && f.getType().equals(type)).toList(),"config store "+type));
+        var scopeStore=stores.apply(scopeType); var folderStore=stores.apply(folderType);
+        require(List.of(4,7,inboxAt).stream().allMatch(at->register(overrideCode.get(at))==folderRegister) &&
+            scopeStore.getRegisterA()==folderOverride.getImplementation().getRegisterCount()-1 && folderStore.getRegisterA()==folderRegister &&
+            scopeStore.getRegisterB()==folderStore.getRegisterB(),"folder/filter config connection changed");
         for(var m:main.getMethods()) {
             require(m.equals(folderOverride) || !hasString(m,"folderName"),"other main config folder override");
             require(calls(m).stream().noneMatch(c->c.getDefiningClass().equals(loaderCtor.getDefiningClass()) && c.getParameterTypes().contains(folderType)),"main renderer selects another folder");
@@ -2720,6 +2817,10 @@ public class CompatReport {
         return i instanceof WideLiteralInstruction w ? w.getWideLiteral() : null;
     }
 
+    static boolean isNarrow(Instruction i, long value) {
+        return i instanceof NarrowLiteralInstruction n && n.getNarrowLiteral() == value;
+    }
+
     static TwoRegisterInstruction twoRegister(List<Instruction> code, int at, Opcode op) {
         return code.get(at).getOpcode() == op && code.get(at) instanceof TwoRegisterInstruction t ? t : null;
     }
@@ -2773,23 +2874,38 @@ public class CompatReport {
     static boolean videoPassthroughSite(Method method) {
         var code = instructions(method);
         var sites = new ArrayList<Integer>();
-        for (int c = 9; c < code.size() - 1; c++)
-            if (code.get(c).getOpcode() == Opcode.CMP_LONG && code.get(c + 1).getOpcode() == Opcode.IF_GEZ &&
+        for (int c = 9; c < code.size() - 1; c++) {
+            if (code.get(c).getOpcode() != Opcode.CMP_LONG) continue;
+            boolean configured = c >= 11 && code.get(c + 1).getOpcode() == Opcode.IF_LTZ &&
+                code.get(c - 6).getOpcode() == Opcode.CONST_WIDE_16 && Long.valueOf(8000L).equals(wide(code.get(c - 6))) &&
+                isNarrow(code.get(c - 3), 1000);
+            boolean constant = code.get(c + 1).getOpcode() == Opcode.IF_GEZ &&
                 code.get(c - 4).getOpcode() == Opcode.CONST_WIDE_16 && Long.valueOf(8000L).equals(wide(code.get(c - 4))) &&
-                code.get(c - 2).getOpcode() == Opcode.CONST_WIDE_32 && Long.valueOf(5_000_000L).equals(wide(code.get(c - 2)))) sites.add(c);
+                code.get(c - 2).getOpcode() == Opcode.CONST_WIDE_32 && Long.valueOf(5_000_000L).equals(wide(code.get(c - 2))) &&
+                code.get(c - 3).getOpcode() == Opcode.DIV_LONG_2ADDR && code.get(c - 5).getOpcode() == Opcode.MUL_LONG_2ADDR;
+            if (configured || constant) sites.add(c);
+        }
         if (sites.size() != 1) return false;
         int c = sites.get(0);
+        boolean constant = code.get(c - 2).getOpcode() == Opcode.CONST_WIDE_32 && Long.valueOf(5_000_000L).equals(wide(code.get(c - 2)));
         var cmp = (ThreeRegisterInstruction) code.get(c);
         int limit = cmp.getRegisterC(), size = cmp.getRegisterB(), result = cmp.getRegisterA();
         var add = twoRegister(code, c - 1, Opcode.ADD_LONG_2ADDR);
-        var div = twoRegister(code, c - 3, Opcode.DIV_LONG_2ADDR);
-        var mul = twoRegister(code, c - 5, Opcode.MUL_LONG_2ADDR);
-        var duration = twoRegister(code, c - 6, Opcode.IGET_WIDE);
-        var widen = twoRegister(code, c - 7, Opcode.INT_TO_LONG);
-        var bytes = twoRegister(code, c - 9, Opcode.IGET_WIDE);
+        var div = twoRegister(code, constant ? c - 3 : c - 5, Opcode.DIV_LONG_2ADDR);
+        var mul = twoRegister(code, constant ? c - 5 : c - 7, Opcode.MUL_LONG_2ADDR);
+        var duration = twoRegister(code, constant ? c - 6 : c - 8, Opcode.IGET_WIDE);
+        var widen = twoRegister(code, constant ? c - 7 : c - 9, Opcode.INT_TO_LONG);
+        var bytes = twoRegister(code, constant ? c - 9 : c - 11, Opcode.IGET_WIDE);
         if (add == null || div == null || mul == null || duration == null || widen == null || bytes == null) return false;
-        int temp = register(code.get(c - 4));
-        if (register(code.get(c - 2)) != temp) return false;
+        int temp = register(code.get(constant ? c - 2 : c - 6));
+        if (constant) {
+            if (register(code.get(c - 2)) != temp) return false;
+        } else {
+            var widenMargin = twoRegister(code, c - 2, Opcode.INT_TO_LONG);
+            var margin = twoRegister(code, c - 3, Opcode.MUL_INT_LIT16);
+            if (widenMargin == null || margin == null || widenMargin.getRegisterA() != temp || widenMargin.getRegisterB() != temp ||
+                margin.getRegisterA() != temp || margin.getRegisterB() != temp) return false;
+        }
         if (add.getRegisterA() != limit || add.getRegisterB() != temp || div.getRegisterA() != limit ||
             div.getRegisterB() != temp || mul.getRegisterA() != limit || mul.getRegisterB() != duration.getRegisterA() ||
             widen.getRegisterA() != limit || widen.getRegisterB() != limit) return false;
@@ -2799,7 +2915,7 @@ public class CompatReport {
             !bytesField.getDefiningClass().equals(durationField.getDefiningClass()) || bytesField.getName().equals(durationField.getName()) ||
             bytes.getRegisterB() != duration.getRegisterB()) return false;
         // Nothing between the size read and the compare may write the size pair.
-        for (int at = c - 8; at < c; at++) {
+        for (int at = (constant ? c - 8 : c - 10); at < c; at++) {
             if (!(code.get(at) instanceof OneRegisterInstruction one)) continue;
             int written = one.getRegisterA();
             if (written == size || written == size + 1 || written + 1 == size) return false;
@@ -3856,7 +3972,11 @@ public class CompatReport {
     static List<Method> shareCopies(List<ClassDef> classes) {
         var copies = new ArrayList<Method>();
         for (var cls : classes) for (var method : cls.getMethods()) {
-            if (!"call".equals(method.getName()) || !method.getParameterTypes().isEmpty() || !"Ljava/lang/Object;".equals(method.getReturnType())) continue;
+            boolean isStatic = AccessFlags.STATIC.isSet(method.getAccessFlags());
+            boolean call = "call".equals(method.getName()) && method.getParameterTypes().isEmpty() && !isStatic;
+            // Some 584.1 arm64 builds move call()'s body into a static method that takes its own class.
+            boolean outlined = isStatic && method.getParameterTypes().stream().map(Object::toString).toList().equals(List.of(cls.getType()));
+            if (!(call || outlined) || !"Ljava/lang/Object;".equals(method.getReturnType())) continue;
             var code = instructions(method);
             if (code.stream().noneMatch(i -> i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr &&
                 "orca_share_media".equals(sr.getString()))) continue;
@@ -4752,6 +4872,25 @@ public class CompatReport {
     }
 
     /**
+     * The narrow constant a register holds at {@code target}, following plain moves to the register they copy. The
+     * 584.1 armv7 bar hoists the listener case into a high register and moves it down at the call. Returns null unless
+     * one definition reaches each step.
+     */
+    static Integer narrowConstantAt(Method method, List<Instruction> code, int target, int register, int depth) {
+        if (depth < 0) return null;
+        var defs = definitionsAt(method, target, register);
+        if (defs == null || defs.size() != 1) return null;
+        int at = defs.iterator().next();
+        if (at < 0) return null;
+        var insn = code.get(at);
+        if (insn instanceof NarrowLiteralInstruction lit && (insn.getOpcode() == Opcode.CONST_4 || insn.getOpcode() == Opcode.CONST_16 || insn.getOpcode() == Opcode.CONST))
+            return lit.getNarrowLiteral();
+        if (insn instanceof TwoRegisterInstruction move && insn.getOpcode().name().startsWith("MOVE") &&
+            !insn.getOpcode().name().startsWith("MOVE_RESULT")) return narrowConstantAt(method, code, at, move.getRegisterB(), depth - 1);
+        return null;
+    }
+
+    /**
      * mark_read_bar and mark_read_click: the chat top bar's builder (the one method naming the QR scanner plugin and
      * reading it from the socket) and its shared listener's onClick, taken only when every value the generated button
      * copies from the QR block resolves, the classes and helpers it names are public, the list walk seam and the
@@ -4824,11 +4963,7 @@ public class CompatReport {
                 if (refParams(m).equals(List.of("Ljava/lang/Object;", "I")) && args.size() == 3 && args.get(1) == pluginRead.getRegisterA()) {
                     listener = m.getDefiningClass();
                     // The case is a constant set wherever the method keeps it: the one definition that reaches the call.
-                    var defs = definitionsAt(bar, i, args.get(2));
-                    if (defs != null && defs.size() == 1 && defs.iterator().next() >= 0) {
-                        var def = c.get(defs.iterator().next());
-                        if (def instanceof NarrowLiteralInstruction lit && (def.getOpcode() == Opcode.CONST_4 || def.getOpcode() == Opcode.CONST_16)) listenerCase = lit.getNarrowLiteral();
-                    }
+                    listenerCase = narrowConstantAt(bar, c, i, args.get(2), 4);
                     listenerRegister = args.get(0);
                 } else if (refParams(m).equals(List.of(builder))) spec = m.getDefiningClass();
             }
@@ -5113,7 +5248,7 @@ public class CompatReport {
         // leaves the control unresolved, as findControls in ControlHooks.kt clears it then.
         boolean changedViewer = false;
         for (var cls : classes) for (var method : cls.getMethods()) {
-            boolean candidate = (EPHEMERAL_VIEWER.equals(cls.getType()) && (EPHEMERAL_DIALOG.equals(method.getName()) || "onResume".equals(method.getName()))) ||
+            boolean candidate = (EPHEMERAL_VIEWER.equals(cls.getType()) && (EPHEMERAL_DIALOGS.contains(method.getName()) || "onResume".equals(method.getName()))) ||
                 (QUICKSNAP_VIEWER.equals(cls.getType()) && "onCreateView".equals(method.getName()));
             if (!candidate) continue;
             if (screenshotViewerSites(method).isEmpty()) changedViewer = true;
@@ -5799,7 +5934,12 @@ public class CompatReport {
         if (tool == null) return null;
         try {
             ProcessBuilder pb;
-            if (tool.endsWith(".bat")) {
+            // apksigner.bat through cmd splits an APKMirror name like "(213,240dpi)" at the comma, so run its jar.
+            File jar = new File(new File(tool).getParentFile(), "lib/apksigner.jar");
+            if (tool.endsWith(".bat") && jar.isFile()) {
+                pb = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-jar",
+                    jar.getAbsolutePath(), "verify", "--print-certs", apk.getAbsolutePath());
+            } else if (tool.endsWith(".bat")) {
                 pb = new ProcessBuilder("cmd", "/c", tool, "verify", "--print-certs", apk.getAbsolutePath());
             } else {
                 pb = new ProcessBuilder(tool, "verify", "--print-certs", apk.getAbsolutePath());
@@ -6372,7 +6512,7 @@ public class CompatReport {
         System.out.println();
         if (anyFail) {
             System.out.println("RESULT: FAIL - one or more patches are incompatible with this APK.");
-            if (!builds.isEmpty()) System.out.println("Use an unmodified arm64 Messenger " + supported(builds) + ".");
+            if (!builds.isEmpty()) System.out.println("Use an unmodified Messenger " + supported(builds) + ".");
             System.exit(1);
         } else {
             System.out.println("RESULT: PASS - all " + (PATCHES.size() + 3) + " patches are compatible.");

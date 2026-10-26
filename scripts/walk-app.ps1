@@ -5,34 +5,37 @@
 .DESCRIPTION
     release/release.ps1's publish stage refuses a bundle without a receipt that a whole-app walk of
     that exact bundle left (walk-receipt.ps1). This runs the walk: it patches Messenger from the
-    bundle with the Morphe Desktop CLI, installs it in place on the device, opens both Hush settings
-    pages, a chat and each patched screen, watches the crash buffer for a Messenger crash (Java or
-    native), and writes walk-receipt.json with New-WalkReceipt. The receipt names the SHA-256 of the
-    .mpp the walked APK was patched with, which is what publish holds it to.
+    bundle with the Morphe Desktop CLI, installs it in place on the device, walks every step in
+    $WalkSteps (a chat, both Hush settings pages, the message log and auto reply sheets when those
+    patches are in, and each patched screen), watches the crash buffer for a Messenger crash (Java
+    or native), and writes walk-receipt.json with New-WalkReceipt. The receipt names the SHA-256 of
+    the .mpp the walked APK was patched with, which is what publish holds it to.
 
     The result the walk writes, and the exit code it ends with:
-      PASS      0  the whole app was walked, every screen opened, no crash.
+      PASS      0  the whole app was walked, every step reached its own screen, no crash.
       PARTIAL   2  a settings page, the chat or one of the default screens was left out, or a
                    -SkipPatch walk found no record that the installed app was patched from -Bundle.
-      FAIL      1  a Messenger crash, a screen that would not open, a crash buffer that couldn't be
-                   read, or an installed APK that isn't the one patched from -Bundle.
+      FAIL      1  a Messenger crash, a step that didn't reach its own screen, a crash buffer that
+                   couldn't be read, or an installed APK that isn't the one patched from -Bundle.
     Only a PASS backs a release.
 
-    A screen counts as opened when its link starts in Messenger and Messenger is still in front
-    after the settle time. The walk doesn't check which screen Messenger picked for a link, so it
-    prints the activity each one reached.
+    A step passes when Messenger is in front on the activity the step expects and the UI dump shows
+    the step's marker, no login or Restore prompt, and a screen no earlier step showed. Each step's
+    screenshot and UI dump go to steps/<id>.png and steps/<id>.xml beside the receipt, which hashes
+    them, and publish reads them again.
 
     Screens open by their fb-messenger:// links (am start -W -a VIEW -d ...), and the chat by
-    -Thread, the user id of a chat on the signed-in account. Opening a chat by its link also gets
-    past the "Restore your Facebook chats" prompt Messenger shows after an update. The walk taps
-    nothing, so it never answers that prompt. The settings pages open through SettingsActivity with
-    the page extra the restart button uses.
+    -Thread, the user id of a chat on the signed-in account. The chat goes first: opening it by its
+    link gets past the "Restore your Facebook chats" prompt Messenger shows after an update. The
+    settings pages open through SettingsActivity with the page extra the restart button uses.
 
     Device safety: the walk takes an exclusive serial lease in the shared lease folder and gives it
     back when it's done. It stops on a lock screen instead of unlocking, wakes the screen with
     KEYCODE_WAKEUP only, never changes the stay-awake setting and never sends sleep or power. It
     never uninstalls or clears Messenger. An install that can't update the app in place is reported,
-    not forced past.
+    not forced past. It taps only inside Hush settings: a sheet's button and its Close or Cancel,
+    each found by its text in a dump taken right before the tap. It never taps Messenger's own
+    screens, so it never answers the Restore prompt.
 
 .EXAMPLE
     scripts/walk-app.ps1 -Serial <adb serial> -ExpectedModel SM-S908U1 -Keystore <key the installed app uses> -Thread <user id>
@@ -81,8 +84,7 @@ $ErrorActionPreference = 'Stop'
 
 # The screens Hush patches, by link: the inbox, Active now, stories, a new message, Messenger's own
 # settings (where the HushMessenger row sits), the sticker store and Marketplace.
-$WalkDefaultScreens = @('fb-messenger://threads', 'fb-messenger://active_now', 'fb-messenger://montage',
-    'fb-messenger://compose', 'fb-messenger://settings', 'fb-messenger://stickerstore', 'fb-messenger://marketplace')
+$WalkDefaultScreens = [string[]]@($WalkSteps | Where-Object { $_.Kind -ceq 'link' } | ForEach-Object { $_.Link })
 $WalkSettingsActivity = 'app.hushmessenger.extension.SettingsActivity'
 $WalkPageExtra = 'app.hushmessenger.page'
 
@@ -101,6 +103,27 @@ function Resolve-WalkOutcome {
     if ($Crashes -gt 0 -or @($Problems).Count -gt 0) { return 'FAIL' }
     if (-not $Full -or $Screens -lt 1) { return 'PARTIAL' }
     return 'PASS'
+}
+
+function Get-WalkPlan {
+    <#
+    .SYNOPSIS
+        The steps a walk with these choices opens, in walk order: $WalkSteps less what it leaves out,
+        then any -Visit link beyond the defaults as an extra step the receipt doesn't record.
+    #>
+    param([bool]$SkipSettings, [string]$Thread, [string[]]$Visit = @(), [string[]]$AppliedPatches = @())
+    $plannedSteps = [Collections.Generic.List[object]]::new()
+    foreach ($definition in $script:WalkSteps) {
+        if ($definition.Kind -ceq 'chat' -and [string]::IsNullOrWhiteSpace($Thread)) { continue }
+        if ($definition.Kind -in 'settings', 'sheet' -and $SkipSettings) { continue }
+        if ($definition.Kind -ceq 'sheet' -and $AppliedPatches -cnotcontains $definition.Patch) { continue }
+        if ($definition.Kind -ceq 'link' -and $Visit -cnotcontains $definition.Link) { continue }
+        $plannedSteps.Add($definition)
+    }
+    foreach ($link in @($Visit | Where-Object { $WalkDefaultScreens -cnotcontains $_ })) {
+        $plannedSteps.Add([pscustomobject]@{ Id = $link; Kind = 'extra'; Link = $link; Activity = $WalkMessengerComponent; Marker = $WalkMessengerNodes })
+    }
+    return $plannedSteps.ToArray()
 }
 
 function Get-WalkSkips {
@@ -155,6 +178,57 @@ function Read-WalkSha256([string[]]$Lines) {
     $hashLine = @($Lines | Where-Object { $_ -cmatch '^[0-9a-f]{64}\s' }) | Select-Object -First 1
     if ($hashLine) { return $hashLine.Substring(0, 64) }
     return ''
+}
+
+function Read-WalkAppliedPatches {
+    <#
+    .SYNOPSIS
+        The patch names in a Desktop result's appliedPatches: plain names (1.19) or {name} objects
+        (1.18.1). Empty when there's no readable result.
+    #>
+    param([string]$ResultFile)
+    if (-not $ResultFile -or -not (Test-Path -LiteralPath $ResultFile -PathType Leaf)) { return [string[]]@() }
+    try { $report = Get-Content -LiteralPath $ResultFile -Raw | ConvertFrom-Json } catch { return [string[]]@() }
+    return [string[]]@(@($report.appliedPatches) | ForEach-Object { if ($_ -is [string]) { $_ } else { $_.name } } |
+        Where-Object { $_ -is [string] -and $_ })
+}
+
+function Read-WalkResumedComponent {
+    <#
+    .SYNOPSIS
+        The component in front, from dumpsys activity activities: topResumedActivity on newer
+        Android, mResumedActivity or ResumedActivity on older ones. '' when none reads.
+    #>
+    param([string[]]$Lines = @())
+    foreach ($label in 'topResumedActivity', 'ResumedActivity') {
+        foreach ($line in $Lines) {
+            if ($line -match "$label[:=]\s*ActivityRecord\{\S+\s+u\d+\s+(\S+/\S+)") { return $Matches[1] }
+        }
+    }
+    return ''
+}
+
+function Find-WalkNodeCenter {
+    <#
+    .SYNOPSIS
+        The center of the enabled node whose whole text is -Text in a UI dump, as @(x, y), or $null.
+        With -Described, the node whose whole content-desc is -Text (an icon button has no text).
+    #>
+    param([AllowEmptyString()][string]$Xml, [Parameter(Mandatory = $true)][string]$Text, [switch]$Described)
+    $attribute = if ($Described) { 'content-desc' } else { 'text' }
+    $pattern = '<node\b[^>]*\b' + $attribute + '="' + [regex]::Escape([Security.SecurityElement]::Escape($Text)) +
+        '"[^>]*\benabled="true"[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"'
+    $found = [regex]::Match([string]$Xml, $pattern)
+    if (-not $found.Success) { return $null }
+    $box = 1..4 | ForEach-Object { [int]$found.Groups[$_].Value }
+    if ($box[2] -le $box[0] -or $box[3] -le $box[1]) { return $null }
+    return @([int](($box[0] + $box[2]) / 2), [int](($box[1] + $box[3]) / 2))
+}
+
+function Test-WalkRestorePrompt([AllowEmptyString()][string]$Xml) {
+    # Whether a UI dump is Messenger's chat restore prompt, by the same pattern publish refuses a step for.
+    $prompt = @($WalkBlockingScreens | Where-Object { $_.Name -clike '*Restore your chats*' })[0]
+    return [string]$Xml -match $prompt.Pattern
 }
 
 function Get-WalkExitCode([string]$Result) {
@@ -321,6 +395,8 @@ function Invoke-WalkApp {
 
     $installApk = $null
     $patchedSha = ''
+    $evidenceDir = Join-Path $OutDir 'steps'
+    Remove-Item -LiteralPath $evidenceDir, (Join-Path $OutDir 'walk-receipt.json') -Recurse -Force -ErrorAction SilentlyContinue
     if ($SkipPatch) {
         $patchedSha = Find-WalkPatchRecord -Destination $OutDir -BundleSha256 $bundleSha256
     } else {
@@ -333,7 +409,11 @@ function Invoke-WalkApp {
         $patchedSha = (Get-FileHash -LiteralPath $installApk -Algorithm SHA256).Hash.ToLowerInvariant()
     }
 
-    $skips = Get-WalkSkips -SkipSettings $SkipSettings -Thread $Thread -Visit $Visit -Unproven (-not $patchedSha)
+    $applied = if ($patchedSha) { Read-WalkAppliedPatches -ResultFile (Join-Path $OutDir 'patch-result.json') } else { [string[]]@() }
+    $skips = [Collections.Generic.List[string]]::new()
+    foreach ($skip in @(Get-WalkSkips -SkipSettings $SkipSettings -Thread $Thread -Visit $Visit -Unproven (-not $patchedSha))) { $skips.Add($skip) }
+    if ($patchedSha -and $applied.Count -eq 0) { $skips.Add("the list of patches Desktop applied (no readable patch-result.json in -OutDir)") }
+    [void][IO.Directory]::CreateDirectory($evidenceDir)
     $lease = Enter-WalkLease -Directory $LeaseDirectory -Serial $Serial -ExpectedModel $ExpectedModel
     $problems = [Collections.Generic.List[string]]::new()
     $screens = 0
@@ -370,38 +450,126 @@ function Invoke-WalkApp {
         [void](Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-n', "$Package/.auth.StartScreenActivity"))
         Start-Sleep -Seconds $SettleSeconds
 
-        $steps = [Collections.Generic.List[object]]::new()
-        if (-not $SkipSettings) {
-            foreach ($page in @('controls', 'app')) {
-                $steps.Add([pscustomobject]@{ Name = "Hush settings, $page page"; Expect = "$Package/$WalkSettingsActivity"; Arguments =
-                    @('shell', 'am', 'start', '-W', '--activity-clear-task', '-n', "$Package/$WalkSettingsActivity", '--es', $WalkPageExtra, $page) })
+        $dumpOnDevice = '/sdcard/hush-walk.xml'
+        $shotOnDevice = '/sdcard/hush-walk.png'
+        # A fresh dump of the screen in front, or '' when uiautomator couldn't make one. The old file
+        # goes first, so a failed dump can never hand back the previous screen.
+        function Read-WalkScreen([string]$Into) {
+            [void](Invoke-WalkAdb @('shell', 'rm', '-f', $dumpOnDevice))
+            $dumped = Invoke-WalkAdb @('shell', 'uiautomator', 'dump', $dumpOnDevice)
+            if (($dumped.Stdout -join ' ') -notmatch 'dumped to') { return '' }
+            $local = if ($Into) { $Into } else { Join-Path $OutDir 'walk-probe.xml' }
+            $pulled = Invoke-WalkAdb @('pull', $dumpOnDevice, $local)
+            if ($pulled.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $local -PathType Leaf)) { return '' }
+            return [IO.File]::ReadAllText($local)
+        }
+        function Invoke-WalkTap([string]$Text) {
+            # Never under the keyboard: close it first, then read the screen again.
+            if (((Invoke-WalkAdb @('shell', 'dumpsys', 'input_method')).Stdout -join "`n") -match 'mInputShown=true') {
+                [void](Invoke-WalkAdb @('shell', 'input', 'keyevent', 'KEYCODE_BACK'))
+                Start-Sleep -Seconds 1
             }
+            $center = Find-WalkNodeCenter -Xml (Read-WalkScreen '') -Text $Text
+            if ($null -eq $center) { return $false }
+            [void](Invoke-WalkAdb @('shell', 'input', 'tap', [string]$center[0], [string]$center[1]))
+            return $true
         }
-        if (-not [string]::IsNullOrWhiteSpace($Thread)) {
-            $steps.Add([pscustomobject]@{ Name = 'a chat'; Expect = $Package; Arguments =
-                @('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', "fb-messenger://user-thread/$Thread", '-p', $Package) })
+        $size = @((Invoke-WalkAdb @('shell', 'wm', 'size')).Stdout | Where-Object { $_ -match '(\d+)x(\d+)' } |
+            ForEach-Object { @([int]$Matches[1], [int]$Matches[2]) }) | Select-Object -Last 2
+        $width, $height = if ($size.Count -eq 2) { $size } else { @(1080, 2340) }
+        # Scrolls the Controls list to the top, then down until -Text shows, and taps it.
+        function Invoke-WalkFindAndTap([string]$Text) {
+            $before = ''
+            for ($i = 0; $i -lt 15; $i++) {
+                $shape = Get-WalkScreenSignature -Xml (Read-WalkScreen '')
+                if ($shape -ceq $before) { break }
+                $before = $shape
+                [void](Invoke-WalkAdb @('shell', 'input', 'swipe', [string]($width / 2), [string]([int]($height * 0.35)), [string]($width / 2), [string]([int]($height * 0.8)), '400'))
+                Start-Sleep -Milliseconds 700
+            }
+            for ($i = 0; $i -lt 40; $i++) {
+                if (Invoke-WalkTap $Text) { return $true }
+                [void](Invoke-WalkAdb @('shell', 'input', 'swipe', [string]($width / 2), [string]([int]($height * 0.75)), [string]($width / 2), [string]([int]($height * 0.4)), '400'))
+                Start-Sleep -Milliseconds 700
+            }
+            return $false
         }
-        foreach ($link in $Visit) {
-            $steps.Add([pscustomobject]@{ Name = $link; Expect = $Package; Arguments =
-                @('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', $link, '-p', $Package) })
+        function Start-WalkSettings([string]$Page) {
+            return Invoke-WalkAdb @('shell', 'am', 'start', '-W', '--activity-clear-task', '-n', "$Package/$WalkSettingsActivity", '--es', $WalkPageExtra, $Page)
         }
-        foreach ($step in $steps) {
-            $launch = Invoke-WalkAdb $step.Arguments
+
+        function Start-WalkLink([string]$Uri) {
+            # Messenger's own screens first: a link sent while a Hush settings window is in front lands on that window.
+            [void](Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-n', "$Package/.auth.StartScreenActivity"))
+            Start-Sleep -Seconds 1
+            return Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', $Uri, '-p', $Package)
+        }
+
+        $plannedSteps = Get-WalkPlan -SkipSettings $SkipSettings -Thread $Thread -Visit $Visit -AppliedPatches $applied
+        $stepRecords = [Collections.Generic.List[object]]::new()
+        $shapesSeen = @{}
+        foreach ($definition in $plannedSteps) {
+            $problem = $null
+            $uri = if ($definition.Kind -ceq 'chat') { "fb-messenger://user-thread/$Thread" } else { $definition.Link }
+            switch ($definition.Kind) {
+                'settings' { $launch = Start-WalkSettings $definition.Page }
+                'sheet' {
+                    $launch = Start-WalkSettings 'controls'
+                    Start-Sleep -Seconds $SettleSeconds
+                    if (-not (Invoke-WalkFindAndTap $definition.Button)) { $problem = "$($definition.Id): couldn't find its $($definition.Button) button on the Controls page" }
+                }
+                default { $launch = Start-WalkLink $uri }
+            }
             Start-Sleep -Seconds $SettleSeconds
-            $launched = ($launch.Stdout -join "`n") -match '(?m)^Status:\s*ok\r?$'
-            # mResumedActivity= on older Android, topResumedActivity= and "ResumedActivity:" on newer ones.
-            $resumed = @((Invoke-WalkAdb @('shell', 'dumpsys', 'activity', 'activities')).Stdout |
-                Where-Object { $_ -match 'ResumedActivity' }) -join ' '
-            $foreground = $resumed -match [regex]::Escape($step.Expect)
-            $reached = @($launch.Stdout | Where-Object { $_ -match '^Activity:\s*(\S+)' } | ForEach-Object { $Matches[1] })
-            if ($launched -and $foreground) {
-                $screens++
-                Write-Host "[walk] opened $($step.Name)$(if ($reached.Count) { " ($($reached[0]))" })"
-            } else {
-                $problems.Add("$($step.Name) would not open (status ok: $launched, in front: $foreground)")
-                Write-Host "[walk] $($step.Name) would not open"
+            # Messenger puts its chat restore prompt in front now and then, as it does for anyone. Close it the way a
+            # person would, from a fresh dump, and open the step again. The step's own dump must then show its screen.
+            for ($closed = 0; $definition.Kind -cnotin 'settings', 'sheet' -and $closed -lt 2; $closed++) {
+                $front = Read-WalkScreen ''
+                if (-not (Test-WalkRestorePrompt $front)) { break }
+                $close = Find-WalkNodeCenter -Xml $front -Text 'Close' -Described
+                if ($null -eq $close) { break }
+                Write-Host "[walk] closing Messenger's chat restore prompt in front of $($definition.Id)"
+                [void](Invoke-WalkAdb @('shell', 'input', 'tap', [string]$close[0], [string]$close[1]))
+                Start-Sleep -Seconds 2
+                $launch = Start-WalkLink $uri
+                Start-Sleep -Seconds $SettleSeconds
             }
+            if (-not $problem -and ($launch.Stdout -join "`n") -notmatch '(?m)^Status:\s*ok\r?$') { $problem = "$($definition.Id) wouldn't start" }
+            $activity = Read-WalkResumedComponent @((Invoke-WalkAdb @('shell', 'dumpsys', 'activity', 'activities')).Stdout)
+            $name = $definition.Id -replace '[^\w.-]', '_'
+            $xmlFile = Join-Path $evidenceDir "$name.xml"
+            $pngFile = Join-Path $evidenceDir "$name.png"
+            $xml = Read-WalkScreen $xmlFile
+            [void](Invoke-WalkAdb @('shell', 'rm', '-f', $shotOnDevice))
+            [void](Invoke-WalkAdb @('shell', 'screencap', '-p', $shotOnDevice))
+            $shot = Invoke-WalkAdb @('pull', $shotOnDevice, $pngFile)
+            if (-not $problem) { $problem = Test-WalkStepScreen -Definition $definition -Activity $activity -Xml $xml }
+            if (-not $problem -and ($shot.ExitCode -ne 0 -or -not (Test-WalkPng $pngFile))) { $problem = "$($definition.Id) left no screenshot" }
+            if (-not $problem) {
+                $shape = Get-WalkScreenSignature -Xml $xml
+                if ($shapesSeen.ContainsKey($shape)) { $problem = "$($definition.Id) showed the same screen as $($shapesSeen[$shape])" }
+                else { $shapesSeen[$shape] = $definition.Id }
+            }
+            if ($definition.Kind -ceq 'sheet' -and -not (Invoke-WalkTap $definition.Close)) {
+                [void](Invoke-WalkAdb @('shell', 'input', 'keyevent', 'KEYCODE_BACK'))
+            }
+            if ($problem) {
+                $problems.Add($problem)
+                Write-Host "[walk] $problem"
+            } else {
+                $screens++
+                Write-Host "[walk] opened $($definition.Id) ($activity)"
+            }
+            if ($definition.Kind -ceq 'extra') { continue }
+            $hashOf = { param($file) if (Test-Path -LiteralPath $file -PathType Leaf) { (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() } else { '' } }
+            $stepRecords.Add([ordered]@{
+                id = $definition.Id; activity = $activity; opened = -not $problem; problem = [string]$problem
+                screenshot = "steps/$name.png"; screenshotSha256 = (& $hashOf $pngFile)
+                uiDump = "steps/$name.xml"; uiDumpSha256 = (& $hashOf $xmlFile)
+            })
         }
+        [void](Invoke-WalkAdb @('shell', 'rm', '-f', $dumpOnDevice, $shotOnDevice))
+        Remove-Item -LiteralPath (Join-Path $OutDir 'walk-probe.xml') -Force -ErrorAction SilentlyContinue
         # Back to the inbox, so the phone is left on Messenger's home screen.
         [void](Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-n', "$Package/.auth.StartScreenActivity"))
 
@@ -430,10 +598,10 @@ function Invoke-WalkApp {
         $result = Resolve-WalkOutcome -Screens $screens -Crashes $fatal.Count -Problems ([string[]]$problems) -Full $full
         $receipt = New-WalkReceipt -Result $result -Full $full -Serial $Serial -Device $deviceModel `
             -AppVersion ([string]$appVersion) -BundleSha256 $bundleSha256 -PatchedApkSha256 $patchedSha -InstalledApkSha256 $installedSha `
-            -Started $started -Finished ([DateTimeOffset]::UtcNow) -Screens $screens -Crashes $fatal.Count `
-            -Problems ([string[]]$problems)
+            -Started $started -Finished ([DateTimeOffset]::UtcNow) -AppliedPatches $applied -Steps $stepRecords.ToArray() `
+            -Crashes $fatal.Count -Problems ([string[]]$problems)
         $receiptPath = Join-Path $OutDir 'walk-receipt.json'
-        [IO.File]::WriteAllText($receiptPath, (ConvertTo-Json -InputObject $receipt -Depth 4) + "`n")
+        [IO.File]::WriteAllText($receiptPath, (ConvertTo-Json -InputObject $receipt -Depth 6) + "`n")
 
         Write-Host "[walk] $result on $deviceModel ($Serial): $screens screens, $($fatal.Count) crashes, $($problems.Count) problems"
         foreach ($problem in $problems) { Write-Host "[walk]   $problem" }

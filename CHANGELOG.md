@@ -2,12 +2,23 @@
 
 ## Unreleased
 
+### New
+
+- **Custom launcher icon** is a new patch that starts unselected. It turns Messenger's home screen icon white on black, or black on white if you pick that style, using Messenger's own logo. Themed icons on Android 13 and up still work. Patch again without it to get the normal icon back. Refs #107.
+
 ### Changed and fixed
 
+- HushMessenger now targets Messenger 584.1.0.61.98 and takes all 18 builds APKMirror lists for it, arm64 and armv7 alike. 584.0.0.49.98 is no longer supported, so update Messenger before you patch. Each build was checked patch by patch, and Morphe Desktop applied and rebuilt every one of them. Refs #106.
+- Patches are built with Morphe patcher 2.0.1, which uses less memory while patching. You'll need Morphe Manager 2.2.0 or newer, or Morphe Desktop 1.19.1.
 - Gallery selections are checked off the UI thread before returning to the chat. A canceled, revoked or timed-out selection returns no media, and Report a problem includes a fixed gallery result category without file paths. Refs #94.
 - Patching now reports when discovery stages start and finish. The Wi-Fi scan reads method signatures directly instead of formatting every reference in Messenger, which cuts that scan's time and temporary allocations. Refs #93, #99, #100.
+- In **Auto reply**, a picture always lands on the card you picked it for, and it's always the one you picked last. Before, a slow copy of an earlier pick could finish late and replace the newer picture, or put one back after you tapped Clear. Save waits while a picture is still copying.
 - **Hide Meta AI** now reaches the search screen too. Tap the search bar and the box at the top used to say "Ask Meta AI or search" even with the switch on. Now it shows the plain search hint, like the bar on the Chats list. Search still finds people and chats the same way.
 - With **Slide chats in and out** on, a chat whose first frames come late no longer jumps partway in. That happened most on the first chat you open after starting Messenger. The chat now waits off screen until Messenger draws on time (a quarter second at most), then slides in from the edge. Going back works the same way.
+
+### Checks
+
+- The whole-app walk now has to show every screen it opened, not just count them. Each required step (a chat, both settings tabs, the message log and auto reply sheets when those patches are in, and each native screen) saves a screenshot and a UI dump next to the receipt, with their checksums. Publish reads those files again and refuses the walk when a step is missing or listed twice, a file is missing or changed, a screen shows the Restore or login prompt, two steps landed on the same screen, or a step ended up somewhere it shouldn't. An older receipt that only counted screens doesn't count anymore.
 
 ## 0.26.0 (2026-10-22)
 
