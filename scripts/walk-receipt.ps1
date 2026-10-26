@@ -49,15 +49,23 @@ $WalkSteps = @(
     }
 )
 
-# A screen standing in front of the one a step asked for. Either one in a dump fails the step.
+# A screen standing in front of the one a step asked for. Either one in a dump fails the step,
+# whether the words sit in a node's text or only in its content-desc (Compose buttons do that).
 $WalkBlockingScreens = @(
-    [pscustomobject]@{ Name = 'the "Restore your chats" prompt'; Pattern = '(?i)<node\b[^>]*\btext="[^"]*\brestore your\b[^"]*\bchats\b' }
-    [pscustomobject]@{ Name = 'the login screen'; Pattern = '(?i)<node\b[^>]*\btext="(Log in|Log into Messenger|Mobile number or email|Continue as [^"]*)"' }
+    # 584.1 draws its headline outside the accessibility tree, so only its "Restore now" button shows in a dump.
+    [pscustomobject]@{ Name = 'the "Restore your chats" prompt'; Pattern = '(?i)<node\b[^>]*\b(text|content-desc)="([^"]*\brestore your\b[^"]*\bchats\b[^"]*|Restore now)"' }
+    [pscustomobject]@{ Name = 'the login screen'; Pattern = '(?i)<node\b[^>]*\b(text|content-desc)="(Log in|Log into Messenger|Mobile number or email|Continue as [^"]*)"' }
 )
-$WalkBlockingActivity = '(?i)/[\w.$]*(Login|Nux)[\w$]*Activity\b'
+$WalkBlockingActivities = @(
+    [pscustomobject]@{ Name = 'the login screen'; Pattern = '(?i)/[\w.$]*Login[\w$]*Activity\b' }
+    # NeueNuxActivity carries the chat restore prompt and Messenger's other first-run screens.
+    [pscustomobject]@{ Name = "one of Messenger's first-run screens"; Pattern = '(?i)/[\w.$]*Nux[\w$]*Activity\b' }
+)
 
+# The functions read $script:WalkSteps: names ignore case, so a caller's own $walkSteps would
+# otherwise stand in for the table through dynamic scope. Dot-source this file at script level.
 function Get-WalkStepDefinition([string]$Id) {
-    return @($WalkSteps | Where-Object { $_.Id -ceq $Id }) | Select-Object -First 1
+    return @($script:WalkSteps | Where-Object { $_.Id -ceq $Id }) | Select-Object -First 1
 }
 
 function Get-WalkRequiredSteps {
@@ -66,7 +74,7 @@ function Get-WalkRequiredSteps {
         The step ids a walk of an APK with these patches applied must pass, in walk order.
     #>
     param([string[]]$AppliedPatches = @())
-    return [string[]]@($WalkSteps | Where-Object { $_.Kind -cne 'sheet' -or $AppliedPatches -ccontains $_.Patch } | ForEach-Object { $_.Id })
+    return [string[]]@($script:WalkSteps | Where-Object { $_.Kind -cne 'sheet' -or $AppliedPatches -ccontains $_.Patch } | ForEach-Object { $_.Id })
 }
 
 function Get-WalkScreenSignature {
@@ -92,6 +100,16 @@ function Get-WalkScreenSignature {
     return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
 }
 
+function Test-WalkPng([string]$Path) {
+    # Whether -Path is a PNG by its first eight bytes. A failed screencap leaves an empty file or an error message.
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $stream = [IO.File]::OpenRead($Path)
+    try {
+        $head = [byte[]]::new(8)
+        return $stream.Read($head, 0, 8) -eq 8 -and [Convert]::ToHexString($head) -ceq '89504E470D0A1A0A'
+    } finally { $stream.Dispose() }
+}
+
 function Test-WalkStepScreen {
     <#
     .SYNOPSIS
@@ -103,7 +121,9 @@ function Test-WalkStepScreen {
     foreach ($blocking in $WalkBlockingScreens) {
         if ($Xml -match $blocking.Pattern) { return "$($Definition.Id) showed $($blocking.Name) instead" }
     }
-    if ($Activity -match $WalkBlockingActivity) { return "$($Definition.Id) showed the login screen instead ($Activity)" }
+    foreach ($blocking in $WalkBlockingActivities) {
+        if ($Activity -match $blocking.Pattern) { return "$($Definition.Id) showed $($blocking.Name) instead ($Activity)" }
+    }
     if ($Activity -notmatch $Definition.Activity) { return "$($Definition.Id) reached $(if ($Activity) { $Activity } else { 'no screen' }), not its own" }
     if ($Xml -notmatch $Definition.Marker) { return "$($Definition.Id)'s screen doesn't show what it should" }
     return $null
@@ -195,7 +215,10 @@ function Test-WalkReceipt {
         return Fail "the walk receipt doesn't list the patches the walked APK has"
     }
     $required = @(Get-WalkRequiredSteps -AppliedPatches ([string[]]$receipt.appliedPatches))
-    if ($receipt.requiredSteps -isnot [array] -or (@($receipt.requiredSteps) -join ' ') -cne ($required -join ' ')) {
+    $listed = $receipt.requiredSteps
+    $sameSteps = $listed -is [array] -and $listed.Count -eq $required.Count
+    for ($i = 0; $sameSteps -and $i -lt $required.Count; $i++) { $sameSteps = $listed[$i] -is [string] -and $listed[$i] -ceq $required[$i] }
+    if (-not $sameSteps) {
         return Fail "the walk receipt's required steps ($(@($receipt.requiredSteps) -join ', ')) aren't the ones this APK needs ($($required -join ', '))"
     }
     if ($receipt.steps -isnot [array]) { return Fail "the walk receipt doesn't list its steps" }
@@ -212,8 +235,9 @@ function Test-WalkReceipt {
         if ($seen.ContainsKey($step.id)) { return Fail "the walk receipt lists $($step.id) twice" }
         $seen[$step.id] = $true
         if ($required -cnotcontains $step.id) { return Fail "the walk receipt lists $($step.id), which this APK doesn't have" }
-        if ($step.opened -isnot [bool] -or -not $step.opened -or ($step.problem -is [string] -and $step.problem)) {
-            return Fail "$($step.id) didn't open$(if ($step.problem -is [string] -and $step.problem) { ": $($step.problem)" })"
+        if ($step.problem -isnot [string]) { return Fail "$($step.id)'s problem isn't a line of text" }
+        if ($step.opened -isnot [bool] -or -not $step.opened -or $step.problem) {
+            return Fail "$($step.id) didn't open$(if ($step.problem) { ": $($step.problem)" })"
         }
         $evidence = @{}
         foreach ($kind in @(@('screenshot', '.png'), @('uiDump', '.xml'))) {
@@ -229,8 +253,7 @@ function Test-WalkReceipt {
             }
             $evidence[$kind[0]] = $file
         }
-        $png = [IO.File]::ReadAllBytes($evidence.screenshot)
-        if ($png.Length -lt 8 -or [Convert]::ToHexString($png, 0, 8) -cne '89504E470D0A1A0A') { return Fail "$($step.id)'s screenshot isn't a PNG" }
+        if (-not (Test-WalkPng $evidence.screenshot)) { return Fail "$($step.id)'s screenshot isn't a PNG" }
         $xml = [IO.File]::ReadAllText($evidence.uiDump)
         $wrong = Test-WalkStepScreen -Definition $definition -Activity ([string]$step.activity) -Xml $xml
         if ($wrong) { return Fail $wrong }

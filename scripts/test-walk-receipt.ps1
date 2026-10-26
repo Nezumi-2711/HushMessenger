@@ -55,6 +55,9 @@ try {
 
     $restore = '<node index="1" text="Restore your Facebook chats" resource-id="" class="android.widget.TextView" package="com.facebook.orca" content-desc="" enabled="true" selected="false" bounds="[0,300][1080,400]" />'
     $login = '<node index="1" text="Log in" resource-id="" class="android.widget.Button" package="com.facebook.orca" content-desc="" enabled="true" selected="false" bounds="[0,300][1080,400]" />'
+    $restoreDesc = '<node index="1" text="" resource-id="" class="android.view.View" package="com.facebook.orca" content-desc="Restore your chats" enabled="true" selected="false" bounds="[0,300][1080,400]" />'
+    $loginDesc = '<node index="1" text="" resource-id="" class="android.view.View" package="com.facebook.orca" content-desc="Log in" enabled="true" selected="false" bounds="[0,300][1080,400]" />'
+    $restoreButton = '<node index="0" text="Restore now" resource-id="" class="android.widget.Button" package="com.facebook.orca" content-desc="Restore now" enabled="true" selected="false" bounds="[45,2023][1035,2158]" />'
     foreach ($badWalk in @(
             # The old count-only receipt.
             @(@{ schema = 1 }, $null, "*isn't schema 2*older receipt only counted screens*"),
@@ -87,6 +90,13 @@ try {
             @(@{}, { param($w) (Step $w 'chat').id = '' }, '*a step with no id*'),
             @(@{}, { param($w) (Step $w 'compose').opened = $false }, "*compose didn't open*"),
             @(@{}, { param($w) (Step $w 'compose').problem = 'compose wouldn''t start' }, "*compose didn't open: compose wouldn't start*"),
+            # A problem that isn't text can't be read as no problem.
+            @(@{}, { param($w) (Step $w 'compose').problem = @('compose wouldn''t start') }, "*compose's problem isn't a line of text*"),
+            @(@{}, { param($w) (Step $w 'compose').problem = $true }, "*compose's problem isn't a line of text*"),
+            @(@{}, { param($w) (Step $w 'compose').problem = $null }, "*compose's problem isn't a line of text*"),
+            # The required steps as one joined string, in a list or bare, aren't the list.
+            @(@{}, { param($w) $w.requiredSteps = @($w.requiredSteps -join ' ') }, "*required steps*aren't the ones this APK needs*"),
+            @(@{}, { param($w) $w.requiredSteps = $w.requiredSteps -join ' ' }, "*required steps*aren't the ones this APK needs*"),
             # Evidence that's missing, moved or changed.
             @(@{}, { param($w, $f) Remove-Item -LiteralPath (Join-Path $f 'steps/threads.png') }, "*threads's screenshot isn't beside the receipt*"),
             @(@{}, { param($w, $f) [IO.File]::AppendAllText((Join-Path $f 'steps/threads.xml'), ' ') }, "*threads's uiDump changed after the walk*"),
@@ -97,6 +107,13 @@ try {
             # A screen in the way of the one asked for.
             @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'threads' (Get-WalkFixtureXml 'threads' $restore) }, '*threads showed the "Restore your chats" prompt instead*'),
             @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'chat' (Get-WalkFixtureXml 'chat' $login) }, '*chat showed the login screen instead*'),
+            # The same prompts with their words only in content-desc, as Compose buttons draw them.
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'montage' (Get-WalkFixtureXml 'montage' $restoreDesc) }, '*montage showed the "Restore your chats" prompt instead*'),
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'compose' (Get-WalkFixtureXml 'compose' $loginDesc) }, '*compose showed the login screen instead*'),
+            # 584.1's restore prompt as the S22 dumped it: only its button and Close are in the tree.
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'settings' (Get-WalkFixtureXml 'settings' $restoreButton) }, '*settings showed the "Restore your chats" prompt instead*'),
+            @(@{}, { param($w) (Step $w 'marketplace').activity = 'com.facebook.orca/com.facebook.messaging.neue.nux.NeueNuxActivity' },
+                "*marketplace showed one of Messenger's first-run screens instead*"),
             @(@{}, { param($w) (Step $w 'compose').activity = 'com.facebook.orca/com.facebook.messaging.accountlogin.AccountLoginActivity' }, '*compose showed the login screen instead*'),
             # The wrong screen, or the right activity without its page.
             @(@{}, { param($w) (Step $w 'settings-app').activity = 'com.facebook.orca/.auth.StartScreenActivity' }, "*settings-app reached com.facebook.orca/.auth.StartScreenActivity, not its own*"),

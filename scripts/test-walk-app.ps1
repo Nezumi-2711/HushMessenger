@@ -39,6 +39,36 @@ try {
     Assert-WalkApp ($unproven.Count -eq 1 -and $unproven[0] -like 'proof the installed app was patched from -Bundle*') `
         'A -SkipPatch walk with no patch record of its bundle should count as a skip.'
 
+    # The steps a walk opens: every required step for a full walk, asked from a caller whose own
+    # $walkSteps would shadow the table if the functions read it by plain name (the first S22-ready walk planned nothing).
+    function Get-ShadowedPlan {
+        $walkSteps = @()
+        return [pscustomobject]@{
+            Plan = @(Get-WalkPlan -SkipSettings $false -Thread '100000000000001' -Visit $WalkDefaultScreens -AppliedPatches $WalkFixturePatches | ForEach-Object { $_.Id })
+            Required = @(Get-WalkRequiredSteps -AppliedPatches $WalkFixturePatches)
+            Chat = Get-WalkStepDefinition 'chat'
+            Local = $walkSteps.Count
+        }
+    }
+    $shadowed = Get-ShadowedPlan
+    Assert-WalkApp ($shadowed.Plan.Count -eq 12 -and ($shadowed.Plan -join ' ') -ceq ($shadowed.Required -join ' ')) `
+        "A full walk should plan every required step, in order (planned: $($shadowed.Plan -join ' '); required: $($shadowed.Required -join ' '))."
+    Assert-WalkApp ($null -ne $shadowed.Chat -and $shadowed.Local -eq 0) "A caller's own `$walkSteps should neither hide the table nor be touched."
+    $trimmed = @(Get-WalkPlan -SkipSettings $true -Thread '' -Visit @('fb-messenger://threads', 'fb-messenger://quicksnap') -AppliedPatches $WalkFixturePatches)
+    Assert-WalkApp ((@($trimmed | ForEach-Object { "$($_.Id):$($_.Kind)" }) -join ' ') -ceq 'threads:link fb-messenger://quicksnap:extra') `
+        "Skipping settings and the chat with one default link and one extra should plan just those ($(@($trimmed | ForEach-Object { $_.Id }) -join ' '))."
+    $noSheets = @(Get-WalkPlan -SkipSettings $false -Thread '1' -Visit $WalkDefaultScreens -AppliedPatches @('Hide Meta AI') | ForEach-Object { $_.Id })
+    Assert-WalkApp ($noSheets.Count -eq 10 -and $noSheets -cnotcontains 'auto-reply') 'Without the sheet patches the sheets should not be planned.'
+
+    # A screenshot counts only as a PNG.
+    $pngFile = Join-Path $work 'shot.png'
+    [IO.File]::WriteAllBytes($pngFile, [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00))
+    Assert-WalkApp (Test-WalkPng $pngFile) 'A PNG should count as a screenshot.'
+    [IO.File]::WriteAllText($pngFile, 'screencap: error')
+    Assert-WalkApp (-not (Test-WalkPng $pngFile)) 'An error message pulled as a screenshot should not count.'
+    [IO.File]::WriteAllBytes($pngFile, [byte[]]@())
+    Assert-WalkApp (-not (Test-WalkPng $pngFile) -and -not (Test-WalkPng (Join-Path $work 'none.png'))) 'An empty or missing screenshot should not count.'
+
     # Whether the APK the device ran is the one patched from the bundle.
     $patchedHash = 'c' * 64
     Assert-WalkApp ($null -eq (Get-WalkApkProblem -Installed $patchedHash -Patched $patchedHash)) 'The patched APK on the device should raise nothing.'
@@ -147,6 +177,15 @@ try {
     Assert-WalkApp ($null -eq (Find-WalkNodeCenter -Xml $sheetXml -Text 'Close')) 'A disabled button should not be tapped.'
     Assert-WalkApp ($null -eq (Find-WalkNodeCenter -Xml $sheetXml -Text 'Edit replies') -and $null -eq (Find-WalkNodeCenter -Xml '' -Text 'View log')) `
         'A missing button or an empty dump should give nothing to tap.'
+
+    # Messenger's chat restore prompt, as the S22 dumped it, and its icon-only Close.
+    $restorePrompt = '<hierarchy><node text="" class="android.widget.Button" content-desc="Close" enabled="true" bounds="[11,87][146,222]" />' +
+        '<node text="Restore now" class="android.widget.Button" content-desc="Restore now" enabled="true" bounds="[45,2023][1035,2158]" /></hierarchy>'
+    Assert-WalkApp (Test-WalkRestorePrompt $restorePrompt) 'The restore prompt should read as the restore prompt.'
+    Assert-WalkApp (-not (Test-WalkRestorePrompt (Get-WalkFixtureXml 'threads')) -and -not (Test-WalkRestorePrompt '')) 'Other screens should not read as the restore prompt.'
+    $close = Find-WalkNodeCenter -Xml $restorePrompt -Text 'Close' -Described
+    Assert-WalkApp ($close[0] -eq 78 -and $close[1] -eq 154) "Close should be found by its description ($($close -join ','))."
+    Assert-WalkApp ($null -eq (Find-WalkNodeCenter -Xml $restorePrompt -Text 'Close')) 'Close has no text, so a text lookup should not find it.'
 
     # The walk's own judgment of a step, the same one publish makes again.
     $controls = Get-WalkStepDefinition 'settings-controls'

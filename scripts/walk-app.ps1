@@ -105,6 +105,27 @@ function Resolve-WalkOutcome {
     return 'PASS'
 }
 
+function Get-WalkPlan {
+    <#
+    .SYNOPSIS
+        The steps a walk with these choices opens, in walk order: $WalkSteps less what it leaves out,
+        then any -Visit link beyond the defaults as an extra step the receipt doesn't record.
+    #>
+    param([bool]$SkipSettings, [string]$Thread, [string[]]$Visit = @(), [string[]]$AppliedPatches = @())
+    $plannedSteps = [Collections.Generic.List[object]]::new()
+    foreach ($definition in $script:WalkSteps) {
+        if ($definition.Kind -ceq 'chat' -and [string]::IsNullOrWhiteSpace($Thread)) { continue }
+        if ($definition.Kind -in 'settings', 'sheet' -and $SkipSettings) { continue }
+        if ($definition.Kind -ceq 'sheet' -and $AppliedPatches -cnotcontains $definition.Patch) { continue }
+        if ($definition.Kind -ceq 'link' -and $Visit -cnotcontains $definition.Link) { continue }
+        $plannedSteps.Add($definition)
+    }
+    foreach ($link in @($Visit | Where-Object { $WalkDefaultScreens -cnotcontains $_ })) {
+        $plannedSteps.Add([pscustomobject]@{ Id = $link; Kind = 'extra'; Link = $link; Activity = $WalkMessengerComponent; Marker = $WalkMessengerNodes })
+    }
+    return $plannedSteps.ToArray()
+}
+
 function Get-WalkSkips {
     <#
     .SYNOPSIS
@@ -191,15 +212,23 @@ function Find-WalkNodeCenter {
     <#
     .SYNOPSIS
         The center of the enabled node whose whole text is -Text in a UI dump, as @(x, y), or $null.
+        With -Described, the node whose whole content-desc is -Text (an icon button has no text).
     #>
-    param([AllowEmptyString()][string]$Xml, [Parameter(Mandatory = $true)][string]$Text)
-    $pattern = '<node\b[^>]*\btext="' + [regex]::Escape([Security.SecurityElement]::Escape($Text)) +
+    param([AllowEmptyString()][string]$Xml, [Parameter(Mandatory = $true)][string]$Text, [switch]$Described)
+    $attribute = if ($Described) { 'content-desc' } else { 'text' }
+    $pattern = '<node\b[^>]*\b' + $attribute + '="' + [regex]::Escape([Security.SecurityElement]::Escape($Text)) +
         '"[^>]*\benabled="true"[^>]*\bbounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"'
     $found = [regex]::Match([string]$Xml, $pattern)
     if (-not $found.Success) { return $null }
     $box = 1..4 | ForEach-Object { [int]$found.Groups[$_].Value }
     if ($box[2] -le $box[0] -or $box[3] -le $box[1]) { return $null }
     return @([int](($box[0] + $box[2]) / 2), [int](($box[1] + $box[3]) / 2))
+}
+
+function Test-WalkRestorePrompt([AllowEmptyString()][string]$Xml) {
+    # Whether a UI dump is Messenger's chat restore prompt, by the same pattern publish refuses a step for.
+    $prompt = @($WalkBlockingScreens | Where-Object { $_.Name -clike '*Restore your chats*' })[0]
+    return [string]$Xml -match $prompt.Pattern
 }
 
 function Get-WalkExitCode([string]$Result) {
@@ -469,34 +498,42 @@ function Invoke-WalkApp {
             return Invoke-WalkAdb @('shell', 'am', 'start', '-W', '--activity-clear-task', '-n', "$Package/$WalkSettingsActivity", '--es', $WalkPageExtra, $Page)
         }
 
-        $walkSteps = [Collections.Generic.List[object]]::new()
-        foreach ($definition in $WalkSteps) {
-            if ($definition.Kind -ceq 'chat' -and [string]::IsNullOrWhiteSpace($Thread)) { continue }
-            if ($definition.Kind -in 'settings', 'sheet' -and $SkipSettings) { continue }
-            if ($definition.Kind -ceq 'sheet' -and $applied -cnotcontains $definition.Patch) { continue }
-            if ($definition.Kind -ceq 'link' -and $Visit -cnotcontains $definition.Link) { continue }
-            $walkSteps.Add($definition)
-        }
-        # A link added with -Visit on top of the defaults is walked too, though the receipt has no step for it.
-        foreach ($link in @($Visit | Where-Object { $WalkDefaultScreens -cnotcontains $_ })) {
-            $walkSteps.Add([pscustomobject]@{ Id = $link; Kind = 'extra'; Link = $link; Activity = $WalkMessengerComponent; Marker = $WalkMessengerNodes })
+        function Start-WalkLink([string]$Uri) {
+            # Messenger's own screens first: a link sent while a Hush settings window is in front lands on that window.
+            [void](Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-n', "$Package/.auth.StartScreenActivity"))
+            Start-Sleep -Seconds 1
+            return Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', $Uri, '-p', $Package)
         }
 
+        $plannedSteps = Get-WalkPlan -SkipSettings $SkipSettings -Thread $Thread -Visit $Visit -AppliedPatches $applied
         $stepRecords = [Collections.Generic.List[object]]::new()
         $shapesSeen = @{}
-        foreach ($definition in $walkSteps) {
+        foreach ($definition in $plannedSteps) {
             $problem = $null
+            $uri = if ($definition.Kind -ceq 'chat') { "fb-messenger://user-thread/$Thread" } else { $definition.Link }
             switch ($definition.Kind) {
-                'chat' { $launch = Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', "fb-messenger://user-thread/$Thread", '-p', $Package) }
                 'settings' { $launch = Start-WalkSettings $definition.Page }
                 'sheet' {
                     $launch = Start-WalkSettings 'controls'
                     Start-Sleep -Seconds $SettleSeconds
                     if (-not (Invoke-WalkFindAndTap $definition.Button)) { $problem = "$($definition.Id): couldn't find its $($definition.Button) button on the Controls page" }
                 }
-                default { $launch = Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', $definition.Link, '-p', $Package) }
+                default { $launch = Start-WalkLink $uri }
             }
             Start-Sleep -Seconds $SettleSeconds
+            # Messenger puts its chat restore prompt in front now and then, as it does for anyone. Close it the way a
+            # person would, from a fresh dump, and open the step again. The step's own dump must then show its screen.
+            for ($closed = 0; $definition.Kind -cnotin 'settings', 'sheet' -and $closed -lt 2; $closed++) {
+                $front = Read-WalkScreen ''
+                if (-not (Test-WalkRestorePrompt $front)) { break }
+                $close = Find-WalkNodeCenter -Xml $front -Text 'Close' -Described
+                if ($null -eq $close) { break }
+                Write-Host "[walk] closing Messenger's chat restore prompt in front of $($definition.Id)"
+                [void](Invoke-WalkAdb @('shell', 'input', 'tap', [string]$close[0], [string]$close[1]))
+                Start-Sleep -Seconds 2
+                $launch = Start-WalkLink $uri
+                Start-Sleep -Seconds $SettleSeconds
+            }
             if (-not $problem -and ($launch.Stdout -join "`n") -notmatch '(?m)^Status:\s*ok\r?$') { $problem = "$($definition.Id) wouldn't start" }
             $activity = Read-WalkResumedComponent @((Invoke-WalkAdb @('shell', 'dumpsys', 'activity', 'activities')).Stdout)
             $name = $definition.Id -replace '[^\w.-]', '_'
@@ -507,7 +544,7 @@ function Invoke-WalkApp {
             [void](Invoke-WalkAdb @('shell', 'screencap', '-p', $shotOnDevice))
             $shot = Invoke-WalkAdb @('pull', $shotOnDevice, $pngFile)
             if (-not $problem) { $problem = Test-WalkStepScreen -Definition $definition -Activity $activity -Xml $xml }
-            if (-not $problem -and ($shot.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $pngFile -PathType Leaf))) { $problem = "$($definition.Id) left no screenshot" }
+            if (-not $problem -and ($shot.ExitCode -ne 0 -or -not (Test-WalkPng $pngFile))) { $problem = "$($definition.Id) left no screenshot" }
             if (-not $problem) {
                 $shape = Get-WalkScreenSignature -Xml $xml
                 if ($shapesSeen.ContainsKey($shape)) { $problem = "$($definition.Id) showed the same screen as $($shapesSeen[$shape])" }
