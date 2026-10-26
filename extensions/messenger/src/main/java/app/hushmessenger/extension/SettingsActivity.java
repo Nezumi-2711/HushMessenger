@@ -1562,6 +1562,12 @@ public final class SettingsActivity extends Activity {
         LinearLayout about = ui.panel();
         about.setPadding(ui.dp(14), ui.dp(14), ui.dp(14), ui.dp(14));
         infoRow(about, text.get("version"), BuildConfig.VERSION_NAME);
+        int art = ScreenArt.artDpi.applyAsInt(this), screen = getResources().getDisplayMetrics().densityDpi;
+        if (ScreenArt.blurry(art, screen)) {
+            TextView blurry = ui.text(text.get("screen_art_blurry", text.number(art), text.number(screen)), 13, ui.warning, false);
+            blurry.setTag("screen_art_blurry");
+            ui.add(about, blurry, 8);
+        }
         ui.rule(about, 10);
         infoRow(about, text.get("installed"), text.number(installedControls.size()));
         // Update checks sit with the version they compare against.

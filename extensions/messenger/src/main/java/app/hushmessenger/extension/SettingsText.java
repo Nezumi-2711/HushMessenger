@@ -195,6 +195,7 @@ final class SettingsText {
         ENGLISH.put("about", "About HushMessenger");
         ENGLISH.put("version", "Version");
         ENGLISH.put("installed", "Installed controls");
+        ENGLISH.put("screen_art_blurry", "This Messenger download only has icons for %1$s dpi screens, and this phone's is %2$s dpi, so they look blurry. To fix it, patch an APKMirror build marked nodpi or one made for your screen.");
         ENGLISH.put("copy", "Copy setup");
         ENGLISH.put("copy_help", "Copies app versions and control choices. No account or chat details. Nothing is sent.");
         ENGLISH.put("setup_activity_help", "Activity notes only show that a control ran. They don't prove it had a visible effect or protected your privacy.");

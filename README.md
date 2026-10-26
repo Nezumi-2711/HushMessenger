@@ -30,7 +30,7 @@ Every switch starts off, so a freshly patched Messenger behaves like stock until
 
 ## Install
 
-1. **Get the APK.** HushMessenger patches Messenger 584.1.0.61.98. Download it from [APKMirror's 584.1.0.61.98 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/). Every arm64 and armv7 build listed there works, so pick the one APKMirror suggests for your phone. Older versions, 584.0 included, need an older HushMessenger release.
+1. **Get the APK.** HushMessenger patches Messenger 584.1.0.61.98. Download it from [APKMirror's 584.1.0.61.98 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/). Every arm64 and armv7 build listed there works. Pick one for your phone's CPU, and check its DPI column too. A `nodpi` build has icons for every screen. A build made for a smaller screen (`120-160dpi`, say) still patches fine, but on a sharper phone its icons come out blurry and jagged, in the launcher and in Messenger's own settings. HushMessenger's settings say so under **About** when that happens. Older versions, 584.0 included, need an older HushMessenger release.
 2. **Add the source.** Open the link above on your phone with Morphe Manager (2.2.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **63 patches**. If it shows an older version, tap its refresh button.
 3. **Patch Messenger.** The default selection includes every switch. Four patches start unselected because they change the app itself, with no switch to undo them: **Clone install under another package name**, **Spoof package version**, **Custom new-message sound** and **Custom launcher icon**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
 4. **Keep one source.** Don't add the remote source and a local copy together, and don't mix in Messenger patches from other sources.
@@ -163,6 +163,8 @@ With **Hide read receipts** on, a chat you open stays unread on your phone, beca
 | Version | `584.1.0.61.98` |
 | Version codes, arm64-v8a | `346816935`, `346816937`, `346816939`, `346816940`, `346816951`, `346816955`, `346816969`, `346816972`, `346816973`, `346817004`, `346817005`, `346817021`, `346817022`, `346817023`, `346817024` |
 | Version codes, armeabi-v7a | `346816949`, `346816966`, `346817019` |
+| Icons for every screen density | `346816935`, `346816951`, `346817004`, `346817021` |
+| Icons for one screen density | 120-160 dpi `346816969`, `346817005`, `346817022`. 240 dpi `346816937`, `346817023`. 320 dpi `346817024`. 480 dpi `346816939`, `346816955`, `346816972` and every armeabi-v7a build. 640 dpi `346816940`, `346816973` |
 | Minimum Android version | Android 9 (API 28) |
 | APKMirror download | [584.1.0.61.98](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/) |
 

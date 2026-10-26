@@ -111,6 +111,7 @@ final class SettingsTextZhTw {
         {"about", "關於 HushMessenger"},
         {"version", "版本"},
         {"installed", "已安裝的控制項"},
+        {"screen_art_blurry", "此 Messenger 下載版本只含 %1$s dpi 螢幕用的圖示，而這支手機是 %2$s dpi，所以圖示會模糊。若要修正，請修補 APKMirror 上標示為 nodpi 或符合你螢幕的版本。"},
         {"copy", "複製設定資訊"},
         {"copy_help", "複製應用程式版本與控制項設定，不含帳號或對話資料，也不會傳送任何內容。"},
         {"setup_activity_help", "活動紀錄僅表示控制項曾執行，無法證明它實際影響了畫面或保護了你的隱私。"},
