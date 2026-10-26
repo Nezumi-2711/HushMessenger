@@ -499,8 +499,10 @@ function Invoke-WalkApp {
         }
 
         function Start-WalkLink([string]$Uri) {
-            # Messenger's own screens first: a link sent while a Hush settings window is in front lands on that window.
-            [void](Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-n', "$Package/.auth.StartScreenActivity"))
+            # A cold start for every link: a running Messenger hands the link to whatever screen it already shows (a Hush
+            # settings window, the chat, its own settings), so each step would only photograph the one before it. Crashes
+            # are read from the crash buffer, which a force-stop doesn't write to.
+            [void](Invoke-WalkAdb @('shell', 'am', 'force-stop', $Package))
             Start-Sleep -Seconds 1
             return Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', $Uri, '-p', $Package)
         }
