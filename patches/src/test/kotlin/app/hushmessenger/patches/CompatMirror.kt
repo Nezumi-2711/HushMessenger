@@ -66,6 +66,11 @@ object CompatMirror {
     fun peopleSection(method: Method, getter: String): List<String>? =
         static("peopleSection", List::class.java, String::class.java).invoke(null, listOf(method), getter) as List<String>?
 
+    /** CompatReport.legacyDrawerProblems: why Open settings from menu would stop on [classes], empty when it wouldn't. */
+    @Suppress("UNCHECKED_CAST")
+    fun legacyDrawerProblems(classes: Iterable<ClassDef>, menu: List<Method>): List<String> =
+        static("legacyDrawerProblems", List::class.java, List::class.java).invoke(null, classes.toList(), menu) as List<String>
+
     /** CompatReport.rethrowOnlyWrites: the move-exception writes that can only be rethrown. */
     @Suppress("UNCHECKED_CAST")
     fun rethrowOnlyWrites(code: List<*>, tryBlocks: List<*>): Set<Int> =
