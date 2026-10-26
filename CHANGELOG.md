@@ -19,6 +19,7 @@
 
 ### Checks
 
+- The install check now names the kind of refusal it finds and what to do about it. A Messenger signed with another key says which Android user it's installed for, so a copy hiding in Secure Folder or a work profile is easy to find. A permission held by another app (`INSTALL_FAILED_DUPLICATE_PERMISSION`) is no longer mixed up with a Messenger signer problem.
 - When another app takes the phone's screen in the middle of a walk, the failed step now says which app it was, instead of only saying it left no screen dump.
 - The whole-app walk now has to show every screen it opened, not just count them. Each required step (a chat, both settings tabs, the message log and auto reply sheets when those patches are in, and each native screen) saves a screenshot and a UI dump next to the receipt, with their checksums. Publish reads those files again and refuses the walk when a step is missing or listed twice, a file is missing or changed, a screen shows the Restore or login prompt, two steps landed on the same screen, or a step ended up somewhere it shouldn't. An older receipt that only counted screens doesn't count anymore.
 
