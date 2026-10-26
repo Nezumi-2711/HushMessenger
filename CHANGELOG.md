@@ -16,6 +16,10 @@
 - **Hide Meta AI** now reaches the search screen too. Tap the search bar and the box at the top used to say "Ask Meta AI or search" even with the switch on. Now it shows the plain search hint, like the bar on the Chats list. Search still finds people and chats the same way.
 - With **Slide chats in and out** on, a chat whose first frames come late no longer jumps partway in. That happened most on the first chat you open after starting Messenger. The chat now waits off screen until Messenger draws on time (a quarter second at most), then slides in from the edge. Going back works the same way.
 
+### Checks
+
+- The whole-app walk now has to show every screen it opened, not just count them. Each required step (a chat, both settings tabs, the message log and auto reply sheets when those patches are in, and each native screen) saves a screenshot and a UI dump next to the receipt, with their checksums. Publish reads those files again and refuses the walk when a step is missing or listed twice, a file is missing or changed, a screen shows the Restore or login prompt, two steps landed on the same screen, or a step ended up somewhere it shouldn't. An older receipt that only counted screens doesn't count anymore.
+
 ## 0.26.0 (2026-10-22)
 
 ### Reported issues

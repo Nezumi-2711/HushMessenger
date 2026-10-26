@@ -23,7 +23,8 @@
                  match scripts/profiles). A family that already passed with this bundle keeps its
                  receipt and isn't patched again.
       publish    Refuses unless -Walk names the walk-receipt.json of a full, passing whole-app
-                 walk of this exact bundle on a release phone or an emulator. Then the annotated
+                 walk of this exact bundle on a release phone or an emulator, with the screenshot
+                 and UI dump of every required step beside it. Then the annotated
                  tag, pushed on its own, and the GitHub release with the bundle, SHA256SUMS.txt
                  and the signature. Notes are the whole CHANGELOG section. Each asset is
                  downloaded back and compared.
