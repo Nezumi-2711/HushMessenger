@@ -8,6 +8,7 @@ package app.hushmessenger.patches.coexist
 import app.hushmessenger.patches.MessengerTarget
 import app.hushmessenger.patches.controls.BASE_PROFILE
 import app.hushmessenger.patches.controls.PROFILE_346816966
+import app.hushmessenger.patches.controls.SHORTCUTS_DIRECTORIES
 import app.hushmessenger.patches.controls.controlProfileFor
 import app.hushmessenger.patches.controls.hookId
 import app.hushmessenger.patches.controls.resolveShortcutsPath
@@ -451,7 +452,7 @@ internal val cloneResources = resourcePatch(description = "Move Messenger's mani
     finalize {
         val request = cloneRequest ?: return@finalize
         cloneRequest = null
-        val shortcutsPath = resolveShortcutsPath(listApkEntries("res/")) { path -> document(path).use { it } }
+        val shortcutsPath = resolveShortcutsPath(decode(SHORTCUTS_DIRECTORIES)) { path -> document(path).use { it } }
         document("AndroidManifest.xml").use { it.renameForClone(request.packageName, request.label) }
         document(shortcutsPath).use { it.retargetShortcuts(request.packageName) }
     }
