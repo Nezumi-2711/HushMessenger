@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New
+
+- **Custom launcher icon** is a new patch that starts unselected. It turns Messenger's home screen icon white on black, or black on white if you pick that style, using Messenger's own logo. Themed icons on Android 13 and up still work. Patch again without it to get the normal icon back. Refs #107.
+
 ### Changed and fixed
 
 - HushMessenger now targets Messenger 584.1.0.61.98 and takes all 18 builds APKMirror lists for it, arm64 and armv7 alike. 584.0.0.49.98 is no longer supported, so update Messenger before you patch. Each build was checked patch by patch, and Morphe Desktop applied and rebuilt every one of them. Refs #106.

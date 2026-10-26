@@ -307,6 +307,49 @@
             ]
         },
         {
+            "name": "Custom launcher icon",
+            "description": "Makes Messenger's home screen icon white on black or black on white. Pick it and its style in Morphe Manager's Expert mode. Works as soon as you patch it in, with no switch.",
+            "default": false,
+            "category": "Theme",
+            "dependencies": [],
+            "compatiblePackages": [
+                {
+                    "packageName": "com.facebook.orca",
+                    "name": "Messenger",
+                    "description": null,
+                    "apkFileType": "APK",
+                    "appIconColor": "#0084FF",
+                    "signatures": [
+                        "911d604446084ca7f4760b775bfc160fa8702441240a7258645d7a72c4312d27",
+                        "e3f9e1e0cf99d0e56a055ba65e241b3399f7cea524326b0cdd6ec1327ed0fdc1"
+                    ],
+                    "targets": [
+                        {
+                            "version": "584.1.0.61.98",
+                            "versionCodes": null,
+                            "isExperimental": false,
+                            "minSdk": 28,
+                            "description": "Stock builds 346816935, 346816937, 346816939, 346816940, 346816949, 346816951, 346816955, 346816966, 346816969, 346816972, 346816973, 346817004, 346817005, 346817019, 346817021, 346817022, 346817023 and 346817024; checked again during patching"
+                        }
+                    ]
+                }
+            ],
+            "options": [
+                {
+                    "key": "iconStyle",
+                    "title": "Icon style",
+                    "description": "White on black draws Messenger's logo in white on a black icon. Black on white draws it in black on a white one.",
+                    "required": true,
+                    "type": "kotlin.String",
+                    "default": "white-on-black",
+                    "values": {
+                        "Black on white": "black-on-white",
+                        "White on black": "white-on-black"
+                    }
+                }
+            ]
+        },
+        {
             "name": "Custom new-message sound",
             "description": "Replaces Messenger's new-message sound with an .ogg, .mp3, .m4a or .wav file (1 MB or less) that you choose. Pick it in Morphe Manager's Expert mode. Works as soon as you patch it in, with no switch.",
             "default": false,
