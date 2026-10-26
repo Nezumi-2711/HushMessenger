@@ -4,7 +4,7 @@
 
 ### Changed and fixed
 
-- HushMessenger now also patches Messenger 584.1.0.61.98, armv7 build `346816966`, alongside the arm64 584.0.0.49.98 build. Every patch was checked against it, and Morphe Desktop applied and rebuilt all of them. The arm64 584.1 builds and the 32-bit 584.0 builds still aren't supported.
+- HushMessenger now targets Messenger 584.1.0.61.98 and takes all 18 builds APKMirror lists for it, arm64 and armv7 alike. 584.0.0.49.98 is no longer supported, so update Messenger before you patch. Each build was checked patch by patch, and Morphe Desktop applied and rebuilt every one of them. Refs #106.
 - Patches are built with Morphe patcher 2.0.1, which uses less memory while patching. You'll need Morphe Manager 2.2.0 or newer, or Morphe Desktop 1.19.1.
 - Gallery selections are checked off the UI thread before returning to the chat. A canceled, revoked or timed-out selection returns no media, and Report a problem includes a fixed gallery result category without file paths. Refs #94.
 - Patching now reports when discovery stages start and finish. The Wi-Fi scan reads method signatures directly instead of formatting every reference in Messenger, which cuts that scan's time and temporary allocations. Refs #93, #99, #100.

@@ -44,7 +44,7 @@ class LegacyDrawerPatchTest {
 
     @Test fun factoryUsesFreshNativeModelsAndItsOwnCachedKeyAcrossAllFactoryMappings() {
         val profiles = controlProfiles.values.distinct()
-        // 584.1 builds the Settings icon in place; every other recorded build calls the icon's factory.
+        // 584.1's armv7 build makes the Settings icon in place; every other recorded build calls the icon's factory.
         assertEquals(setOf(false, true), profiles.map { legacyDrawerFixture(it).mapping.inlineIcon }.toSet())
         for (profile in profiles.filter { !legacyDrawerFixture(it).mapping.inlineIcon }) {
             val fixture = legacyDrawerFixture(profile)
@@ -54,9 +54,9 @@ class LegacyDrawerPatchTest {
             val code = prepared.factory.implementation!!.instructions.toList()
             val references = code.mapNotNull { (it as? ReferenceInstruction)?.reference?.toString() }
             val allocations = code.filter { it.opcode == Opcode.NEW_INSTANCE }.map { (it as ReferenceInstruction).reference.toString() }
-            val (icon, glyph) = fixture.mapping.icon to fixture.mapping.glyph
+            val glyph = fixture.mapping.glyph
             assertEquals(listOf(SETTINGS_KEY, DRAWER_METADATA, fixture.mapping.row, fixture.mapping.section), allocations)
-            assertContains(references, "$icon->A00($glyph)$icon")
+            assertContains(references, fixture.mapping.iconFactory())
             assertContains(references, "$glyph->A65:$glyph")
             assertContains(references, "Ljava/util/Collections;->emptyMap()Ljava/util/Map;")
             assertContains(references, "Ljava/util/Collections;->singletonList(Ljava/lang/Object;)Ljava/util/List;")
@@ -69,6 +69,22 @@ class LegacyDrawerPatchTest {
             assertEquals(0, prepared.refresh.sections)
             assertEquals(2, code.count { it.opcode == Opcode.INVOKE_DIRECT_RANGE })
         }
+    }
+
+    /** 584.1's 951 family calls G7K.A00, which lives on the icon's parent and returns a new G7P. */
+    @Test fun anIconFactoryOnTheParentTypeIsAcceptedButNotOneOnAnUnrelatedClass() {
+        for (profile in controlProfiles.values.distinct()) {
+            if (legacyDrawerFixture(profile).mapping.inlineIcon) continue
+            val onBase = legacyDrawerFixture(profile, iconFactoryOn = "base")
+            val references = plan(onBase, profile).factory.implementation!!.instructions
+                .mapNotNull { (it as? ReferenceInstruction)?.reference?.toString() }
+            assertContains(references, onBase.mapping.iconFactory(onBase.mapping.iconBase))
+            val unrelated = legacyDrawerFixture(profile, iconFactoryOn = "dispatcher")
+            val before = unrelated.methods.map { it.implementation?.instructions?.toList() }
+            assertFailsWith<PatchException> { plan(unrelated, profile) }
+            assertEquals(before, unrelated.methods.map { it.implementation?.instructions?.toList() })
+        }
+        assertTrue(controlProfiles.values.distinct().any { legacyDrawerFixture(it).mapping.iconFactoryOnBase })
     }
 
     @Test fun anInlineSettingsIconUsesItsOwnConstructorAndKeepsTheFactoryUnused() {
@@ -84,7 +100,7 @@ class LegacyDrawerPatchTest {
             assertEquals(listOf(fixture.mapping.icon, SETTINGS_KEY, DRAWER_METADATA, fixture.mapping.row, fixture.mapping.section), allocations)
             assertContains(references, "${fixture.mapping.icon}-><init>(${fixture.mapping.glyph}Lfixture/Color;)V")
             assertContains(references, "Lfixture/DrawerColor;->A0A:Lfixture/DrawerColor;")
-            assertFalse(references.contains("${fixture.mapping.icon}->A00(${fixture.mapping.glyph})${fixture.mapping.icon}"))
+            assertFalse(references.contains(fixture.mapping.iconFactory()))
             assertEquals(11, prepared.factory.implementation!!.registerCount)
         }
     }

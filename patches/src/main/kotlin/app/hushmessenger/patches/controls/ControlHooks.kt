@@ -423,7 +423,7 @@ internal fun validateControls(
         if (actual.size != expected.size || actual.toSet() != expected) {
             val why = screenshotViewerRefusal?.takeIf { feature == "screenshot_viewers" }?.let { " $it." } ?: ""
             throw PatchException("Messenger controls: $feature hooks differ from the tested build.$why " +
-                "Use an unmodified arm64 Messenger ${MessengerTarget.supportedApks(versions)}.")
+                "Use an unmodified Messenger ${MessengerTarget.supportedApks(versions)}.")
         }
     }
 }
@@ -512,12 +512,8 @@ internal fun MutableMethod.validatePluginGate() {
         disabled?.opcode != Opcode.CONST_4 || (disabled as? WideLiteralInstruction)?.wideLiteral != 0L ||
         enabledRegister !in 2 until implementation!!.registerCount - 1 ||
         disabledRegister !in 2 until implementation!!.registerCount - 1 || enabledRegister == disabledRegister ||
-        code.drop(3).any { instruction ->
-            val destination = (instruction as? OneRegisterInstruction)?.registerA
-            instruction.opcode.setsRegister() && destination != null &&
-                (destination == enabledRegister || destination == disabledRegister ||
-                    (instruction.opcode.setsWideRegister() &&
-                        (destination + 1 == enabledRegister || destination + 1 == disabledRegister)))
+        rethrowOnlyWrites(code, implementation!!.tryBlocks).let { rethrown ->
+            code.withIndex().drop(3).any { (index, instruction) -> index !in rethrown && instruction.writesEither(enabledRegister, disabledRegister) }
         } ||
         tail.map { it.opcode } != listOf(Opcode.IGET_OBJECT, Opcode.SGET_OBJECT, Opcode.IF_EQ, Opcode.RETURN, Opcode.RETURN) ||
         cache?.registerA != 1 || cache.registerB != first.registerB ||
@@ -529,6 +525,40 @@ internal fun MutableMethod.validatePluginGate() {
         (tail[4] as? OneRegisterInstruction)?.registerA != (disabled as? OneRegisterInstruction)?.registerA) {
         throw PatchException("Messenger controls: plugin enable/disable behavior changed in ${hookId()}. Use an unmodified supported APK.")
     }
+}
+
+/** Whether [this] writes register [first] or [second], counting the high half of a wide write. */
+private fun Instruction.writesEither(first: Int?, second: Int?): Boolean {
+    val destination = (this as? OneRegisterInstruction)?.registerA ?: return false
+    return opcode.setsRegister() && (destination == first || destination == second ||
+        (opcode.setsWideRegister() && (destination + 1 == first || destination + 1 == second)))
+}
+
+private val RETURNS = setOf(Opcode.RETURN_VOID, Opcode.RETURN, Opcode.RETURN_WIDE, Opcode.RETURN_OBJECT)
+
+/**
+ * Indexes of the move-exception writes that can only be rethrown. From the move-exception to the first throw nothing
+ * returns, branches or switches out, writes the caught register again or sits inside a try block, and that throw
+ * rethrows the caught register. 584.1's plugin gates reuse their 0 register in such a systrace handler, which never
+ * reaches the gate's returns.
+ */
+internal fun rethrowOnlyWrites(code: List<Instruction>, tryBlocks: List<com.android.tools.smali.dexlib2.iface.TryBlock<*>>): Set<Int> {
+    val addresses = code.runningFold(0) { address, instruction -> address + instruction.codeUnits }
+    return code.indices.filter { start ->
+        val caught = (code[start] as? OneRegisterInstruction)?.registerA
+        val end = (start + 1 until code.size).firstOrNull { code[it].opcode == Opcode.THROW }
+        code[start].opcode == Opcode.MOVE_EXCEPTION && caught != null && end != null &&
+            (code[end] as OneRegisterInstruction).registerA == caught &&
+            tryBlocks.none { block ->
+                block.startCodeAddress < addresses[end + 1] && addresses[start] < block.startCodeAddress + block.codeUnitCount
+            } &&
+            (start + 1 until end).all { i ->
+                val instruction = code[i]
+                val target = (instruction as? OffsetInstruction)?.let { addresses[i] + it.codeOffset }
+                instruction.opcode !in RETURNS && !instruction.writesEither(caught, null) &&
+                    (target == null || target in addresses[start + 1]..addresses[end])
+            }
+    }.toSet()
 }
 
 /** v0 must be a local register, never a parameter overwritten on the stock branch. */
@@ -698,17 +728,17 @@ internal fun MutableMethod.injectSubtabs() {
 }
 
 /**
- * How 584 reads the external-browser preference: an eight-register check that keeps the false default in v2 and
- * returns when the answer is on.
+ * How 584 reads the external-browser preference: a check that keeps the false default in v2 and returns when the
+ * answer is on. 584.0 gives it eight registers, 584.1 nine.
  */
-private const val BROWSER_PREFERENCE_REGISTERS = 8
+private val BROWSER_PREFERENCE_REGISTERS = setOf(8, 9)
 private const val BROWSER_PREFERENCE_DEFAULT = 2
 
 internal fun MutableMethod.validateBrowserPreference(): Int {
     val instructions = implementation!!.instructions
     val key = activeProfile.browserPreferenceIndex
     val getter = instructions.getOrNull(key + 1) as? FiveRegisterInstruction
-    if (AccessFlags.STATIC.isSet(accessFlags) || implementation!!.registerCount != BROWSER_PREFERENCE_REGISTERS ||
+    if (AccessFlags.STATIC.isSet(accessFlags) || implementation!!.registerCount !in BROWSER_PREFERENCE_REGISTERS ||
         parameterTypes != listOf("Landroid/net/Uri;", "Lcom/facebook/auth/usersession/FbUserSession;") ||
         returnType != "Z" || instructions.getOrNull(key)?.opcode != Opcode.SGET_OBJECT ||
         (instructions[key] as? OneRegisterInstruction)?.registerA != 0 ||
@@ -784,10 +814,6 @@ internal fun ClassDef.hasMessageIdGetter(): Boolean = messageIdGetterName.isNotE
 /** The Notifications tab's server flag ID as 584 numbers it. Meta renumbers it with each release. */
 private const val PEOPLE_SERVER_FLAG = 72344171435866083L
 
-/** The section check's register count, and the register that holds its false default. */
-private const val PEOPLE_SECTION_REGISTERS = 10
-private const val PEOPLE_SECTION_DEFAULT = 5
-
 /**
  * Where the Notifications tab loads its server flag: the method's only constant with that value, at 17, after the
  * preference branch at 12.
@@ -796,14 +822,21 @@ private fun List<Instruction>.peopleFlagIndex(): Int =
     indices.filter { i -> this[i].opcode == Opcode.CONST_WIDE && (this[i] as? WideLiteralInstruction)?.wideLiteral == PEOPLE_SERVER_FLAG }
         .singleOrNull()?.takeIf { it == 17 } ?: -1
 
+/** Whether [this] writes [register], or a wide pair that covers it. */
+private fun Instruction.setsPeopleDefault(register: Int): Boolean {
+    val target = (this as? OneRegisterInstruction)?.registerA ?: return false
+    return opcode.setsRegister() && (target == register || (opcode.setsWideRegister() && target + 1 == register))
+}
+
 /** The section check takes the suggestions logger, then its owner. */
 private fun Method.isPeopleSectionShape() = parameterTypes.map(CharSequence::toString).let { it.size == 2 && it[1] == definingClass }
 
 /**
  * The Notifications tab reads its stock "section hidden" preference into v0 and branches on it. A hidden
  * section is still shown when a server flag (v0, three instructions after its constant) is on; both branches
- * land on the final false return. The false value lives in v5 of the ten-register body, which logs a skipped
- * impression under a monitor after the server branch.
+ * land on the final false return. The false value is a local loaded at 9: v5 of a ten-register body, or v3 of the
+ * eight-register one some 584.1 arm64 builds compile. The body logs a skipped impression under a monitor after the
+ * server branch.
  */
 internal fun MutableMethod.validatePeopleSection() {
     val code = implementation!!.instructions.toList()
@@ -813,8 +846,11 @@ internal fun MutableMethod.validatePeopleSection() {
     val at = code.peopleFlagIndex()
     val flag = code.getOrNull(at)
     val last = code.lastIndex
-    val no = if (implementation!!.registerCount == PEOPLE_SECTION_REGISTERS) PEOPLE_SECTION_DEFAULT else -1
+    // A local past v0 and v1, which carry the key, the getter and the flag, and below the two parameters.
+    val no = (default as? OneRegisterInstruction)?.registerA?.takeIf { it in 2 until implementation!!.registerCount - 2 } ?: -1
+    // Both branches return it, so nothing between the getter and the server branch may overwrite it.
     if (!AccessFlags.STATIC.isSet(accessFlags) || returnType != "Z" || !isPeopleSectionShape() || no < 0 ||
+        (10..minOf(at + 3, last)).any { code[it].setsPeopleDefault(no) } ||
         flag?.opcode != Opcode.CONST_WIDE || (flag as? OneRegisterInstruction)?.registerA != 0 ||
         code.getOrNull(at + 1)?.opcode != Opcode.INVOKE_STATIC ||
         (code[at + 1] as? ReferenceInstruction)?.reference.toString() != activeProfile.peopleFlagCheck ||

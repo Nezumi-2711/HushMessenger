@@ -7,7 +7,9 @@ package app.hushmessenger.patches.coexist
 
 import app.hushmessenger.patches.MessengerTarget
 import app.hushmessenger.patches.controls.BASE_PROFILE
+import app.hushmessenger.patches.controls.PROFILE_346816951
 import app.hushmessenger.patches.controls.PROFILE_346816966
+import app.hushmessenger.patches.controls.PROFILE_346816973
 import app.hushmessenger.patches.controls.SHORTCUTS_DIRECTORIES
 import app.hushmessenger.patches.controls.controlProfileFor
 import app.hushmessenger.patches.controls.hookId
@@ -304,8 +306,12 @@ private const val CLICK = "->onClick(Landroid/view/View;)V"
 internal fun expectedCloneSitesFor(versionCode: String): Set<String> {
     validateVersionCode(versionCode)
     return when (controlProfileFor(versionCode)) {
-        BASE_PROFILE -> setOf("LX/FQg;-><init>()V", "LX/4Su;$ATTACHMENT_CHECK", "LX/3A1;$BROADCAST@1", "LX/8Zu;${NOTIFICATION}LX/B12;@229",
-            "LX/8Zu;${NOTIFICATION}LX/B12;@329", "LX/BIQ;$CLICK@81", "LX/NZa;$CLICK@168")
+        BASE_PROFILE -> setOf("LX/FQg;-><init>()V", "LX/4Tx;$ATTACHMENT_CHECK", "LX/38k;$BROADCAST@1", "LX/8bJ;${NOTIFICATION}LX/B1g;@228",
+            "LX/8bJ;${NOTIFICATION}LX/B1g;@328", "LX/IDE;$CLICK@63", "LX/DFf;$CLICK@160")
+        PROFILE_346816951 -> setOf("LX/FCX;-><init>()V", "LX/4Qs;$ATTACHMENT_CHECK", "LX/39s;$BROADCAST@1", "LX/8Y0;${NOTIFICATION}LX/Az4;@229",
+            "LX/8Y0;${NOTIFICATION}LX/Az4;@329", "LX/I4D;$CLICK@83", "LX/NmZ;$CLICK@159")
+        PROFILE_346816973 -> setOf("LX/FQh;-><init>()V", "LX/4Su;$ATTACHMENT_CHECK", "LX/3A1;$BROADCAST@1", "LX/8Zt;${NOTIFICATION}LX/B10;@229",
+            "LX/8Zt;${NOTIFICATION}LX/B10;@329", "LX/BIM;$CLICK@81", "LX/NZV;$CLICK@168")
         PROFILE_346816966 -> setOf("LX/NTU;-><init>()V", "LX/4RW;$ATTACHMENT_CHECK", "LX/G9e;$BROADCAST@1",
             "LX/8XP;->A05(Landroid/os/Bundle;)LX/AyH;@188", "LX/8XP;->A05(Landroid/os/Bundle;)LX/AyH;@288",
             "LX/Nia;$CLICK@81", "LX/Kwz;$CLICK@158")

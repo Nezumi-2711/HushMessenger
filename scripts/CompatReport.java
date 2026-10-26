@@ -396,7 +396,7 @@ public class CompatReport {
         return buildCall.getRegisterCount() == 1 && buildCall.getRegisterC() == made1;
     }
 
-    /** "584.0.0.49.98 (version code 346814894)", joined with " or " across version names. */
+    /** "584.1.0.61.98 (version code 346816935)", joined with " or " across version names. */
     static String supported(Map<String, Profile> builds) {
         var codes = new TreeMap<String, List<String>>();
         for (var build : builds.values()) codes.computeIfAbsent(build.version, v -> new ArrayList<>()).add(build.code);
@@ -516,11 +516,9 @@ public class CompatReport {
         if (first.getRegisterA() != 0 || first.getRegisterB() != registers - 1 || !Long.valueOf(1L).equals(wide(code.get(1))) ||
             !Long.valueOf(0L).equals(wide(code.get(2))) || enabled < 2 || enabled >= registers - 1 || disabled < 2 ||
             disabled >= registers - 1 || enabled == disabled) return false;
-        for (var i : code.subList(3, code.size())) {
-            if (!i.getOpcode().setsRegister() || !(i instanceof OneRegisterInstruction one)) continue;
-            int written = one.getRegisterA();
-            if (written == enabled || written == disabled ||
-                (i.getOpcode().setsWideRegister() && (written + 1 == enabled || written + 1 == disabled))) return false;
+        var rethrown = rethrowOnlyWrites(code, impl.getTryBlocks());
+        for (int k = 3; k < code.size(); k++) {
+            if (!rethrown.contains(k) && (writes(code.get(k), enabled) || writes(code.get(k), disabled))) return false;
         }
         var cache = (TwoRegisterInstruction) tail.get(0);
         var compare = (TwoRegisterInstruction) tail.get(2);
@@ -530,14 +528,52 @@ public class CompatReport {
             register(tail.get(3)) == enabled && register(tail.get(4)) == disabled;
     }
 
+    /** Whether the instruction writes the register, counting the high half of a wide write. */
+    static boolean writes(Instruction i, int register) {
+        if (!i.getOpcode().setsRegister() || !(i instanceof OneRegisterInstruction one)) return false;
+        int written = one.getRegisterA();
+        return written == register || (i.getOpcode().setsWideRegister() && written + 1 == register);
+    }
+
+    static final Set<Opcode> RETURNS = EnumSet.of(Opcode.RETURN_VOID, Opcode.RETURN, Opcode.RETURN_WIDE, Opcode.RETURN_OBJECT);
+
+    /**
+     * ControlHooks.kt's rethrowOnlyWrites: the move-exception writes that can only be rethrown. From the move-exception
+     * to the first throw nothing returns, branches or switches out, writes the caught register again or sits inside a
+     * try block, and that throw rethrows the caught register.
+     */
+    static Set<Integer> rethrowOnlyWrites(List<Instruction> code, List<? extends com.android.tools.smali.dexlib2.iface.TryBlock<?>> tryBlocks) {
+        var addresses = new int[code.size() + 1];
+        for (int k = 0; k < code.size(); k++) addresses[k + 1] = addresses[k] + code.get(k).getCodeUnits();
+        var found = new HashSet<Integer>();
+        for (int start = 0; start < code.size(); start++) {
+            if (code.get(start).getOpcode() != Opcode.MOVE_EXCEPTION) continue;
+            int caught = register(code.get(start)), end = -1;
+            for (int k = start + 1; k < code.size() && end < 0; k++) if (code.get(k).getOpcode() == Opcode.THROW) end = k;
+            if (end < 0 || register(code.get(end)) != caught) continue;
+            int from = addresses[start], to = addresses[end + 1];
+            if (tryBlocks.stream().anyMatch(b -> b.getStartCodeAddress() < to && from < b.getStartCodeAddress() + b.getCodeUnitCount())) continue;
+            boolean closed = true;
+            for (int k = start + 1; k < end && closed; k++) {
+                var i = code.get(k);
+                Integer target = i instanceof OffsetInstruction o ? addresses[k] + o.getCodeOffset() : null;
+                closed = !RETURNS.contains(i.getOpcode()) && !writes(i, caught) &&
+                    (target == null || (target >= addresses[start + 1] && target <= addresses[end]));
+            }
+            if (closed) found.add(start);
+        }
+        return found;
+    }
+
     record PreferenceRead(int index, String key, String getter) {}
 
     /** The check's register count and false-default register; it returns when the answer is on. As in ControlHooks.kt. */
-    static final int BROWSER_PREFERENCE_REGISTERS = 8, BROWSER_PREFERENCE_DEFAULT = 2;
+    static final Set<Integer> BROWSER_PREFERENCE_REGISTERS = Set.of(8, 9);
+    static final int BROWSER_PREFERENCE_DEFAULT = 2;
 
     /** The one boolean preference read the external-browser check branches on. */
     static PreferenceRead browserPreferenceRead(List<Method> browser) {
-        if (browser.size() != 1 || browser.get(0).getImplementation().getRegisterCount() != BROWSER_PREFERENCE_REGISTERS) return null;
+        if (browser.size() != 1 || !BROWSER_PREFERENCE_REGISTERS.contains(browser.get(0).getImplementation().getRegisterCount())) return null;
         var code = instructions(browser.get(0));
         PreferenceRead read = null;
         for (int k = 0; k + 3 < code.size(); k++) {
@@ -555,14 +591,14 @@ public class CompatReport {
         return read;
     }
 
-    /** The section check's register count and its false-default register, as in ControlHooks.kt. */
-    static final int PEOPLE_SECTION_REGISTERS = 10, PEOPLE_SECTION_DEFAULT = 5;
-
     /** The Notifications tab's preference key and its server-override check, checked as validatePeopleSection does. */
     static List<String> peopleSection(List<Method> jewel, String getter) {
         if (jewel.size() != 1 || jewel.get(0).getImplementation() == null) return null;
         var code = instructions(jewel.get(0));
-        Integer no = jewel.get(0).getImplementation().getRegisterCount() == PEOPLE_SECTION_REGISTERS ? PEOPLE_SECTION_DEFAULT : null;
+        // The false default is a local loaded at 9, past v0 and v1 and below the two parameters, as in ControlHooks.kt.
+        int registers = jewel.get(0).getImplementation().getRegisterCount();
+        Integer no = code.size() > 9 && code.get(9).getOpcode() == Opcode.CONST_4 && register(code.get(9)) >= 2 &&
+            register(code.get(9)) < registers - 2 ? Integer.valueOf(register(code.get(9))) : null;
         // The server flag loads at 17.
         var flags = new ArrayList<Integer>();
         for (int i = 0; i < code.size(); i++) {
@@ -571,6 +607,12 @@ public class CompatReport {
         }
         if (no == null || flags.size() != 1 || flags.get(0) != 17) return null;
         int at = flags.get(0), last = code.size() - 1;
+        // Both branches return the false default, so nothing between the getter and the server branch may overwrite it.
+        for (int i = 10; i <= Math.min(at + 3, last); i++) {
+            var opcode = code.get(i).getOpcode();
+            int target = register(code.get(i));
+            if (opcode.setsRegister() && (target == no || (opcode.setsWideRegister() && target + 1 == no))) return null;
+        }
         // Both branches land on the final return of the false default, after the "hidden" true return.
         if (code.size() < at + 7 || register(code.get(at)) != 0 ||
             code.get(at + 1).getOpcode() != Opcode.INVOKE_STATIC ||
@@ -1758,7 +1800,7 @@ public class CompatReport {
     static final int GENERATE_MENU_LABEL_5841 = 0x7f141bd5;
     // The viewer's onCreateDialog override, A1K in 584
     static final String EPHEMERAL_DIALOG = "A1K";
-    static final java.util.Set<String> EPHEMERAL_DIALOGS = Set.of(EPHEMERAL_DIALOG, "A1O");
+    static final java.util.Set<String> EPHEMERAL_DIALOGS = Set.of(EPHEMERAL_DIALOG, "A1O", "A1I", "A1J");
 
     static int mediaTarget(List<Instruction> code, int at) {
         if (!(code.get(at) instanceof OffsetInstruction jump)) return -1;
@@ -1830,9 +1872,15 @@ public class CompatReport {
             if (valid) for (int i = 10; i <= 21; i++) if (mediaWrites(c.get(i), 1)) valid = false;
         } else if (method.getDefiningClass().equals(QUICKSNAP_VIEWER) && method.getName().equals("onCreateView") &&
                 p.equals(List.of("Landroid/view/LayoutInflater;", "Landroid/view/ViewGroup;", "Landroid/os/Bundle;")) && method.getReturnType().equals("Landroid/view/View;")) {
-            sites = List.of(32);
-            valid = impl.getRegisterCount() == 23 && Set.of(446, 451).contains(c.size()) && mediaResult(c, 26, "Landroid/app/Dialog;", 0) &&
-                mediaNull(c, 27, 0, 33) && mediaWindow(c, 28, "Landroid/app/Dialog;", 0, 1, 33) && mediaLiteral(c, 31, 0) && mediaCall(c, 32, ADD_FLAGS, 1, 0);
+            // The one addFlags call is the site, as in NativeMediaControls.kt
+            var adds = new ArrayList<Integer>();
+            for (int i = 0; i < c.size(); i++) if (ADD_FLAGS.equals(ref(c.get(i)))) adds.add(i);
+            if (adds.size() != 1 || adds.getFirst() < 6) return List.of();
+            int site = adds.getFirst();
+            sites = List.of(site);
+            valid = impl.getRegisterCount() == 23 && mediaResult(c, site - 6, "Landroid/app/Dialog;", 0) &&
+                mediaNull(c, site - 5, 0, site + 1) && mediaWindow(c, site - 4, "Landroid/app/Dialog;", 0, 1, site + 1) &&
+                mediaLiteral(c, site - 1, 0) && mediaCall(c, site, ADD_FLAGS, 1, 0);
         } else return List.of();
         var setters = new ArrayList<Integer>();
         for (int i = 0; i < c.size(); i++) if (ref(c.get(i)) != null && Set.of(SET_FLAGS, ADD_FLAGS, WINDOW + "->clearFlags(I)V").contains(ref(c.get(i)))) setters.add(i);
@@ -1851,8 +1899,10 @@ public class CompatReport {
         String render() { return type + "->render(" + scope + ")" + component; }
     }
     static final List<AiCell> AI_CELLS = List.of(
+        new AiCell("LX/CSp;", "LX/1Nj;", "LX/2DF;", "LX/1J7;", GENERATE_AI_LABEL, 4, 107, GENERATE_MENU_LABEL, 1),
         new AiCell("LX/CVr;", "LX/1Nj;", "LX/2DF;", "LX/1J7;", GENERATE_AI_LABEL, 4, 107, GENERATE_MENU_LABEL, 1),
-        new AiCell("LX/CPH;", "LX/1O9;", "LX/2Df;", "LX/1JX;", GENERATE_AI_LABEL, 4, 109, GENERATE_MENU_LABEL_5841, 1));
+        new AiCell("LX/CPH;", "LX/1O9;", "LX/2Df;", "LX/1JX;", GENERATE_AI_LABEL, 4, 109, GENERATE_MENU_LABEL_5841, 1),
+        new AiCell("LX/CUN;", "LX/1NU;", "LX/2Ce;", "LX/1Iz;", GENERATE_AI_LABEL, 4, 109, GENERATE_MENU_LABEL, 1));
     static List<Method> findAiStickerCells(List<ClassDef> classes) {
         var result = new ArrayList<Method>();
         for (var shape : AI_CELLS) {
@@ -2157,13 +2207,21 @@ public class CompatReport {
         require(instructions(folderGetter).stream().anyMatch(i->i.getOpcode()==Opcode.SGET_OBJECT && Objects.toString(ref(i)).equals(folders.get("INBOX").toString())),"default folder is not INBOX");
         var folderOverride=single(methods(main).stream().filter(m->hasString(m,"folderName")).toList(),"main typed folder override");
         var overrideCode=instructions(folderOverride);
-        require(hasString(folderOverride,"InboxLoaderCoordinator.setFolderAndFilter") && overrideCode.size()==42 && overrideCode.get(0).getOpcode()==Opcode.INVOKE_STATIC && overrideCode.get(1).getOpcode()==Opcode.MOVE_RESULT_OBJECT && folderOverride.getParameterTypes().size()==2,"main folder switch changed");
+        // Some 584.1 arm64 builds drop a flag store and move the config's apply into a static helper: 38 instructions, not 42.
+        require(hasString(folderOverride,"InboxLoaderCoordinator.setFolderAndFilter") && (overrideCode.size()==42 || overrideCode.size()==38) && overrideCode.get(0).getOpcode()==Opcode.INVOKE_STATIC && overrideCode.get(1).getOpcode()==Opcode.MOVE_RESULT_OBJECT && folderOverride.getParameterTypes().size()==2,"main folder switch changed");
         String scopeType=folderOverride.getParameterTypes().get(1).toString();
         var scopeLabels=enumFieldNames(scopeType); var folderLabels=enumFieldNames(folderType);
         var pending=(FieldReference)ref(overrideCode.get(4)); var requests=(FieldReference)ref(overrideCode.get(2));
         require(scopeLabels.get(requests.getName()).equals("MESSAGE_REQUESTS") && folderLabels.get(pending.getName()).equals("PENDING"),"pending scope label changed");
-        require(overrideCode.get(3).getOpcode()==Opcode.IF_NE && branch(folderOverride,3)==13 && Objects.toString(ref(overrideCode.get(7))).equals(pending.toString()) && Objects.toString(ref(overrideCode.get(13))).equals(folders.get("INBOX").toString()),"main folder branches changed");
-        require(overrideCode.get(25).getOpcode()==Opcode.IPUT_OBJECT && ((TwoRegisterInstruction)overrideCode.get(25)).getRegisterA()==5 && overrideCode.get(28).getOpcode()==Opcode.IPUT_OBJECT && ((TwoRegisterInstruction)overrideCode.get(28)).getRegisterA()==4,"folder/filter config connection changed");
+        int inboxAt=branch(folderOverride,3), folderRegister=register(overrideCode.get(4));
+        require(overrideCode.get(3).getOpcode()==Opcode.IF_NE && Objects.toString(ref(overrideCode.get(7))).equals(pending.toString()) && Objects.toString(ref(overrideCode.get(inboxAt))).equals(folders.get("INBOX").toString()),"main folder branches changed");
+        // The switch's own scope parameter and the chosen folder are the two values stored into the new config.
+        java.util.function.Function<String,TwoRegisterInstruction> stores=type->(TwoRegisterInstruction)overrideCode.get(single(java.util.stream.IntStream.range(0,overrideCode.size()).boxed()
+            .filter(at->overrideCode.get(at).getOpcode()==Opcode.IPUT_OBJECT && ref(overrideCode.get(at)) instanceof FieldReference f && f.getType().equals(type)).toList(),"config store "+type));
+        var scopeStore=stores.apply(scopeType); var folderStore=stores.apply(folderType);
+        require(List.of(4,7,inboxAt).stream().allMatch(at->register(overrideCode.get(at))==folderRegister) &&
+            scopeStore.getRegisterA()==folderOverride.getImplementation().getRegisterCount()-1 && folderStore.getRegisterA()==folderRegister &&
+            scopeStore.getRegisterB()==folderStore.getRegisterB(),"folder/filter config connection changed");
         for(var m:main.getMethods()) {
             require(m.equals(folderOverride) || !hasString(m,"folderName"),"other main config folder override");
             require(calls(m).stream().noneMatch(c->c.getDefiningClass().equals(loaderCtor.getDefiningClass()) && c.getParameterTypes().contains(folderType)),"main renderer selects another folder");
@@ -3914,7 +3972,11 @@ public class CompatReport {
     static List<Method> shareCopies(List<ClassDef> classes) {
         var copies = new ArrayList<Method>();
         for (var cls : classes) for (var method : cls.getMethods()) {
-            if (!"call".equals(method.getName()) || !method.getParameterTypes().isEmpty() || !"Ljava/lang/Object;".equals(method.getReturnType())) continue;
+            boolean isStatic = AccessFlags.STATIC.isSet(method.getAccessFlags());
+            boolean call = "call".equals(method.getName()) && method.getParameterTypes().isEmpty() && !isStatic;
+            // Some 584.1 arm64 builds move call()'s body into a static method that takes its own class.
+            boolean outlined = isStatic && method.getParameterTypes().stream().map(Object::toString).toList().equals(List.of(cls.getType()));
+            if (!(call || outlined) || !"Ljava/lang/Object;".equals(method.getReturnType())) continue;
             var code = instructions(method);
             if (code.stream().noneMatch(i -> i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr &&
                 "orca_share_media".equals(sr.getString()))) continue;
@@ -5872,7 +5934,12 @@ public class CompatReport {
         if (tool == null) return null;
         try {
             ProcessBuilder pb;
-            if (tool.endsWith(".bat")) {
+            // apksigner.bat through cmd splits an APKMirror name like "(213,240dpi)" at the comma, so run its jar.
+            File jar = new File(new File(tool).getParentFile(), "lib/apksigner.jar");
+            if (tool.endsWith(".bat") && jar.isFile()) {
+                pb = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-jar",
+                    jar.getAbsolutePath(), "verify", "--print-certs", apk.getAbsolutePath());
+            } else if (tool.endsWith(".bat")) {
                 pb = new ProcessBuilder("cmd", "/c", tool, "verify", "--print-certs", apk.getAbsolutePath());
             } else {
                 pb = new ProcessBuilder(tool, "verify", "--print-certs", apk.getAbsolutePath());
@@ -6445,7 +6512,7 @@ public class CompatReport {
         System.out.println();
         if (anyFail) {
             System.out.println("RESULT: FAIL - one or more patches are incompatible with this APK.");
-            if (!builds.isEmpty()) System.out.println("Use an unmodified arm64 Messenger " + supported(builds) + ".");
+            if (!builds.isEmpty()) System.out.println("Use an unmodified Messenger " + supported(builds) + ".");
             System.exit(1);
         } else {
             System.out.println("RESULT: PASS - all " + (PATCHES.size() + 3) + " patches are compatible.");

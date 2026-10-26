@@ -16,8 +16,10 @@ import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.reference.TypeReference
+import com.android.tools.smali.dexlib2.immutable.ImmutableExceptionHandler
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethodImplementation
+import com.android.tools.smali.dexlib2.immutable.ImmutableTryBlock
 import java.io.ByteArrayInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.test.*
@@ -246,6 +248,43 @@ class ExpandedControlsTest {
             body.replace("iget-object v1, p0, Lfixture/Gate;->cache", "iget-object v1, p0, Lfixture/Gate;->other"),
             body.replace("iget-object v0, p0", "iget-object v2, p0"),
         )) assertEquals(false to false, takenBy(changed), changed)
+
+        // 584.1 reuses the false register in a systrace handler that only rethrows; one that can reach a return can't.
+        val handled = body.replace("iget-object v1", "goto :check\nmove-exception v5\nthrow v5\n:check\niget-object v1")
+        assertEquals(true to true, takenBy(handled))
+        for (changed in listOf(
+            handled.replace("throw v5", "throw v1"),
+            handled.replace("throw v5", "return v5"),
+            handled.replace("throw v5", "const/4 v5, 0x1\nthrow v5"),
+            handled.replace("throw v5", "if-eqz v5, :disabled\nthrow v5"),
+        )) assertEquals(false to false, takenBy(changed), changed)
+    }
+
+    @Test fun rethrowOnlyHandlersAreTheOnlyWritesTheGateCheckSkips() {
+        val handler = """
+            const/4 v1, 0x0
+            return v1
+            :handler
+            move-exception v5
+            invoke-static {}, LX/0Ap;->A00()V
+            throw v5
+        """.trimIndent()
+        fun skipped(text: String, tries: Boolean = false): Pair<Set<Int>, Set<Int>> {
+            val code = method("Lfixture/Gate;", "gate", 8, "Z", text).implementation!!.instructions.toList()
+            val start = code.take(2).sumOf { it.codeUnits }
+            val blocks = if (tries) listOf(ImmutableTryBlock(start, code[2].codeUnits + code[3].codeUnits,
+                listOf(ImmutableExceptionHandler(null, 0)))) else emptyList()
+            return rethrowOnlyWrites(code, blocks) to CompatMirror.rethrowOnlyWrites(code, blocks)
+        }
+        assertEquals(setOf(2) to setOf(2), skipped(handler))
+        for (changed in listOf(
+            handler.replace("throw v5", "throw v1"),
+            handler.replace("throw v5", "return v5\nthrow v5"),
+            handler.replace("invoke-static {}, LX/0Ap;->A00()V", "if-eqz v5, :handler"),
+            handler.replace("const/4 v1", ":out\nconst/4 v1").replace("invoke-static {}, LX/0Ap;->A00()V", "goto :out"),
+            handler.replace("invoke-static {}, LX/0Ap;->A00()V", "const/4 v5, 0x0"),
+        )) assertEquals(emptySet<Int>() to emptySet(), skipped(changed), changed)
+        assertEquals(emptySet<Int>() to emptySet(), skipped(handler, tries = true), "a handler inside a try block can be caught again")
     }
 
     // Modelled on the drawer case of Messenger's merged click listener, where the row lands in a high register.

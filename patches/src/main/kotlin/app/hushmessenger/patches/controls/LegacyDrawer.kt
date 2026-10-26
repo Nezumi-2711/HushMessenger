@@ -338,7 +338,8 @@ internal fun prepareLegacyDrawer(
             ?: drawerChanged("settings icon construction changed")
         val iconCtor = iconCode[iconBuild].drawerRef() as? MethodReference ?: drawerChanged("settings icon constructor changed")
         val iconArgs = iconCode[iconBuild].drawerArgs()
-        if (icon.definingClass != icon.returnType || iconCtor.definingClass != icon.returnType || iconCtor.name != "<init>" ||
+        // 584.1's second arm64 family keeps the factory on the icon's parent type (G7K.A00 returns a new G7P).
+        if (!models.subtype(icon.returnType, icon.definingClass) || iconCtor.definingClass != icon.returnType || iconCtor.name != "<init>" ||
             iconCtor.drawerParams().size != 2 || iconCtor.drawerParams()[0] != glyph.type || iconArgs.size != 3 ||
             iconArgs[1] != iconFactory.implementation!!.registerCount - 1 ||
             iconCode.size != 4 || iconCode[0].opcode != Opcode.SGET_OBJECT || iconCode[1].opcode != Opcode.NEW_INSTANCE ||
