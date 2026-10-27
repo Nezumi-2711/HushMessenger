@@ -6,25 +6,27 @@
 
 $WalkFixturePatches = [string[]]@('Settings in Messenger', 'Keep a message log', 'Auto reply', 'Hide Meta AI')
 
-function Get-WalkFixtureActivity([string]$Id) {
-    $definition = Get-WalkStepDefinition $Id
-    switch ($definition.Kind) {
-        'chat' { return 'com.facebook.orca/com.facebook.messaging.msys.thread.MsysThreadViewActivity' }
-        { $_ -in 'settings', 'sheet' } { return 'com.facebook.orca/app.hushmessenger.extension.SettingsActivity' }
-        default { return 'com.facebook.orca/.auth.StartScreenActivity' }
-    }
+# What each step's screen read as on the S22: the resumed activity and the node its marker matches.
+$WalkFixtureScreens = @{
+    'chat' = @('com.facebook.orca/com.facebook.messaging.msys.thread.fragment.MsysThreadViewActivity', '', 'Matt Parker, Thread details', 'android.widget.Button')
+    'inbox' = @('com.facebook.orca/.auth.StartScreenActivity', '', 'New message', 'android.widget.Button')
+    'settings-controls' = @('com.facebook.orca/app.hushmessenger.extension.SettingsActivity', 'Controls', '', 'android.widget.Button')
+    'settings-app' = @('com.facebook.orca/app.hushmessenger.extension.SettingsActivity', 'App', '', 'android.widget.Button')
+    'message-log' = @('com.facebook.orca/app.hushmessenger.extension.SettingsActivity', 'Message log', '', 'android.widget.TextView')
+    'auto-reply' = @('com.facebook.orca/app.hushmessenger.extension.SettingsActivity', 'Auto replies', '', 'android.widget.TextView')
+    'settings' = @('com.facebook.orca/com.facebook.messaging.settings.mesettings.surface.MessengerMePreferenceActivity', 'Dark mode', '', 'android.widget.TextView')
+    'story-settings' = @('com.facebook.orca/com.facebook.messaging.montage.prefs.MontagePreferenceActivity', 'Who can see your stories?', '', 'android.widget.TextView')
+    'contact-settings' = @('com.facebook.orca/com.facebook.messaging.contacts.settings.mesettings.NeueContactsPreferenceActivity', 'Manage contacts', '', 'android.widget.TextView')
 }
 
+function Get-WalkFixtureActivity([string]$Id) { return $WalkFixtureScreens[$Id][0] }
+
 function Get-WalkFixtureXml {
-    <# A UI dump for step -Id: its marker, plus a node only this step has, so no two steps share a screen. #>
+    <# A UI dump for step -Id: its marker, inside a root only this step has, so no two steps share a screen. #>
     param([Parameter(Mandatory = $true)][string]$Id, [string]$Extra = '')
-    $marker = switch ($Id) {
-        'settings-controls' { '<node index="0" text="Controls" resource-id="" class="android.widget.Button" package="com.facebook.orca" content-desc="" enabled="true" selected="true" bounds="[0,100][540,200]" />' }
-        'settings-app' { '<node index="0" text="App" resource-id="" class="android.widget.Button" package="com.facebook.orca" content-desc="" enabled="true" selected="true" bounds="[540,100][1080,200]" />' }
-        'message-log' { '<node index="0" text="Message log" resource-id="" class="android.widget.TextView" package="com.facebook.orca" content-desc="" enabled="true" selected="false" bounds="[0,100][1080,200]" />' }
-        'auto-reply' { '<node index="0" text="Auto replies" resource-id="" class="android.widget.TextView" package="com.facebook.orca" content-desc="" enabled="true" selected="false" bounds="[0,100][1080,200]" />' }
-        default { '<node index="0" text="" resource-id="" class="android.view.ViewGroup" package="com.facebook.orca" content-desc="Chats" enabled="true" selected="false" bounds="[0,100][1080,200]" />' }
-    }
+    $screen = $WalkFixtureScreens[$Id]
+    $selected = if ($Id -in 'settings-controls', 'settings-app') { 'true' } else { 'false' }
+    $marker = "<node index=""0"" text=""$($screen[1])"" resource-id="""" class=""$($screen[3])"" package=""com.facebook.orca"" content-desc=""$($screen[2])"" enabled=""true"" selected=""$selected"" bounds=""[0,100][1080,200]"" />"
     return "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation=""0""><node index=""0"" text="""" resource-id=""fixture:id/$Id"" class=""android.widget.FrameLayout"" package=""com.facebook.orca"" content-desc="""" enabled=""true"" selected=""false"" bounds=""[0,0][1080,2340]"">$marker$Extra</node></hierarchy>"
 }
 

@@ -24,8 +24,8 @@
     screenshot and UI dump go to steps/<id>.png and steps/<id>.xml beside the receipt, which hashes
     them, and publish reads them again.
 
-    Screens open by their fb-messenger:// links (am start -W -a VIEW -d ...), and the chat by
-    -Thread, the user id of a chat on the signed-in account. The chat goes first: opening it by its
+    Screens open by their fb-messenger:// links (am start -W -a VIEW -d ...), the inbox through
+    its launcher activity, and the chat by -Thread, the user id of a chat on the signed-in account. The chat goes first: opening it by its
     link gets past the "Restore your Facebook chats" prompt Messenger shows after an update. The
     settings pages open through SettingsActivity with the page extra the restart button uses.
 
@@ -82,8 +82,8 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'walk-receipt.ps1')
 
-# The screens Hush patches, by link: the inbox, Active now, stories, a new message, Messenger's own
-# settings (where the HushMessenger row sits), the sticker store and Marketplace.
+# The Messenger screens that open by link: its own settings (where the HushMessenger row sits) and its
+# story and contact settings. The inbox opens through its launcher activity, the chat by -Thread.
 $WalkDefaultScreens = [string[]]@($WalkSteps | Where-Object { $_.Kind -ceq 'link' } | ForEach-Object { $_.Link })
 $WalkSettingsActivity = 'app.hushmessenger.extension.SettingsActivity'
 $WalkPageExtra = 'app.hushmessenger.page'
@@ -510,6 +510,13 @@ function Invoke-WalkApp {
             Start-Sleep -Seconds 1
             return Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-a', 'android.intent.action.VIEW', '-d', $Uri, '-p', $Package)
         }
+        function Start-WalkMessenger($Definition, [string]$Uri) {
+            # The inbox has no link 584.1 routes from outside, so it gets the same cold start through its launcher activity.
+            if ($Definition.Kind -cne 'inbox') { return Start-WalkLink $Uri }
+            [void](Invoke-WalkAdb @('shell', 'am', 'force-stop', $Package))
+            Start-Sleep -Seconds 1
+            return Invoke-WalkAdb @('shell', 'am', 'start', '-W', '-n', "$Package/$WalkInboxActivity")
+        }
 
         $plannedSteps = Get-WalkPlan -SkipSettings $SkipSettings -Thread $Thread -Visit $Visit -AppliedPatches $applied
         $stepRecords = [Collections.Generic.List[object]]::new()
@@ -524,7 +531,7 @@ function Invoke-WalkApp {
                     Start-Sleep -Seconds $SettleSeconds
                     if (-not (Invoke-WalkFindAndTap $definition.Button)) { $problem = "$($definition.Id): couldn't find its $($definition.Button) button on the Controls page" }
                 }
-                default { $launch = Start-WalkLink $uri }
+                default { $launch = Start-WalkMessenger $definition $uri }
             }
             Start-Sleep -Seconds $SettleSeconds
             # Messenger puts its chat restore prompt in front now and then, as it does for anyone. Close it the way a
@@ -537,7 +544,7 @@ function Invoke-WalkApp {
                 Write-Host "[walk] closing Messenger's chat restore prompt in front of $($definition.Id)"
                 [void](Invoke-WalkAdb @('shell', 'input', 'tap', [string]$close[0], [string]$close[1]))
                 Start-Sleep -Seconds 2
-                $launch = Start-WalkLink $uri
+                $launch = Start-WalkMessenger $definition $uri
                 Start-Sleep -Seconds $SettleSeconds
             }
             if (-not $problem -and ($launch.Stdout -join "`n") -notmatch '(?m)^Status:\s*ok\r?$') { $problem = "$($definition.Id) wouldn't start" }

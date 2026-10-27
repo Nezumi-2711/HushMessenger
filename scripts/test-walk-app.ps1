@@ -19,7 +19,7 @@ $work = Join-Path ([IO.Path]::GetTempPath()) ('hushmessenger-walk-app-' + [guid]
 try {
     # The result a walk earns.
     Assert-WalkApp ((Resolve-WalkOutcome -Screens 12 -Crashes 1 -Problems @() -Full $true) -ceq 'FAIL') 'A crash during a full walk should earn FAIL.'
-    Assert-WalkApp ((Resolve-WalkOutcome -Screens 12 -Crashes 0 -Problems @('fb-messenger://montage would not open') -Full $true) -ceq 'FAIL') `
+    Assert-WalkApp ((Resolve-WalkOutcome -Screens 12 -Crashes 0 -Problems @('fb-messenger://settings/montage would not open') -Full $true) -ceq 'FAIL') `
         'A screen that would not open should earn FAIL.'
     Assert-WalkApp ((Resolve-WalkOutcome -Screens 9 -Crashes 0 -Problems @() -Full $false) -ceq 'PARTIAL') 'A skipped screen should earn PARTIAL.'
     Assert-WalkApp ((Resolve-WalkOutcome -Screens 0 -Crashes 0 -Problems @() -Full $true) -ceq 'PARTIAL') 'A walk that opened no screen should earn PARTIAL.'
@@ -29,8 +29,8 @@ try {
     # What counts as skipped: the settings pages, the chat, or any default screen.
     Assert-WalkApp (@(Get-WalkSkips -SkipSettings $false -Thread '100000000000001' -Visit $WalkDefaultScreens).Count -eq 0) `
         'The default walk with a chat should leave nothing out.'
-    $leftOut = @(Get-WalkSkips -SkipSettings $false -Thread '100000000000001' -Visit @($WalkDefaultScreens | Where-Object { $_ -ne 'fb-messenger://montage' }))
-    Assert-WalkApp ($leftOut.Count -eq 1 -and $leftOut[0] -ceq 'fb-messenger://montage') 'Dropping a default screen should count as a skip.'
+    $leftOut = @(Get-WalkSkips -SkipSettings $false -Thread '100000000000001' -Visit @($WalkDefaultScreens | Where-Object { $_ -ne 'fb-messenger://settings/montage' }))
+    Assert-WalkApp ($leftOut.Count -eq 1 -and $leftOut[0] -ceq 'fb-messenger://settings/montage') 'Dropping a default screen should count as a skip.'
     Assert-WalkApp (@(Get-WalkSkips -SkipSettings $false -Thread '' -Visit $WalkDefaultScreens) -contains 'a chat (no -Thread)') 'A walk with no chat should count as a skip.'
     Assert-WalkApp (@(Get-WalkSkips -SkipSettings $true -Thread '1' -Visit $WalkDefaultScreens) -contains 'the Hush settings pages') 'Skipping settings should count as a skip.'
     Assert-WalkApp (@(Get-WalkSkips -SkipSettings $false -Thread '1' -Visit ($WalkDefaultScreens + 'fb-messenger://quicksnap')).Count -eq 0) `
@@ -51,14 +51,14 @@ try {
         }
     }
     $shadowed = Get-ShadowedPlan
-    Assert-WalkApp ($shadowed.Plan.Count -eq 12 -and ($shadowed.Plan -join ' ') -ceq ($shadowed.Required -join ' ')) `
+    Assert-WalkApp ($shadowed.Plan.Count -eq 9 -and ($shadowed.Plan -join ' ') -ceq ($shadowed.Required -join ' ')) `
         "A full walk should plan every required step, in order (planned: $($shadowed.Plan -join ' '); required: $($shadowed.Required -join ' '))."
     Assert-WalkApp ($null -ne $shadowed.Chat -and $shadowed.Local -eq 0) "A caller's own `$walkSteps should neither hide the table nor be touched."
-    $trimmed = @(Get-WalkPlan -SkipSettings $true -Thread '' -Visit @('fb-messenger://threads', 'fb-messenger://quicksnap') -AppliedPatches $WalkFixturePatches)
-    Assert-WalkApp ((@($trimmed | ForEach-Object { "$($_.Id):$($_.Kind)" }) -join ' ') -ceq 'threads:link fb-messenger://quicksnap:extra') `
-        "Skipping settings and the chat with one default link and one extra should plan just those ($(@($trimmed | ForEach-Object { $_.Id }) -join ' '))."
+    $trimmed = @(Get-WalkPlan -SkipSettings $true -Thread '' -Visit @('fb-messenger://settings/montage', 'fb-messenger://quicksnap') -AppliedPatches $WalkFixturePatches)
+    Assert-WalkApp ((@($trimmed | ForEach-Object { "$($_.Id):$($_.Kind)" }) -join ' ') -ceq 'inbox:inbox story-settings:link fb-messenger://quicksnap:extra') `
+        "Skipping settings and the chat with one default link and one extra should plan the inbox and just those ($(@($trimmed | ForEach-Object { $_.Id }) -join ' '))."
     $noSheets = @(Get-WalkPlan -SkipSettings $false -Thread '1' -Visit $WalkDefaultScreens -AppliedPatches @('Hide Meta AI') | ForEach-Object { $_.Id })
-    Assert-WalkApp ($noSheets.Count -eq 10 -and $noSheets -cnotcontains 'auto-reply') 'Without the sheet patches the sheets should not be planned.'
+    Assert-WalkApp ($noSheets.Count -eq 7 -and $noSheets -cnotcontains 'auto-reply') 'Without the sheet patches the sheets should not be planned.'
     # Settings sections start closed, so each sheet step opens the one its button sits in, by the id SettingsActivity uses.
     $settingsSource = Get-Content -Raw (Join-Path $PSScriptRoot '..\extensions\messenger\src\main\java\app\hushmessenger\extension\SettingsActivity.java')
     Assert-WalkApp ($settingsSource -match 'OPEN_EXTRA = "app\.hushmessenger\.open"' -and $WalkSectionExtra -ceq 'app.hushmessenger.open') `
@@ -191,7 +191,7 @@ try {
     $restorePrompt = '<hierarchy><node text="" class="android.widget.Button" content-desc="Close" enabled="true" bounds="[11,87][146,222]" />' +
         '<node text="Restore now" class="android.widget.Button" content-desc="Restore now" enabled="true" bounds="[45,2023][1035,2158]" /></hierarchy>'
     Assert-WalkApp (Test-WalkRestorePrompt $restorePrompt) 'The restore prompt should read as the restore prompt.'
-    Assert-WalkApp (-not (Test-WalkRestorePrompt (Get-WalkFixtureXml 'threads')) -and -not (Test-WalkRestorePrompt '')) 'Other screens should not read as the restore prompt.'
+    Assert-WalkApp (-not (Test-WalkRestorePrompt (Get-WalkFixtureXml 'inbox')) -and -not (Test-WalkRestorePrompt '')) 'Other screens should not read as the restore prompt.'
     $close = Find-WalkNodeCenter -Xml $restorePrompt -Text 'Close' -Described
     Assert-WalkApp ($close[0] -eq 78 -and $close[1] -eq 154) "Close should be found by its description ($($close -join ','))."
     Assert-WalkApp ($null -eq (Find-WalkNodeCenter -Xml $restorePrompt -Text 'Close')) 'Close has no text, so a text lookup should not find it.'

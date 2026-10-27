@@ -31,27 +31,36 @@ try {
 
     # The required steps follow the patches: the sheets only when their patch was applied.
     $all = @(Get-WalkRequiredSteps -AppliedPatches $WalkFixturePatches)
-    Assert-WalkContract (($all -join ' ') -ceq 'chat settings-controls settings-app message-log auto-reply threads active-now montage compose settings stickerstore marketplace') `
+    Assert-WalkContract (($all -join ' ') -ceq 'chat inbox settings-controls settings-app message-log auto-reply settings story-settings contact-settings') `
         "The required steps with both sheet patches read: $($all -join ' ')"
     $without = @(Get-WalkRequiredSteps -AppliedPatches @('Hide Meta AI'))
-    Assert-WalkContract ($without -cnotcontains 'message-log' -and $without -cnotcontains 'auto-reply' -and $without.Count -eq 10) `
+    Assert-WalkContract ($without -cnotcontains 'message-log' -and $without -cnotcontains 'auto-reply' -and $without.Count -eq 7) `
         "Without the log and reply patches the sheets should not be required: $($without -join ' ')"
+    # Every Messenger step holds its screen to its own activity and marker, not just Messenger in front.
+    foreach ($step in @($WalkSteps | Where-Object { $_.Kind -in 'chat', 'inbox', 'link' })) {
+        Assert-WalkContract ($step.Activity -cne $WalkMessengerComponent -and $step.Marker -cne $WalkMessengerNodes) "$($step.Id) only asks for Messenger in front."
+        $others = @($WalkSteps | Where-Object { $_.Id -cne $step.Id -and $_.Kind -in 'chat', 'inbox', 'link' })
+        foreach ($other in $others) {
+            Assert-WalkContract ((Get-WalkFixtureActivity $other.Id) -notmatch $step.Activity) "$($step.Id) would take $($other.Id)'s activity."
+            Assert-WalkContract ((Get-WalkFixtureXml $other.Id) -notmatch $step.Marker) "$($step.Id) would take $($other.Id)'s screen."
+        }
+    }
 
     # The screen signature leaves out words and positions, and nothing else.
-    $one = Get-WalkFixtureXml 'threads'
-    Assert-WalkContract ((Get-WalkScreenSignature $one) -ceq (Get-WalkScreenSignature ($one.Replace('content-desc="Chats"', 'content-desc="Chats, 3 new"').Replace('[0,100]', '[0,140]')))) `
+    $one = Get-WalkFixtureXml 'inbox'
+    Assert-WalkContract ((Get-WalkScreenSignature $one) -ceq (Get-WalkScreenSignature ($one.Replace('content-desc="New message"', 'content-desc="New message, 3 new"').Replace('[0,100]', '[0,140]')))) `
         'A changed label or position should leave the screen signature alone.'
-    Assert-WalkContract ((Get-WalkScreenSignature $one) -cne (Get-WalkScreenSignature (Get-WalkFixtureXml 'montage'))) 'Two different screens should sign differently.'
+    Assert-WalkContract ((Get-WalkScreenSignature $one) -cne (Get-WalkScreenSignature (Get-WalkFixtureXml 'story-settings'))) 'Two different screens should sign differently.'
     Assert-WalkContract ((Get-WalkScreenSignature $one) -cne (Get-WalkScreenSignature ($one.Replace('</node></hierarchy>', '<node class="x" package="p" /></node></hierarchy>')))) `
         'An extra node should change the signature.'
 
     # Either release phone or an emulator walks for a release, with or without the sheet patches.
     foreach ($walker in @(@{}, @{ device = 'SM-S938B' }, @{ serial = 'emulator-5554'; device = 'sdk_gphone64_x86_64'; emulator = $true })) {
         $good = Test-WalkReceipt -Path (Write-Walk $walker) -BundlePath $bundle
-        Assert-WalkContract ($good.Valid -and $good.Receipt.screens -eq 12) "A full PASS walk of the bundle was refused: $($good.Reason)"
+        Assert-WalkContract ($good.Valid -and $good.Receipt.screens -eq 9) "A full PASS walk of the bundle was refused: $($good.Reason)"
     }
     $good = Test-WalkReceipt -Path (Write-Walk -Applied @('Hide Meta AI')) -BundlePath $bundle
-    Assert-WalkContract ($good.Valid -and $good.Receipt.screens -eq 10) "A full walk of an APK without the sheet patches was refused: $($good.Reason)"
+    Assert-WalkContract ($good.Valid -and $good.Receipt.screens -eq 7) "A full walk of an APK without the sheet patches was refused: $($good.Reason)"
 
     $restore = '<node index="1" text="Restore your Facebook chats" resource-id="" class="android.widget.TextView" package="com.facebook.orca" content-desc="" enabled="true" selected="false" bounds="[0,300][1080,400]" />'
     $login = '<node index="1" text="Log in" resource-id="" class="android.widget.Button" package="com.facebook.orca" content-desc="" enabled="true" selected="false" bounds="[0,300][1080,400]" />'
@@ -68,7 +77,7 @@ try {
             @(@{ full = $false }, $null, '*was not the whole app*'),
             @(@{ crashes = 1 }, $null, '*recorded a Messenger crash*'),
             # PASS beside a problem contradicts itself.
-            @(@{ problems = @('montage would not open') }, $null, '*recorded problems: montage would not open*'),
+            @(@{ problems = @('story-settings would not open') }, $null, '*recorded problems: story-settings would not open*'),
             @(@{ problems = 'one string' }, $null, "*problems aren't a list*"),
             @(@{ device = $null }, $null, "*doesn't say which device walked it*"),
             @(@{ device = 'Pixel 9' }, $null, "*Pixel 9 isn't one of the release walk phones*"),
@@ -81,51 +90,60 @@ try {
             @(@{ appliedPatches = @() }, $null, "*doesn't list the patches*"),
             # A receipt that drops a step from its own required list.
             @(@{}, { param($w) $w.requiredSteps = @($w.requiredSteps | Where-Object { $_ -cne 'auto-reply' }) }, "*required steps*aren't the ones this APK needs*"),
-            @(@{ screens = 40 }, $null, '*counts 40 screens but lists 12 steps*'),
+            @(@{ screens = 40 }, $null, '*counts 40 screens but lists 9 steps*'),
             @(@{ steps = 'none' }, $null, "*doesn't list its steps*"),
             # An absent step.
-            @(@{}, { param($w) $w.steps = @($w.steps | Where-Object { $_.id -cne 'montage' }); $w.screens = 11 }, '*the walk left out montage*'),
-            @(@{}, { param($w) $w.steps = @($w.steps) + (Step $w 'chat'); $w.screens = 13 }, '*lists chat twice*'),
+            @(@{}, { param($w) $w.steps = @($w.steps | Where-Object { $_.id -cne 'story-settings' }); $w.screens = 8 }, '*the walk left out story-settings*'),
+            @(@{}, { param($w) $w.steps = @($w.steps) + (Step $w 'chat'); $w.screens = 10 }, '*lists chat twice*'),
             @(@{}, { param($w) (Step $w 'chat').id = 'quicksnap' }, "*a step it doesn't know (quicksnap)*"),
             @(@{}, { param($w) (Step $w 'chat').id = '' }, '*a step with no id*'),
-            @(@{}, { param($w) (Step $w 'compose').opened = $false }, "*compose didn't open*"),
-            @(@{}, { param($w) (Step $w 'compose').problem = 'compose wouldn''t start' }, "*compose didn't open: compose wouldn't start*"),
+            @(@{}, { param($w) (Step $w 'contact-settings').opened = $false }, "*contact-settings didn't open*"),
+            @(@{}, { param($w) (Step $w 'contact-settings').problem = 'contact-settings wouldn''t start' }, "*contact-settings didn't open: contact-settings wouldn't start*"),
             # A problem that isn't text can't be read as no problem.
-            @(@{}, { param($w) (Step $w 'compose').problem = @('compose wouldn''t start') }, "*compose's problem isn't a line of text*"),
-            @(@{}, { param($w) (Step $w 'compose').problem = $true }, "*compose's problem isn't a line of text*"),
-            @(@{}, { param($w) (Step $w 'compose').problem = $null }, "*compose's problem isn't a line of text*"),
+            @(@{}, { param($w) (Step $w 'contact-settings').problem = @('contact-settings wouldn''t start') }, "*contact-settings's problem isn't a line of text*"),
+            @(@{}, { param($w) (Step $w 'contact-settings').problem = $true }, "*contact-settings's problem isn't a line of text*"),
+            @(@{}, { param($w) (Step $w 'contact-settings').problem = $null }, "*contact-settings's problem isn't a line of text*"),
             # The required steps as one joined string, in a list or bare, aren't the list.
             @(@{}, { param($w) $w.requiredSteps = @($w.requiredSteps -join ' ') }, "*required steps*aren't the ones this APK needs*"),
             @(@{}, { param($w) $w.requiredSteps = $w.requiredSteps -join ' ' }, "*required steps*aren't the ones this APK needs*"),
             # Evidence that's missing, moved or changed.
-            @(@{}, { param($w, $f) Remove-Item -LiteralPath (Join-Path $f 'steps/threads.png') }, "*threads's screenshot isn't beside the receipt*"),
-            @(@{}, { param($w, $f) [IO.File]::AppendAllText((Join-Path $f 'steps/threads.xml'), ' ') }, "*threads's uiDump changed after the walk*"),
-            @(@{}, { param($w) (Step $w 'threads').uiDump = '../threads.xml' }, "*threads doesn't name its uiDump*"),
-            @(@{}, { param($w) (Step $w 'threads').screenshotSha256 = '' }, "*threads doesn't name its screenshot*"),
-            @(@{}, { param($w, $f) (Step $w 'threads').screenshotSha256 = Write-WalkFixtureFile (Join-Path $f 'steps/threads.png') ([Text.Encoding]::ASCII.GetBytes('not a png')) },
-                "*threads's screenshot isn't a PNG*"),
+            @(@{}, { param($w, $f) Remove-Item -LiteralPath (Join-Path $f 'steps/inbox.png') }, "*inbox's screenshot isn't beside the receipt*"),
+            @(@{}, { param($w, $f) [IO.File]::AppendAllText((Join-Path $f 'steps/inbox.xml'), ' ') }, "*inbox's uiDump changed after the walk*"),
+            @(@{}, { param($w) (Step $w 'inbox').uiDump = '../inbox.xml' }, "*inbox doesn't name its uiDump*"),
+            @(@{}, { param($w) (Step $w 'inbox').screenshotSha256 = '' }, "*inbox doesn't name its screenshot*"),
+            @(@{}, { param($w, $f) (Step $w 'inbox').screenshotSha256 = Write-WalkFixtureFile (Join-Path $f 'steps/inbox.png') ([Text.Encoding]::ASCII.GetBytes('not a png')) },
+                "*inbox's screenshot isn't a PNG*"),
             # A screen in the way of the one asked for.
-            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'threads' (Get-WalkFixtureXml 'threads' $restore) }, '*threads showed the "Restore your chats" prompt instead*'),
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'inbox' (Get-WalkFixtureXml 'inbox' $restore) }, '*inbox showed the "Restore your chats" prompt instead*'),
             @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'chat' (Get-WalkFixtureXml 'chat' $login) }, '*chat showed the login screen instead*'),
             # The same prompts with their words only in content-desc, as Compose buttons draw them.
-            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'montage' (Get-WalkFixtureXml 'montage' $restoreDesc) }, '*montage showed the "Restore your chats" prompt instead*'),
-            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'compose' (Get-WalkFixtureXml 'compose' $loginDesc) }, '*compose showed the login screen instead*'),
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'story-settings' (Get-WalkFixtureXml 'story-settings' $restoreDesc) }, '*story-settings showed the "Restore your chats" prompt instead*'),
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'contact-settings' (Get-WalkFixtureXml 'contact-settings' $loginDesc) }, '*contact-settings showed the login screen instead*'),
             # 584.1's restore prompt as the S22 dumped it: only its button and Close are in the tree.
             @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'settings' (Get-WalkFixtureXml 'settings' $restoreButton) }, '*settings showed the "Restore your chats" prompt instead*'),
-            @(@{}, { param($w) (Step $w 'marketplace').activity = 'com.facebook.orca/com.facebook.messaging.neue.nux.NeueNuxActivity' },
-                "*marketplace showed one of Messenger's first-run screens instead*"),
-            @(@{}, { param($w) (Step $w 'compose').activity = 'com.facebook.orca/com.facebook.messaging.accountlogin.AccountLoginActivity' }, '*compose showed the login screen instead*'),
+            @(@{}, { param($w) (Step $w 'contact-settings').activity = 'com.facebook.orca/com.facebook.messaging.neue.nux.NeueNuxActivity' },
+                "*contact-settings showed one of Messenger's first-run screens instead*"),
+            @(@{}, { param($w) (Step $w 'story-settings').activity = 'com.facebook.orca/com.facebook.messaging.accountlogin.AccountLoginActivity' }, '*story-settings showed the login screen instead*'),
             # The wrong screen, or the right activity without its page.
             @(@{}, { param($w) (Step $w 'settings-app').activity = 'com.facebook.orca/.auth.StartScreenActivity' }, "*settings-app reached com.facebook.orca/.auth.StartScreenActivity, not its own*"),
-            @(@{}, { param($w) (Step $w 'threads').activity = 'com.facebook.orca/app.hushmessenger.extension.SettingsActivity' }, '*threads reached*SettingsActivity, not its own*'),
-            @(@{}, { param($w) (Step $w 'threads').activity = 'com.android.launcher3/.Launcher' }, '*threads reached com.android.launcher3/.Launcher, not its own*'),
+            @(@{}, { param($w) (Step $w 'inbox').activity = 'com.facebook.orca/app.hushmessenger.extension.SettingsActivity' }, '*inbox reached*SettingsActivity, not its own*'),
+            @(@{}, { param($w) (Step $w 'inbox').activity = 'com.android.launcher3/.Launcher' }, '*inbox reached com.android.launcher3/.Launcher, not its own*'),
             @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'settings-controls' (Get-WalkFixtureXml 'settings-app') }, "*settings-controls's screen doesn't show what it should*"),
             @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'auto-reply' '' }, '*auto-reply left no UI dump'),
-            # Another app in front, as when a second session drove the phone mid-walk.
-            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'threads' ''; (Step $w 'threads').activity = 'com.zhiliaoapp.musically/com.ss.android.ugc.aweme.splash.SplashActivity' },
-                '*threads left no UI dump, with com.zhiliaoapp.musically in front instead of Messenger*'),
-            # The same screen twice, as when a link falls back to the inbox.
-            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'stickerstore' ((Get-WalkFixtureXml 'threads').Replace('Chats', 'Chats, 2 new')) }, '*stickerstore showed the same screen as threads*'))) {
+            # A link Messenger drops: the inbox stays in front, or another Messenger screen, and the step names it.
+            @(@{}, { param($w) (Step $w 'story-settings').activity = 'com.facebook.orca/.auth.StartScreenActivity' }, '*story-settings reached com.facebook.orca/.auth.StartScreenActivity, not its own*'),
+            @(@{}, { param($w) (Step $w 'contact-settings').activity = Get-WalkFixtureActivity 'settings' }, '*contact-settings reached*MessengerMePreferenceActivity, not its own*'),
+            @(@{}, { param($w) (Step $w 'chat').activity = 'com.facebook.orca/.auth.StartScreenActivity' }, '*chat reached com.facebook.orca/.auth.StartScreenActivity, not its own*'),
+            # The right activity showing another step's screen.
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'contact-settings' (Get-WalkFixtureXml 'inbox') }, "*contact-settings's screen doesn't show what it should*"),
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'chat' (Get-WalkFixtureXml 'inbox') }, "*chat's screen doesn't show what it should*"),
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'settings' (Get-WalkFixtureXml 'story-settings') }, "*settings's screen doesn't show what it should*"),
+            # Another app in front, as when a dropped link uncovers the app behind Messenger.
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'story-settings' ''; (Step $w 'story-settings').activity = 'com.zhiliaoapp.musically/com.ss.android.ugc.aweme.splash.SplashActivity' },
+                '*story-settings left no UI dump, with com.zhiliaoapp.musically in front instead of Messenger*'),
+            # The same screen twice, marker and all.
+            @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'contact-settings' ((Get-WalkFixtureXml 'story-settings').Replace('text="Who can see your stories?"', 'text="Manage contacts"')) },
+                '*contact-settings showed the same screen as story-settings*'))) {
         $path = Write-Walk $badWalk[0] $badWalk[1]
         $bad = Test-WalkReceipt -Path $path -BundlePath $bundle
         Assert-WalkContract (-not $bad.Valid -and $bad.Reason -like $badWalk[2]) "Expected the walk refusal [$($badWalk[2])], got [$($bad.Reason)]."
@@ -134,7 +152,7 @@ try {
     $path = Write-Walk -Applied @('Hide Meta AI') -Bend {
         param($w, $f)
         $full = New-WalkFixture -Folder $f -BundleSha256 $bundleSha256
-        $w.steps = @($w.steps) + (Step $full 'auto-reply'); $w.screens = 11
+        $w.steps = @($w.steps) + (Step $full 'auto-reply'); $w.screens = 8
     }
     $bad = Test-WalkReceipt -Path $path -BundlePath $bundle
     Assert-WalkContract (-not $bad.Valid -and $bad.Reason -like "*lists auto-reply, which this APK doesn't have*") "A sheet for a missing patch read as: $($bad.Reason)"

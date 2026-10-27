@@ -31,10 +31,23 @@ $WalkSettingsComponent = '/app\.hushmessenger\.extension\.Settings(Activity|Laun
 $WalkMessengerComponent = '^com\.facebook\.orca/(?!app\.hushmessenger\.)'
 $WalkMessengerNodes = '<node\b[^>]*\bpackage="com\.facebook\.orca"'
 
+# The inbox's own launcher activity. Brought up by am start it resumes under this alias, not MainActivity.
+$WalkInboxActivity = '.auth.StartScreenActivity'
+
 # Every screen a release walk must reach, in walk order. A sheet step is required only when its
-# patch was applied, and it's opened by tapping its button on the Controls page.
+# patch was applied, and it's opened by tapping its button on the Controls page. Each Messenger step
+# names its own activity and a node only its screen has, read off the signed-in S22 on 584.1, so a
+# link that falls back to the inbox or any other Messenger screen fails. The markers are English
+# labels: walk on an English account. 584.1 drops threads, active_now, montage, compose, stickerstore
+# and marketplace from an outside caller, cold or warm (IntentHandlerActivity finishes without routing),
+# so those aren't steps; the inbox opens through its launcher activity instead.
 $WalkSteps = @(
-    [pscustomobject]@{ Id = 'chat'; Kind = 'chat'; Link = ''; Activity = $WalkMessengerComponent; Marker = $WalkMessengerNodes }
+    [pscustomobject]@{ Id = 'chat'; Kind = 'chat'; Link = ''
+        Activity = '^com\.facebook\.orca/com\.facebook\.messaging\.msys\.thread\.fragment\.MsysThreadViewActivity\z'
+        Marker = '<node\b[^>]*\bcontent-desc="(?:[^"]*, )?Thread details"' }
+    [pscustomobject]@{ Id = 'inbox'; Kind = 'inbox'; Link = ''
+        Activity = '^com\.facebook\.orca/(?:\.auth\.StartScreenActivity|com\.facebook\.messenger\.neue\.MainActivity)\z'
+        Marker = '<node\b[^>]*\bcontent-desc="New message"' }
     [pscustomobject]@{ Id = 'settings-controls'; Kind = 'settings'; Page = 'controls'; Activity = $WalkSettingsComponent
         Marker = '<node\b[^>]*\btext="Controls"[^>]*\bselected="true"' }
     [pscustomobject]@{ Id = 'settings-app'; Kind = 'settings'; Page = 'app'; Activity = $WalkSettingsComponent
@@ -44,10 +57,16 @@ $WalkSteps = @(
         Section = 'privacy'; Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Message log"' }
     [pscustomobject]@{ Id = 'auto-reply'; Kind = 'sheet'; Patch = 'Auto reply'; Button = 'Edit replies'; Close = 'Cancel'
         Section = 'conversations'; Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Auto replies"' }
-    foreach ($link in @('threads', 'active_now', 'montage', 'compose', 'settings', 'stickerstore', 'marketplace')) {
-        [pscustomobject]@{ Id = $link.Replace('_', '-'); Kind = 'link'; Link = "fb-messenger://$link"
-            Activity = $WalkMessengerComponent; Marker = $WalkMessengerNodes }
-    }
+    # Messenger's own settings, where the HushMessenger row sits, then its story and contact settings.
+    [pscustomobject]@{ Id = 'settings'; Kind = 'link'; Link = 'fb-messenger://settings'
+        Activity = '^com\.facebook\.orca/com\.facebook\.messaging\.settings\.mesettings\.surface\.MessengerMePreferenceActivity\z'
+        Marker = '<node\b[^>]*\btext="Dark mode"' }
+    [pscustomobject]@{ Id = 'story-settings'; Kind = 'link'; Link = 'fb-messenger://settings/montage'
+        Activity = '^com\.facebook\.orca/com\.facebook\.messaging\.montage\.prefs\.MontagePreferenceActivity\z'
+        Marker = '<node\b[^>]*\btext="Who can see your stories\?"' }
+    [pscustomobject]@{ Id = 'contact-settings'; Kind = 'link'; Link = 'fb-messenger://upload_contacts_settings'
+        Activity = '^com\.facebook\.orca/com\.facebook\.messaging\.contacts\.settings\.mesettings\.NeueContactsPreferenceActivity\z'
+        Marker = '<node\b[^>]*\btext="Manage contacts"' }
 )
 
 # A screen standing in front of the one a step asked for. Either one in a dump fails the step,
