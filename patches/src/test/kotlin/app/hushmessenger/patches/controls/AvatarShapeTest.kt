@@ -197,11 +197,22 @@ class AvatarShapeTest {
                 .replace("invoke-virtual {p0, v1}, $SYNTHETIC_TILE_SHAPE\n", "")))),
             "a placeholder without an oval" to avatarShapeFixture(placeholderDraw = listOf(placeholder(PLACEHOLDER_BODY
                 .replace("invoke-virtual {p1, v0, v1}, $DRAW_OVAL\n", "")))),
+            "two tile setups" to avatarShapeFixture(tile = listOf(tileShape(), tileSetup(),
+                fixtureMethod("$TILE->A0A(Landroid/graphics/Path;$PLACEHOLDER)V", TILE_SETUP_BODY, 5))),
+            // The setup also takes a second drawable that draws ovals, so which one is the placeholder can't be told.
+            "two placeholder draws" to avatarShapeFixture(tile = listOf(tileShape(),
+                fixtureMethod("$TILE->A09(Landroid/graphics/Path;${PLACEHOLDER}LX/Av12;)V", TILE_SETUP_BODY, 6))) +
+                fixtureClass("LX/Av12;", listOf(fixtureMethod("LX/Av12;->draw(Landroid/graphics/Canvas;)V", PLACEHOLDER_BODY.replace(PLACEHOLDER, "LX/Av12;"), 4))),
         )
         for ((case, classes) in cases) {
             assertTrue(found(classes).isEmpty(), case)
             assertFailsWith<PatchException>(case) { validateControls(mirroredControls(classes), setOf(AVATAR_SHAPE)) }
         }
+        // That second drawable is fine when it draws no oval.
+        val plain = avatarShapeFixture(tile = listOf(tileShape(),
+            fixtureMethod("$TILE->A09(Landroid/graphics/Path;${PLACEHOLDER}LX/Av12;)V", TILE_SETUP_BODY, 6))) +
+            fixtureClass("LX/Av12;", listOf(fixtureMethod("LX/Av12;->draw(Landroid/graphics/Canvas;)V", "return-void", 2)))
+        assertEquals(5, found(plain).size)
     }
 
     @Test fun vitoAsksForTheShapeRightAfterTheParentConstructor() {
