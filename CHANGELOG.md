@@ -4,7 +4,7 @@
 
 ### New
 
-- **Square profile pictures** is a new switch under Theme, and it starts off. Turn it on and profile pictures show as squares instead of circles. Want something softer? Turn on **Round the corners** under it for rounded squares. Restart Messenger after a change. Pictures in notifications stay round for now. Refs #89.
+- **Square profile pictures** is a new switch under Theme, and it starts off. It's meant to turn profile pictures into squares (or rounded squares with **Round the corners**) after a restart. It's still in progress, though. On Messenger 584.1 the chat list, chat headers and stories still show circles, because Messenger crops them round a second time. Refs #89.
 - **Custom launcher icon** is a new patch that starts unselected. It turns Messenger's home screen icon white on black, or black on white if you pick that style, using Messenger's own logo. Themed icons on Android 13 and up still work. Patch again without it to get the normal icon back. Refs #107.
 - HushMessenger's settings speak Traditional Chinese when your phone is set to it, in Taiwan, Hong Kong or Macau. Simplified Chinese still shows English for now. Thanks to @JhouHank for the translation. Refs #98.
 - **Hide Your story when sharing** is a new switch under Photos and videos, and it starts off. Share a photo, video or link into Messenger from another app and the Send to list won't offer Your story anymore, so a stray tap on Add can't post it. Your chats and groups stay right where they were, and the story itself works as usual. Refs #102.
