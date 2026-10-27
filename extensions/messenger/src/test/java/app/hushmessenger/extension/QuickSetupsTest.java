@@ -156,6 +156,11 @@ public class QuickSetupsTest {
             View root = screen.get().getWindow().getDecorView();
             View undo = root.findViewWithTag("undo");
             root.findViewWithTag("tab_app").performClick();
+            // The bar's title draws a frame every 10 ms, and Robolectric moves its clock on by a frame delay at each
+            // one, so the Undo window would seem to run out early. Hidden, the title only looks in every half second
+            // through a plain handler, which leaves the clock to the test.
+            root.findViewWithTag("wordmark").setVisibility(View.INVISIBLE);
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50));
             root.findViewWithTag("quick_defaults").performClick();
             assertEquals("Undo Back to defaults", ((TextView) undo).getText().toString());
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(SettingsActivity.UNDO_MILLIS - 1));

@@ -419,6 +419,8 @@ final class SettingsTextZhTw {
         {"xhe_audio.description", "某些影片會因較新的音訊格式（xHE-AAC）或三星螢幕錄影程式加入的標記，而顯示「無法傳送」，原版 Messenger 也有此問題。此功能會在傳送前修正音訊或移除標記，無論從其他應用程式分享到 Messenger，或在聊天室中選取影片都適用。影片畫面不會變更。"},
         {"recent_media.title", "隱藏最近相片卡片"},
         {"recent_media.description", "截圖、拍照或錄影後立即開啟聊天室時，不再於訊息輸入框上方顯示建議傳送該內容的卡片。你仍可從相簿選取。"},
+        {"share_story.title", "分享時隱藏你的限時動態"},
+        {"share_story.description", "從其他應用程式將相片、影片或連結分享到 Messenger 時，「傳送給」清單不再顯示你的限時動態，避免誤按「新增」而發佈。你的聊天室和群組仍會顯示。"},
         {"system_camera.title", "使用手機相機應用程式"},
         {"system_camera.description", "聊天室中的相機按鈕會開啟手機的相機應用程式。拍攝的相片會在 Messenger 編輯器中開啟，供你傳送。僅支援相片。"},
         {"external_gallery.title", "開啟手機相簿應用程式"},

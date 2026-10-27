@@ -499,6 +499,42 @@ public class SettingsReliabilityTest {
         }
     }
 
+    /** Each section's chevron turns a quarter round as it opens, so its box holds the whole glyph either way up. */
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test @Config(sdk = {28, 36}) public void sectionChevronsStayWholeAtLargeText() {
+        RuntimeEnvironment.setQualifiers("w411dp-h891dp-mdpi");
+        RuntimeEnvironment.setFontScale(2f);
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = layout(screen.get(), 411, 891);
+            int checked = 0;
+            for (String tab : new String[] {"tab_controls", "tab_app"}) {
+                root.findViewWithTag(tab).performClick();
+                layout(screen.get(), 411, 891);
+                for (View header : sectionHeaders(root)) {
+                    if (!header.isShown()) continue;
+                    TextView chevron = (TextView) ((ViewGroup) header).getChildAt(2);
+                    float glyph = Math.max(chevron.getPaint().getFontSpacing(),
+                        chevron.getPaint().measureText(chevron.getText().toString()));
+                    // Real text metrics, grown past the old fixed 24dp box (one px a dp here).
+                    assertTrue("glyph " + glyph, glyph > 24f);
+                    assertTrue(header.getTag() + " chevron " + chevron.getWidth() + "x" + chevron.getHeight() + " for " + glyph,
+                        Math.min(chevron.getWidth(), chevron.getHeight()) >= glyph);
+                    checked++;
+                }
+            }
+            assertTrue(checked >= 2);
+        }
+    }
+
+    private static java.util.List<View> sectionHeaders(View view) {
+        java.util.List<View> found = new java.util.ArrayList<>();
+        if (view.getTag() instanceof String && ((String) view.getTag()).startsWith("section_")) found.add(view);
+        if (view instanceof ViewGroup)
+            for (int child = 0; child < ((ViewGroup) view).getChildCount(); child++)
+                found.addAll(sectionHeaders(((ViewGroup) view).getChildAt(child)));
+        return found;
+    }
+
     @Test @Config(sdk = {28, 36}) public void keyboardSizedWindowKeepsSearchReadableAndRestoresNavigation() {
         RuntimeEnvironment.setQualifiers("w320dp-h360dp-mdpi");
         RuntimeEnvironment.setFontScale(2f);

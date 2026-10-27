@@ -197,6 +197,7 @@ public final class SettingsActivity extends Activity {
         {"original_video", "Send videos without re-encoding", "Sends a video as the original file when Messenger allows it, instead of a recompressed copy. Videos over 25 MB and edited videos are still compressed.", "photos_videos"},
         {"xhe_audio", "Fix videos that won't send", "Some videos fail with \"Unable to send\", even in stock Messenger, because of a newer sound format (xHE-AAC) or a tag Samsung's screen recorder adds. This fixes the sound or drops the tag before the video goes out, whether you share it into Messenger or pick it in a chat. The picture isn't touched.", "photos_videos"},
         {"recent_media", "Hide the recent photo card", "Opening a chat right after you take a screenshot, photo or video no longer shows a card above the message box offering to send it. You can still pick it from the gallery.", "photos_videos"},
+        {"share_story", "Hide Your story when sharing", "When you share a photo, video or link into Messenger from another app, the Send to list no longer offers Your story, so a tap on Add can't post it by mistake. Your chats and groups are still there.", "photos_videos"},
         {"system_camera", "Use the phone's camera app", "The camera button in a chat opens your phone's camera app. The photo opens in Messenger's editor, ready to send. Photos only.", "photos_videos"},
         {"external_gallery", "Open your gallery app", "The gallery button in a chat opens your phone's own gallery app. One photo or video opens in Messenger's editor for that chat, ready to send. Pick several and Messenger's Send to sheet opens with all of them and that chat at the top.", "photos_videos"},
         {"external_browser", "Open web links externally", "Opens web links (http and https) in your default browser. Other link types work as before.", "links_bubbles"},
@@ -562,7 +563,7 @@ public final class SettingsActivity extends Activity {
         brand = ui.row();
         if (ui.largeText) brand.setOrientation(LinearLayout.VERTICAL);
         LinearLayout wordmark = ui.column();
-        TextView title = ui.text("HushMessenger", 20, ui.text, true);
+        TextView title = ui.title("HushMessenger", 20);
         title.setTag("wordmark");
         title.setAccessibilityHeading(true);
         // Linear font scaling on Android 13 and older could otherwise split the wordmark mid-word.
@@ -825,7 +826,9 @@ public final class SettingsActivity extends Activity {
         }
         emptyState = ui.panel();
         emptyState.setTag("empty_state");
-        ui.add(emptyState, ui.text(text.get("empty_title"), 18, ui.text, true), 0);
+        TextView emptyTitle = ui.title(text.get("empty_title"), 18);
+        emptyTitle.setTag("empty_title");
+        ui.add(emptyState, emptyTitle, 0);
         ui.add(emptyState, ui.text(text.get("empty_help"), 14, ui.muted, false), 10);
         Button clearSearch = ui.button(text.get("clear"));
         clearSearch.setTag("clear_filters");
@@ -1681,7 +1684,7 @@ public final class SettingsActivity extends Activity {
         section(content, "usage", usage, 8);
         Button source = ui.button(text.get("source"));
         source.setTag("source_licenses");
-        source.setOnClickListener(view -> openPage("https://github.com/SysAdminDoc/HushMessenger#research-and-credits"));
+        source.setOnClickListener(view -> openPage("https://github.com/SysAdminDoc/HushMessenger#credits"));
         ui.add(content, source, 16);
         // Built when tapped, so the controls listed are the ones on right then.
         ui.add(content, linkPanel("report_problem", "report", () -> openPage(ProblemReport.issueUrl(reportFacts()))), 12);
@@ -1729,7 +1732,7 @@ public final class SettingsActivity extends Activity {
         return new ProblemReport.Facts(BuildConfig.VERSION_NAME, messenger, code,
             ProblemReport.patchedFrom(HostScreens.originalBuild(), Settings.preview), Build.MANUFACTURER, Build.MODEL,
             Build.VERSION.RELEASE, Build.VERSION.SDK_INT, Settings.preferences.getBoolean("paused", false), CrashGuard.isSafeMode(), on,
-            GalleryPicker.lastOutcome.name());
+            GalleryPicker.lastOutcome.name(), LastCrash.read(getFilesDir(), System.currentTimeMillis()));
     }
 
     /**
@@ -2167,7 +2170,7 @@ public final class SettingsActivity extends Activity {
                     if (result.setAside) {
                         LinearLayout notice = ui.panel();
                         notice.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-                        notice.addView(ui.text(text.get("message_log_set_aside"), 18, ui.text, true));
+                        notice.addView(ui.title(text.get("message_log_set_aside"), 18));
                         ui.add(notice, ui.text(text.get("message_log_set_aside_help"), 14, ui.muted, false), 8);
                         Button remove = ui.button(text.get("message_log_set_aside_remove"));
                         remove.setTag("message_log_set_aside_remove");
@@ -2182,7 +2185,9 @@ public final class SettingsActivity extends Activity {
                         View accent = new View(this);
                         accent.setBackground(ui.shape(ui.accent, 0, 2));
                         empty.addView(accent, new LinearLayout.LayoutParams(ui.dp(36), ui.dp(4)));
-                        ui.add(empty, ui.text(text.get("message_log_empty"), 18, ui.text, true), 16);
+                        TextView emptyLog = ui.title(text.get("message_log_empty"), 18);
+                        emptyLog.setTag("message_log_empty_title");
+                        ui.add(empty, emptyLog, 16);
                         ui.add(empty, ui.text(text.get(Settings.wouldUse(MessageLog.KEY) ? "message_log_empty_on" : "message_log_empty_off"), 14, ui.muted, false), 8);
                         // The settings page's Undo sits behind this sheet.
                         if (messageLogUndo) {
@@ -3333,7 +3338,10 @@ public final class SettingsActivity extends Activity {
         TextView chevron = ui.text(String.valueOf((char) 0x203a), 20, ui.muted, true);
         chevron.setGravity(android.view.Gravity.CENTER);
         chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        header.addView(chevron, new LinearLayout.LayoutParams(ui.dp(24), ui.dp(24)));
+        // Square and as big as the glyph, which grows with the text size: it turns a quarter round as the section opens.
+        int side = Math.max(ui.dp(24), (int) Math.ceil(Math.max(chevron.getPaint().getFontSpacing(),
+            chevron.getPaint().measureText(chevron.getText().toString()))));
+        header.addView(chevron, new LinearLayout.LayoutParams(side, side));
         header.setOnClickListener(view -> toggleSection(id));
         header.setAccessibilityDelegate(new View.AccessibilityDelegate() {
             @Override public void onInitializeAccessibilityNodeInfo(View host, android.view.accessibility.AccessibilityNodeInfo info) {

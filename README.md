@@ -45,11 +45,15 @@ Long-press Messenger's icon on your home screen and tap **Patch controls**. The 
 
 The **Controls** tab groups the switches into sections that fold up under their headers. They start closed, and the ones you open stay open. The search box finds every word you type, in any order, and opens whatever section a match sits in. A switch that's on shows when Messenger last checked it. The **App** tab has the restart button at the top, then **Quick setups** (Quiet, Privacy or Back to defaults in one tap), appearance, **Save choices to a file** and **Restore choices from a file**, and **Copy setup**, which copies your versions and switch states with no chats or account details in it. **Report a problem** opens a new GitHub issue with your versions, phone model and the switches that are on already filled in. Issues are public, so look it over before you send it. **Check for updates** is off by default. When it's on, it asks GitHub at most once an hour and sends nothing but the request.
 
-The screenshots below show the settings in the current release, in the dark and light themes.
+These screenshots come from the code on this page, so they can be a step ahead of the release you have installed. Each pair shows the Controls tab, then the App tab with its ways in.
 
 <p>
-  <img src="assets/settings-dark.png" width="300" alt="Controls tab in the dark theme, with search and category filters">
-  <img src="assets/settings-light.png" width="300" alt="Controls tab in the light theme, with search and category filters">
+  <img src="assets/settings-dark.png" width="200" alt="Controls tab in the dark theme, with search and the Inbox section open">
+  <img src="assets/settings-app-dark.png" width="200" alt="App tab in the dark theme, with the restart button and the Quick access section open">
+</p>
+<p>
+  <img src="assets/settings-light.png" width="200" alt="Controls tab in the light theme, with search and the Inbox section open">
+  <img src="assets/settings-app-light.png" width="200" alt="App tab in the light theme, with the restart button and the Quick access section open">
 </p>
 
 ### What each switch does
@@ -108,6 +112,7 @@ The screenshots below show the settings in the current release, in the dark and 
 | Hold stories at the end | A story stays on screen when it ends, photo or video, until you tap or swipe to the next one. The last one stays open until you close it. Experimental. |
 | Ignore the swipe up for disappearing messages | Swiping up at the bottom of a chat no longer turns on disappearing messages. |
 | Hide the recent photo card | The card above the message box that offers to send the screenshot, photo or video you just took doesn't show up. You can still send it from the gallery. |
+| Hide Your story when sharing | Sharing into Messenger from another app, the Send to list no longer offers Your story, so a tap on Add can't post it. Chats and groups stay. |
 | Allow chat bubbles | **Stock**, **Chat heads** or **Android bubbles** (Android 11 and newer). See [Chat heads and bubbles](#chat-heads-and-bubbles). |
 | Unlock app icons | Every icon in Messenger's App icon setting becomes selectable without a subscription. |
 | Material You theme | In dark mode on Android 12 and newer, Messenger takes the accent color from your wallpaper. A **Pure black dark mode** switch sits under Appearance. |
