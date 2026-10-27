@@ -149,6 +149,36 @@ class LegacyDrawerPatchTest {
         }
     }
 
+    /** CompatReport's drawer preflight accepts what the patch accepts and refuses what it refuses, minus extension checks. */
+    @Test fun compatReportRefusesTheDrawerContractsThePatchRefuses() {
+        fun problems(fixture: LegacyDrawerFixture, profile: ControlProfile): List<String> {
+            val ids = profile.hooks.getValue("menu_settings")
+            val menu = listOf(fixture.method(ids.single { it.endsWith("()V") }), fixture.method(ids.single { it.endsWith("Ljava/util/ArrayList;") }))
+            return app.hushmessenger.patches.CompatMirror.legacyDrawerProblems(fixture.classes, menu)
+        }
+        val common = listOf("refresh-result", "refresh-owner", "refresh-duplicate", "refresh-incoming", "refresh-registers",
+            "provider", "fragment", "row-field", "row-store", "glyph",
+            "key-constructor", "key-equality", "map-store", "section-store", "section-kind", "section-branch",
+            "check-missing", "check-side-effect", "check-parameter", "check-access", "check-target") +
+            listOf("row", "section", "icon", "map", "key").flatMap { kind -> listOf("$kind-abstract", "$kind-interface") }
+        for (profile in controlProfiles.values.distinct()) {
+            val inline = legacyDrawerFixture(profile).mapping.inlineIcon
+            assertEquals(emptyList(), problems(legacyDrawerFixture(profile), profile), "$profile")
+            if (!inline) {
+                assertEquals(emptyList(), problems(legacyDrawerFixture(profile, iconFactoryOn = "base"), profile), "$profile base")
+                assertTrue(problems(legacyDrawerFixture(profile, iconFactoryOn = "dispatcher"), profile).isNotEmpty(), "$profile dispatcher")
+            }
+            val variants = common + if (inline) listOf("inline-icon-missing-ctor", "inline-icon-constructor", "inline-icon-type", "inline-icon-color")
+                else listOf("icon-origin", "icon-return", "icon-shared")
+            for (broken in variants) {
+                // The patch's refusal for the same fixture, so a variant only it refuses for an extension reason can't slip in.
+                assertFailsWith<PatchException>(broken) { plan(legacyDrawerFixture(profile, broken), profile) }
+                val found = problems(legacyDrawerFixture(profile, broken), profile)
+                assertTrue(found.isNotEmpty() && found.all { it.startsWith("legacy drawer ") }, "$broken: $found")
+            }
+        }
+    }
+
     @Test fun incomingCatchHandlerAtTheRefreshStoreIsRefused() {
         val fixture = legacyDrawerFixture(SYNTHETIC_PROFILE)
         val id = SYNTHETIC_PROFILE.hooks.getValue("menu_settings").single { it.endsWith("->A1i()V") }

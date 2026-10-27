@@ -20,11 +20,13 @@ from pathlib import Path
 
 if __package__:
     from .build_queue import gradle, time_limit
+    from .readme_captures import check as check_captures
 else:
     # Run as a script, or loaded by file path from the tests.
     if str(Path(__file__).resolve().parent) not in sys.path:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
     from build_queue import gradle, time_limit
+    from readme_captures import check as check_captures
 
 RELEASE_SIGNERS = Path("scripts/release_signers")
 RELEASE_SIGNER = "SysAdminDoc"
@@ -214,6 +216,24 @@ def verify(root, bundle=None, evidence=None, release_tag=None, checksums=None):
     for link in release_links.finditer(readme):
         advertised = link.group(1) or link.group(2)
         require(advertised == version, "README download link differs from source")
+    # Between releases the install step names the published release's Messenger version (#111),
+    # so a release that moves the target has to move that step with it.
+    targets = {
+        target["version"]
+        for entry in entries
+        for package in entry.get("compatiblePackages") or []
+        for target in package.get("targets") or []
+        if isinstance(target, dict) and isinstance(target.get("version"), str)
+    }
+    if targets:
+        step = re.search(r"^\d+\. \*\*Get the APK\.\*\*(.*)$", readme, re.MULTILINE)
+        require(step is not None, "README has no Get the APK step")
+        require(
+            all(target in step.group(1) for target in targets),
+            "README Get the APK step names a different Messenger version than the bundle targets",
+        )
+    # Its settings screenshots show this catalog, and the app's help links reach real headings.
+    check_captures(root)
     headings = re.findall(
         r"^## (.+)$", (root / "CHANGELOG.md").read_text(encoding="utf-8"), re.MULTILINE
     )

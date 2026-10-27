@@ -86,10 +86,7 @@ final class SettingsText {
     static {
         ENGLISH.put("controls", "Controls");
         ENGLISH.put("app", "App");
-        ENGLISH.put("all", "All");
         ENGLISH.put("inbox", "Inbox");
-        ENGLISH.put("chats", "Chats");
-        ENGLISH.put("more", "More");
         ENGLISH.put("navigation", "Navigation");
         ENGLISH.put("stickers", "Stickers");
         ENGLISH.put("conversations", "Conversations");
@@ -100,7 +97,6 @@ final class SettingsText {
         ENGLISH.put("settings", "HushMessenger settings");
         ENGLISH.put("preview_title", "HushMessenger UI preview");
         ENGLISH.put("preview_notice", "UI preview. These controls don't change Messenger.");
-        ENGLISH.put("tagline", "Make Messenger yours.");
         ENGLISH.put("open", "Open");
         ENGLISH.put("open_messenger", "Open Messenger");
         ENGLISH.put("reopen", "Some changes apply after App > Restart Messenger.");
@@ -156,7 +152,6 @@ final class SettingsText {
         ENGLISH.put("settings_open_failed", "Couldn't open HushMessenger settings.");
         ENGLISH.put("settings_open_instead", "Patch controls: long-press Messenger's home screen icon");
         ENGLISH.put("restart_save_failed", "Couldn't save, so Messenger wasn't restarted. Try again.");
-        ENGLISH.put("setup", "Your setup");
         ENGLISH.put("paused", "Pause all changes");
         ENGLISH.put("search", "Find a control");
         ENGLISH.put("empty_title", "No controls match");
@@ -181,6 +176,8 @@ final class SettingsText {
         ENGLISH.put("bubble_settings_missing", "Screen not found. Open app info, then Notifications.");
         ENGLISH.put("facebook_keep_profile", "Keep the Profile button");
         ENGLISH.put("facebook_keep_profile_help", "Leaves the Profile button on a chat's details page, so you can still open the person's Facebook profile. The other Facebook shortcuts stay hidden.");
+        ENGLISH.put("avatar_shape_rounded", "Round the corners");
+        ENGLISH.put("avatar_shape_rounded_help", "Gives the squares rounded corners instead of sharp ones.");
         ENGLISH.put("tab_badges_keep_chats", "Keep the Chats badge");
         ENGLISH.put("tab_badges_keep_people", "Keep the People badge");
         ENGLISH.put("tab_badges_keep_notifications", "Keep the Notifications badge");
@@ -198,6 +195,7 @@ final class SettingsText {
         ENGLISH.put("about", "About HushMessenger");
         ENGLISH.put("version", "Version");
         ENGLISH.put("installed", "Installed controls");
+        ENGLISH.put("screen_art_blurry", "This Messenger download only has icons for %1$s dpi screens, and this phone's is %2$s dpi, so they look blurry. To fix it, patch an APKMirror build marked nodpi or one made for your screen.");
         ENGLISH.put("copy", "Copy setup");
         ENGLISH.put("copy_help", "Copies app versions and control choices. No account or chat details. Nothing is sent.");
         ENGLISH.put("setup_activity_help", "Activity notes only show that a control ran. They don't prove it had a visible effect or protected your privacy.");
@@ -207,6 +205,10 @@ final class SettingsText {
         ENGLISH.put("account_help", "Your choices apply to every Messenger account in this installation.");
         ENGLISH.put("missing", "Missing a control?");
         ENGLISH.put("missing_help", "Pick it in Morphe Manager and patch Messenger again. Updating the patch source alone doesn't add new controls.");
+        ENGLISH.put("log_out", "Log out");
+        ENGLISH.put("log_out_help", "Signs you out of this account on this phone, the same way Messenger's own Log out does.");
+        ENGLISH.put("log_out_unavailable", "Messenger's Log out wasn't found in this build, so use the one in Messenger's menu.");
+        ENGLISH.put("log_out_failed", "Messenger's Log out didn't open. The one in Messenger's menu still works.");
         ENGLISH.put("source", "Source and licenses");
         ENGLISH.put("no_browser", "No web browser found on this phone");
         ENGLISH.put("page_blocked", "Your phone didn't allow opening that page");
@@ -390,6 +392,8 @@ final class SettingsText {
         ENGLISH.put("auto_reply_picture_thumb", "The picture sent with this reply");
         ENGLISH.put("auto_reply_picture_copying", "Copying the picture...");
         ENGLISH.put("auto_reply_picture_failed", "Couldn't use that picture. Try another one.");
+        ENGLISH.put("auto_reply_picture_too_big", "That picture is too big. Pick a smaller one.");
+        ENGLISH.put("auto_reply_picture_too_slow", "That picture took too long to load. Try again or pick another one.");
         ENGLISH.put("auto_reply_picture_no_picker", "No app here can pick a picture");
         ENGLISH.put("font_file_choose", "Choose a font file");
         ENGLISH.put("font_phone", "Use your phone's font");

@@ -108,6 +108,34 @@ class CertificateChecks(unittest.TestCase):
             apk(signers=(B,)), {"com.facebook.orca": apk()}, {}
         )
         self.assertIn("does not approve certificate rotation", problems[0])
+        self.assertTrue(problems[0].startswith("Same-package signer mismatch:"))
+        self.assertIn("INSTALL_FAILED_UPDATE_INCOMPATIBLE", problems[0])
+        self.assertIn("Clone install under another package name", problems[0])
+        self.assertNotIn("Android user", problems[0])
+        other = checker.conflicts(
+            apk(signers=(B,)), {"com.facebook.orca": apk()}, {}, user=150
+        )
+        self.assertIn("for Android user 150", other[0])
+
+    def test_the_three_refusals_are_named_apart(self):
+        installed = {
+            "com.facebook.orca": apk(code=346816999, signers=(B,)),
+            "com.facebook.katana": apk("com.facebook.katana", (B,)),
+        }
+        problems = checker.conflicts(
+            apk(), installed, {PERMISSION: "com.facebook.katana"}
+        )
+        self.assertEqual(
+            [problem.split(":", 1)[0] for problem in problems],
+            [
+                "Same-package signer mismatch",
+                "Version downgrade",
+                "Permission owner mismatch",
+            ],
+        )
+        self.assertIn("INSTALL_FAILED_DUPLICATE_PERMISSION", problems[2])
+        self.assertNotIn("UPDATE_INCOMPATIBLE", problems[2])
+        self.assertNotIn("DUPLICATE_PERMISSION", problems[0])
 
     def test_same_key_update_and_permission_owner_pass(self):
         installed = {
@@ -336,6 +364,7 @@ class CertificateChecks(unittest.TestCase):
             self.assertIn(
                 ["shell", "pm", "path", "--user", "10", "com.facebook.orca"], calls
             )
+            self.assertIn("for Android user 10 ", output.getvalue())
             self.assertNotIn("Secret owner", output.getvalue())
             self.assertNotIn("Private work profile", output.getvalue())
 

@@ -19,7 +19,8 @@
     receipt (steps/<id>.png and steps/<id>.xml), hashed in the receipt. The check reads those files
     again rather than trusting what the receipt says about them: the dump must show the step's own
     screen (its marker), no login or "Restore your chats" prompt, and a screen no other step showed.
-    Markers match the English UI.
+    Markers match the English UI. Below Android 13 the message log's window is FLAG_SECURE, so that
+    one step keeps its window's dumpsys entry (steps/<id>.window.txt) in place of the screenshot.
 #>
 
 # The phones release walks run on, by ro.product.model. An emulator passes by its serial.
@@ -31,29 +32,54 @@ $WalkSettingsComponent = '/app\.hushmessenger\.extension\.Settings(Activity|Laun
 $WalkMessengerComponent = '^com\.facebook\.orca/(?!app\.hushmessenger\.)'
 $WalkMessengerNodes = '<node\b[^>]*\bpackage="com\.facebook\.orca"'
 
+# The inbox's own launcher activity. Brought up by am start it resumes under this alias, not MainActivity.
+$WalkInboxActivity = '.auth.StartScreenActivity'
+
 # Every screen a release walk must reach, in walk order. A sheet step is required only when its
-# patch was applied, and it's opened by tapping its button on the Controls page.
+# patch was applied, and it's opened by tapping its button on the Controls page. Each Messenger step
+# names its own activity and a node only its screen has, read off the signed-in S22 on 584.1, so a
+# link that falls back to the inbox or any other Messenger screen fails. The markers are English
+# labels: walk on an English account. 584.1 drops threads, active_now, montage, compose, stickerstore
+# and marketplace from an outside caller, cold or warm (IntentHandlerActivity finishes without routing),
+# so those aren't steps; the inbox opens through its launcher activity instead.
 $WalkSteps = @(
-    [pscustomobject]@{ Id = 'chat'; Kind = 'chat'; Link = ''; Activity = $WalkMessengerComponent; Marker = $WalkMessengerNodes }
+    [pscustomobject]@{ Id = 'chat'; Kind = 'chat'; Link = ''
+        Activity = '^com\.facebook\.orca/com\.facebook\.messaging\.msys\.thread\.fragment\.MsysThreadViewActivity\z'
+        Marker = '<node\b[^>]*\bcontent-desc="(?:[^"]*, )?Thread details"' }
+    [pscustomobject]@{ Id = 'inbox'; Kind = 'inbox'; Link = ''
+        Activity = '^com\.facebook\.orca/(?:\.auth\.StartScreenActivity|com\.facebook\.messenger\.neue\.MainActivity)\z'
+        Marker = '<node\b[^>]*\bcontent-desc="New message"' }
     [pscustomobject]@{ Id = 'settings-controls'; Kind = 'settings'; Page = 'controls'; Activity = $WalkSettingsComponent
         Marker = '<node\b[^>]*\btext="Controls"[^>]*\bselected="true"' }
     [pscustomobject]@{ Id = 'settings-app'; Kind = 'settings'; Page = 'app'; Activity = $WalkSettingsComponent
         Marker = '<node\b[^>]*\btext="App"[^>]*\bselected="true"' }
+    # Section is the closed-by-default settings section holding the button, opened through the launch extra.
+    # SecureBelowSdk: below Android 13 the log keeps out of Recents with FLAG_SECURE, which screencap can't take,
+    # so there the step keeps its window's dumpsys entry, showing the flag, in place of a screenshot.
     [pscustomobject]@{ Id = 'message-log'; Kind = 'sheet'; Patch = 'Keep a message log'; Button = 'View log'; Close = 'Close'
-        Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Message log"' }
+        Section = 'privacy'; Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Message log"'; SecureBelowSdk = 33 }
     [pscustomobject]@{ Id = 'auto-reply'; Kind = 'sheet'; Patch = 'Auto reply'; Button = 'Edit replies'; Close = 'Cancel'
-        Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Auto replies"' }
-    foreach ($link in @('threads', 'active_now', 'montage', 'compose', 'settings', 'stickerstore', 'marketplace')) {
-        [pscustomobject]@{ Id = $link.Replace('_', '-'); Kind = 'link'; Link = "fb-messenger://$link"
-            Activity = $WalkMessengerComponent; Marker = $WalkMessengerNodes }
-    }
+        Section = 'conversations'; Activity = $WalkSettingsComponent; Marker = '<node\b[^>]*\btext="Auto replies"' }
+    # Messenger's own settings, where the HushMessenger row sits, then its story and contact settings.
+    [pscustomobject]@{ Id = 'settings'; Kind = 'link'; Link = 'fb-messenger://settings'
+        Activity = '^com\.facebook\.orca/com\.facebook\.messaging\.settings\.mesettings\.surface\.MessengerMePreferenceActivity\z'
+        Marker = '<node\b[^>]*\btext="Dark mode"' }
+    [pscustomobject]@{ Id = 'story-settings'; Kind = 'link'; Link = 'fb-messenger://settings/montage'
+        Activity = '^com\.facebook\.orca/com\.facebook\.messaging\.montage\.prefs\.MontagePreferenceActivity\z'
+        Marker = '<node\b[^>]*\btext="Who can see your stories\?"' }
+    [pscustomobject]@{ Id = 'contact-settings'; Kind = 'link'; Link = 'fb-messenger://upload_contacts_settings'
+        Activity = '^com\.facebook\.orca/com\.facebook\.messaging\.contacts\.settings\.mesettings\.NeueContactsPreferenceActivity\z'
+        Marker = '<node\b[^>]*\btext="Manage contacts"' }
 )
 
 # A screen standing in front of the one a step asked for. Either one in a dump fails the step,
 # whether the words sit in a node's text or only in its content-desc (Compose buttons do that).
 $WalkBlockingScreens = @(
-    # 584.1 draws its headline outside the accessibility tree, so only its "Restore now" button shows in a dump.
-    [pscustomobject]@{ Name = 'the "Restore your chats" prompt'; Pattern = '(?i)<node\b[^>]*\b(text|content-desc)="([^"]*\brestore your\b[^"]*\bchats\b[^"]*|Restore now)"' }
+    # 584.1 draws its headline outside the accessibility tree, so only its "Restore now" button shows in a dump. Once
+    # past it, the inbox carries a "Restore chat history" banner with its own "Restore now" button, so a bare
+    # "Restore now" counts only on a screen without the inbox's New message button.
+    [pscustomobject]@{ Name = 'the "Restore your chats" prompt'
+        Pattern = '(?i)<node\b[^>]*\b(text|content-desc)="[^"]*\brestore your\b[^"]*\bchats\b[^"]*"|\A(?![\s\S]*<node\b[^>]*\bcontent-desc="New message")[\s\S]*<node\b[^>]*\b(text|content-desc)="Restore now"' }
     [pscustomobject]@{ Name = 'the login screen'; Pattern = '(?i)<node\b[^>]*\b(text|content-desc)="(Log in|Log into Messenger|Mobile number or email|Continue as [^"]*)"' }
 )
 $WalkBlockingActivities = @(
@@ -110,6 +136,33 @@ function Test-WalkPng([string]$Path) {
     } finally { $stream.Dispose() }
 }
 
+# A Hush settings window's entry in dumpsys window windows.
+$WalkSettingsWindow = 'Window\{[0-9a-f]+ u\d+ com\.facebook\.orca/app\.hushmessenger\.extension\.SettingsActivity\}'
+
+function Get-WalkSettingsWindows {
+    <#
+    .SYNOPSIS
+        The entries of dumpsys window windows that belong to Hush's settings windows, each from its
+        "Window #n" line to the next one. '' when none is listed.
+    #>
+    param([string[]]$Lines = @())
+    $kept = [Text.StringBuilder]::new()
+    $inside = $false
+    foreach ($line in $Lines) {
+        if ($line -match '^\s*Window #\d+ Window\{') { $inside = $line -match $WalkSettingsWindow }
+        if ($inside) { [void]$kept.Append("$line`n") }
+    }
+    return $kept.ToString()
+}
+
+function Test-WalkSecureWindow([AllowEmptyString()][string]$Text) {
+    # Whether one Hush settings window in those entries carries FLAG_SECURE (fl= may sit on a wrapped mAttrs line).
+    foreach ($entry in [regex]::Split([string]$Text, '(?m)^(?=\s*Window #\d+ )')) {
+        if ($entry -match $WalkSettingsWindow -and $entry -match '\bfl=[^\r\n]*\bSECURE\b') { return $true }
+    }
+    return $false
+}
+
 function Test-WalkStepScreen {
     <#
     .SYNOPSIS
@@ -117,7 +170,14 @@ function Test-WalkStepScreen {
         step's UI dump; the walk asks this while it walks and publish asks it again of the files.
     #>
     param([Parameter(Mandatory = $true)]$Definition, [AllowEmptyString()][string]$Activity, [AllowEmptyString()][string]$Xml)
-    if ([string]::IsNullOrEmpty($Xml) -or $Xml -notmatch '<hierarchy\b') { return "$($Definition.Id) left no UI dump" }
+    if ([string]::IsNullOrEmpty($Xml) -or $Xml -notmatch '<hierarchy\b') {
+        # uiautomator often can't dump another app's busy screen, so name the app that had it.
+        $front = [regex]::Match([string]$Activity, '^([\w.]+)/')
+        if ($front.Success -and $front.Groups[1].Value -cne 'com.facebook.orca') {
+            return "$($Definition.Id) left no UI dump, with $($front.Groups[1].Value) in front instead of Messenger (another app or session had the screen)"
+        }
+        return "$($Definition.Id) left no UI dump"
+    }
     foreach ($blocking in $WalkBlockingScreens) {
         if ($Xml -match $blocking.Pattern) { return "$($Definition.Id) showed $($blocking.Name) instead" }
     }
@@ -139,6 +199,8 @@ function New-WalkReceipt {
         [Parameter(Mandatory = $true)][bool]$Full,
         [Parameter(Mandatory = $true)][string]$Serial,
         [Parameter(Mandatory = $true)][string]$Device,
+        # ro.build.version.sdk, 0 when it didn't read. Decides whether a secure window may stand in for a screenshot.
+        [int]$Sdk,
         [AllowEmptyString()][string]$AppVersion,
         [Parameter(Mandatory = $true)][string]$BundleSha256,
         # The APK patched from that bundle, and the one the device ran. '' when unknown.
@@ -155,7 +217,7 @@ function New-WalkReceipt {
     )
     return [ordered]@{
         schema = $WalkReceiptSchema; result = $Result; full = $Full
-        serial = $Serial; device = $Device; emulator = $Serial.StartsWith('emulator-', [StringComparison]::Ordinal)
+        serial = $Serial; device = $Device; emulator = $Serial.StartsWith('emulator-', [StringComparison]::Ordinal); sdk = $Sdk
         appVersion = $AppVersion; bundleSha256 = $BundleSha256.ToLowerInvariant()
         patchedApkSha256 = $PatchedApkSha256; installedApkSha256 = $InstalledApkSha256
         started = $Started.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ'); finished = $Finished.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')
@@ -239,8 +301,17 @@ function Test-WalkReceipt {
         if ($step.opened -isnot [bool] -or -not $step.opened -or $step.problem) {
             return Fail "$($step.id) didn't open$(if ($step.problem) { ": $($step.problem)" })"
         }
+        # A step whose window is FLAG_SECURE below its SDK keeps that window's dumpsys entry instead of a screenshot.
+        $kinds = @(@('screenshot', '.png'), @('uiDump', '.xml'))
+        $secureShot = $definition.SecureBelowSdk -and $step.screenshot -ceq '' -and $null -ne $step.secureWindow
+        if ($secureShot) {
+            if (-not (IsCount $receipt.sdk) -or $receipt.sdk -le 0 -or $receipt.sdk -ge $definition.SecureBelowSdk) {
+                return Fail "$($step.id) has no screenshot, and only below Android SDK $($definition.SecureBelowSdk) does its window keep one out"
+            }
+            $kinds = @(@('secureWindow', '.window.txt'), @('uiDump', '.xml'))
+        }
         $evidence = @{}
-        foreach ($kind in @(@('screenshot', '.png'), @('uiDump', '.xml'))) {
+        foreach ($kind in $kinds) {
             $relative = $step.($kind[0])
             $hash = $step.("$($kind[0])Sha256")
             if ($relative -cne "steps/$($step.id)$($kind[1])" -or -not (IsSha256 $hash)) {
@@ -253,7 +324,11 @@ function Test-WalkReceipt {
             }
             $evidence[$kind[0]] = $file
         }
-        if (-not (Test-WalkPng $evidence.screenshot)) { return Fail "$($step.id)'s screenshot isn't a PNG" }
+        if ($secureShot) {
+            if (-not (Test-WalkSecureWindow ([IO.File]::ReadAllText($evidence.secureWindow)))) {
+                return Fail "$($step.id) has no screenshot, and its window entry doesn't show FLAG_SECURE"
+            }
+        } elseif (-not (Test-WalkPng $evidence.screenshot)) { return Fail "$($step.id)'s screenshot isn't a PNG" }
         $xml = [IO.File]::ReadAllText($evidence.uiDump)
         $wrong = Test-WalkStepScreen -Definition $definition -Activity ([string]$step.activity) -Xml $xml
         if ($wrong) { return Fail $wrong }

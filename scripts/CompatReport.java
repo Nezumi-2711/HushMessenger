@@ -198,6 +198,7 @@ public class CompatReport {
         PATCHES.put("Fix videos that won't send", List.of("xhe_audio", "xhe_transcode"));
         PATCHES.put("Ignore the swipe up for disappearing messages", List.of("disappearing_swipe"));
         PATCHES.put("Hide the recent photo card", List.of("recent_media"));
+        PATCHES.put("Hide Your story when sharing", List.of("share_story"));
         PATCHES.put("Use the phone's camera app", List.of("system_camera"));
         PATCHES.put("Open your gallery app", List.of("external_gallery"));
         PATCHES.put("Stop analytics uploads", List.of("analytics_uploads"));
@@ -214,6 +215,7 @@ public class CompatReport {
         PATCHES.put("Mark as read button", List.of("mark_read_bar", "mark_read_click"));
         PATCHES.put("Keep unsent messages", List.of("keep_unsent", "unsent_indicator", "delta_unsent"));
         PATCHES.put("Unlock app icons", List.of("app_icons"));
+        PATCHES.put("Square profile pictures", List.of("avatar_shape"));
         PATCHES.put("Use your own font", List.of("font_layout", "font_repository", "font_roboto", "font_by_name", "font_input"));
         PATCHES.put("View stories anonymously", List.of("anonymous_stories"));
         PATCHES.put("Save any story", List.of("save_stories"));
@@ -4569,7 +4571,351 @@ public class CompatReport {
         return List.of();
     }
 
-    static final String RTC_NOTIFICATION_SERVICE = "Lcom/facebook/rtc/notification/RtcNotificationForegroundService;";
+    static final String HOISTED_SHARE_LOADER = "Lcom/facebook/messaging/sharing/broadcastflow/mutation/loader/plugins/sections/" +
+        "morewaystoshare/hoisted/BroadcastFlowHoistedMoreWaysToShareSectionsLoader;";
+    static final String UNHOISTED_SHARE_TRACE = "messaging.sharing.broadcastflow.mutation.loader.sections.morewaystoshare.unhoisted." +
+        "BroadcastFlowUnhoistedMoreWaysToShareSectionsLoader";
+
+    static String created(Instruction i) {
+        return i.getOpcode() == Opcode.NEW_INSTANCE ? ((TypeReference) ((ReferenceInstruction) i).getReference()).getType() : null;
+    }
+
+    static String text(Instruction i) {
+        return i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr ? sr.getString() : null;
+    }
+
+    static List<Integer> reads(Instruction i) {
+        var out = new ArrayList<Integer>();
+        if (i instanceof FiveRegisterInstruction call) {
+            int[] all = {call.getRegisterC(), call.getRegisterD(), call.getRegisterE(), call.getRegisterF(), call.getRegisterG()};
+            for (int r = 0; r < call.getRegisterCount(); r++) out.add(all[r]);
+        } else if (i instanceof RegisterRangeInstruction range) {
+            for (int r = 0; r < range.getRegisterCount(); r++) out.add(range.getStartRegister() + r);
+        }
+        return out;
+    }
+
+    static boolean storyRow(ClassDef cls) {
+        for (var method : cls.getMethods()) {
+            if (!"getId".equals(method.getName()) || !"Ljava/lang/String;".equals(method.getReturnType()) ||
+                !method.getParameterTypes().isEmpty() || AccessFlags.STATIC.isSet(method.getAccessFlags())) continue;
+            var code = instructions(method);
+            if (code.size() == 2 && code.get(0).getOpcode() == Opcode.CONST_STRING && "ADD_TO_STORY_ID".equals(text(code.get(0))) &&
+                code.get(1).getOpcode() == Opcode.RETURN_OBJECT) return true;
+        }
+        return false;
+    }
+
+    /** The gate kind on the one row this method creates: 1 hoisted, 2 unhoisted, 0 neither. Mirrors ShareStory.kt. */
+    static int storyGate(Method method, String row) {
+        var code = instructions(method);
+        int at = -1;
+        for (int i = 0; i < code.size(); i++) {
+            if (!row.equals(created(code.get(i)))) continue;
+            if (at >= 0) return 0;
+            at = i;
+        }
+        if (at < 0) return 0;
+        if (hoistedStoryGate(method, code, at)) return 1;
+        return unhoistedStoryGate(method, code, at) ? 2 : 0;
+    }
+
+    static boolean hoistedStoryGate(Method method, List<Instruction> code, int at) {
+        if (!HOISTED_SHARE_LOADER.equals(method.getDefiningClass()) || AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+            !method.getParameterTypes().isEmpty() || !"V".equals(method.getReturnType()) || at < 3) return false;
+        int gate = at - 1;
+        if (code.get(gate).getOpcode() != Opcode.IF_EQZ || mediaTarget(code, gate) <= at) return false;
+        int value = register(code.get(gate));
+        if (code.get(at - 2).getOpcode() != Opcode.MOVE_RESULT || register(code.get(at - 2)) != value || value > 15) return false;
+        if (code.get(at - 3).getOpcode() != Opcode.INVOKE_STATIC || !(code.get(at - 3) instanceof ReferenceInstruction ri) ||
+            !(ri.getReference() instanceof MethodReference call) || !"Z".equals(call.getReturnType())) return false;
+        return !mediaTargets(method).contains(gate);
+    }
+
+    static boolean unhoistedStoryGate(Method method, List<Instruction> code, int at) {
+        boolean traced = false;
+        for (var i : code) if (UNHOISTED_SHARE_TRACE.equals(text(i))) traced = true;
+        if (!traced) return false;
+        int gate = -1;
+        for (int i = at - 1; i >= 1; i--) if (code.get(i).getOpcode() == Opcode.IF_EQ) { gate = i; break; }
+        if (gate < 0) return false;
+        var compare = (TwoRegisterInstruction) code.get(gate);
+        int state = compare.getRegisterA(), skip = compare.getRegisterB();
+        if (state > 15 || skip > 15 || state == skip) return false;
+        var read = code.get(gate - 1);
+        if (read.getOpcode() != Opcode.IGET_OBJECT || ((TwoRegisterInstruction) read).getRegisterA() != state ||
+            !(((ReferenceInstruction) read).getReference() instanceof FieldReference field) ||
+            !field.getDefiningClass().equals(method.getDefiningClass()) || !"Ljava/lang/Object;".equals(field.getType())) return false;
+        boolean started = false;
+        for (int i = gate + 1; i < at; i++) if (UNHOISTED_SHARE_TRACE.equals(text(code.get(i)))) started = true;
+        if (!started) return false;
+        int skipTo = mediaTarget(code, gate);
+        if (skipTo <= at || at + 2 >= code.size() || skipTo + 1 >= code.size()) return false;
+        int made = register(code.get(at));
+        var list = code.get(at + 2);
+        if (list.getOpcode() != Opcode.INVOKE_STATIC ||
+            !(IMMUTABLE_LIST + "->of(Ljava/lang/Object;)" + IMMUTABLE_LIST).equals(ref(list)) || !reads(list).equals(List.of(made))) return false;
+        var first = code.get(skipTo);
+        var write = code.get(skipTo + 1);
+        if (!(first instanceof FiveRegisterInstruction) && !(first instanceof RegisterRangeInstruction)) return false;
+        if (reads(first).contains(state) || (write.getOpcode() != Opcode.MOVE_RESULT && write.getOpcode() != Opcode.MOVE_RESULT_OBJECT) ||
+            register(write) != state) return false;
+        return !mediaTargets(method).contains(gate);
+    }
+
+    /**
+     * share_story: the one class whose getId() is just ADD_TO_STORY_ID, and the two methods that create it, each creating
+     * it once behind its proven gate, one of them in the hoisted more-ways-to-share loader. Mirrors ShareStory.kt.
+     */
+    static List<Method> shareStory(List<ClassDef> classes) {
+        var rows = new ArrayList<String>();
+        for (var cls : classes) if (storyRow(cls)) rows.add(cls.getType());
+        if (rows.size() != 1) return List.of();
+        var row = rows.get(0);
+        var creators = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            for (var i : instructions(method)) if (row.equals(created(i))) { creators.add(method); break; }
+        }
+        if (creators.size() != 2) return List.of();
+        int hoisted = 0;
+        for (var method : creators) {
+            int kind = storyGate(method, row);
+            if (kind == 0) return List.of();
+            if (kind == 1) hoisted++;
+        }
+        return hoisted == 1 ? creators : List.of();
+    }
+
+    /** The register holding parameter n, counting this as 0 on an instance method. */
+    static int parameterSlot(Method method, int n) {
+        int words = AccessFlags.STATIC.isSet(method.getAccessFlags()) ? 0 : 1;
+        for (var type : method.getParameterTypes()) words += "J".contentEquals(type) || "D".contentEquals(type) ? 2 : 1;
+        return method.getImplementation().getRegisterCount() - words + n;
+    }
+
+    /** RoundingOptions' isCircular: the own boolean its toString() last read into the register it appends right after the class name. */
+    static String vitoCircle(ClassDef cls) {
+        Method printer = null;
+        for (var method : cls.getMethods()) {
+            if (!"toString".equals(method.getName()) || !method.getParameterTypes().isEmpty() || !"Ljava/lang/String;".equals(method.getReturnType())) continue;
+            if (printer != null) return null;
+            printer = method;
+        }
+        if (printer == null || AccessFlags.STATIC.isSet(printer.getAccessFlags())) return null;
+        var code = instructions(printer);
+        int named = -1;
+        for (int i = 0; i < code.size() && named < 0; i++) {
+            String value = text(code.get(i));
+            if (value != null && value.startsWith("RoundingOptions(isCircular=")) named = i;
+        }
+        if (named < 0) return null;
+        int append = -1;
+        for (int i = named + 1; i < code.size() && append < 0; i++) {
+            if (code.get(i) instanceof ReferenceInstruction call && call.getReference() instanceof MethodReference target &&
+                "Ljava/lang/StringBuilder;->append(Z)Ljava/lang/StringBuilder;".equals(target.toString())) append = i;
+        }
+        if (append < 0) return null;
+        var targets = mediaTargets(printer);
+        for (int i = 0; i < append; i++) if (code.get(i) instanceof OffsetInstruction || targets.contains(i + 1)) return null;
+        var appended = reads(code.get(append));
+        if (appended.size() < 2) return null;
+        int value = appended.get(1);
+        for (int i = append - 1; i >= 0; i--) {
+            if (!(code.get(i) instanceof OneRegisterInstruction one) || one.getRegisterA() != value) continue;
+            if (code.get(i).getOpcode() != Opcode.IGET_BOOLEAN || ((TwoRegisterInstruction) code.get(i)).getRegisterB() != parameterSlot(printer, 0)) return null;
+            var field = (FieldReference) ((ReferenceInstruction) code.get(i)).getReference();
+            return field.getDefiningClass().equals(cls.getType()) && "Z".equals(field.getType()) ? field.toString() : null;
+        }
+        return null;
+    }
+
+    /** Mirrors AvatarShape.kt's vitoRounding: Object's constructor, one own-parameter store per field, return. */
+    static boolean vitoRounding(Method method, String circleField) {
+        if (!"<init>".equals(method.getName()) || AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"V".equals(method.getReturnType())) return false;
+        if (!circleField.startsWith(method.getDefiningClass() + "->")) return false;
+        var code = instructions(method);
+        if (code.size() < 3 || code.get(code.size() - 1).getOpcode() != Opcode.RETURN_VOID) return false;
+        int self = parameterSlot(method, 0);
+        if (code.get(0).getOpcode() != Opcode.INVOKE_DIRECT || !"Ljava/lang/Object;-><init>()V".equals(ref(code.get(0))) ||
+            !reads(code.get(0)).equals(List.of(self))) return false;
+        var params = new HashMap<Integer, String>();
+        var types = method.getParameterTypes();
+        for (int i = 0; i < types.size(); i++) {
+            String type = types.get(i).toString();
+            if ("J".equals(type) || "D".equals(type)) return false;
+            params.put(parameterSlot(method, i + 1), type);
+        }
+        var names = new HashSet<String>();
+        var values = new HashSet<Integer>();
+        int circle = -1, radius = -1, radii = -1, floats = 0, arrays = 0, circles = 0;
+        for (var store : code.subList(1, code.size() - 1)) {
+            var op = store.getOpcode();
+            if (op != Opcode.IPUT && op != Opcode.IPUT_BOOLEAN && op != Opcode.IPUT_OBJECT) return false;
+            var field = (FieldReference) ((ReferenceInstruction) store).getReference();
+            var put = (TwoRegisterInstruction) store;
+            if (put.getRegisterB() != self || !field.getDefiningClass().equals(method.getDefiningClass()) ||
+                !field.getType().equals(params.get(put.getRegisterA()))) return false;
+            if (!names.add(field.getName()) || !values.add(put.getRegisterA())) return false;
+            if (field.toString().equals(circleField)) { circle = put.getRegisterA(); circles++; }
+            if ("F".equals(field.getType())) { radius = put.getRegisterA(); floats++; }
+            if ("[F".equals(field.getType())) { radii = put.getRegisterA(); arrays++; }
+        }
+        return circles == 1 && floats == 1 && arrays == 1 && Math.max(circle, Math.max(radius, radii)) <= 15;
+    }
+
+    /** Mirrors AvatarShape.kt's legacyRounding: the params' flag, then their radii, handed to the layer, then a spare read. */
+    static boolean legacyRounding(Method method) {
+        if (!AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"V".equals(method.getReturnType()) || method.getParameterTypes().size() != 2) return false;
+        String layerType = method.getParameterTypes().get(0).toString(), paramsType = method.getParameterTypes().get(1).toString();
+        if (!layerType.startsWith("L") || !paramsType.startsWith("L") || layerType.equals(paramsType)) return false;
+        var code = instructions(method);
+        if (code.size() < 6) return false;
+        int layer = parameterSlot(method, 0), params = parameterSlot(method, 1);
+        int flag = legacyRead(code.get(0), Opcode.IGET_BOOLEAN, "Z", layer, params, paramsType);
+        if (flag < 0 || !legacyHands(code.get(1), layer, flag, layerType, "Z")) return false;
+        int radii = legacyRead(code.get(2), Opcode.IGET_OBJECT, "[F", layer, params, paramsType);
+        if (radii < 0 || !legacyHands(code.get(3), layer, radii, layerType, "[F")) return false;
+        var next = code.get(4);
+        if ((next.getOpcode() != Opcode.IGET && next.getOpcode() != Opcode.IGET_BOOLEAN) || ((TwoRegisterInstruction) next).getRegisterB() != params) return false;
+        int spare = ((TwoRegisterInstruction) next).getRegisterA();
+        if (spare == layer || spare == params || spare == radii || spare > 15) return false;
+        var targets = mediaTargets(method);
+        for (int i = 0; i <= 4; i++) if (targets.contains(i)) return false;
+        return true;
+    }
+
+    static int legacyRead(Instruction get, Opcode opcode, String type, int layer, int params, String paramsType) {
+        if (get.getOpcode() != opcode || !(get instanceof TwoRegisterInstruction two) || two.getRegisterB() != params) return -1;
+        var field = (FieldReference) ((ReferenceInstruction) get).getReference();
+        if (!field.getDefiningClass().equals(paramsType) || !field.getType().equals(type)) return -1;
+        int value = two.getRegisterA();
+        return value == layer || value == params || value > 15 ? -1 : value;
+    }
+
+    static boolean legacyHands(Instruction call, int layer, int value, String layerType, String parameter) {
+        if (call.getOpcode() != Opcode.INVOKE_INTERFACE || !(((ReferenceInstruction) call).getReference() instanceof MethodReference target)) return false;
+        return target.getDefiningClass().equals(layerType) && "V".equals(target.getReturnType()) && target.getParameterTypes().size() == 1 &&
+            parameter.contentEquals(target.getParameterTypes().get(0)) && reads(call).equals(List.of(layer, value));
+    }
+
+    static final String TILE_SET_SHAPE = "Landroid/graphics/drawable/ShapeDrawable;->setShape(Landroid/graphics/drawable/shapes/Shape;)V";
+    static final String TILE_PATH_SHAPE = "Landroid/graphics/drawable/shapes/PathShape;-><init>(Landroid/graphics/Path;FF)V";
+    static final String TILE_DRAW_OVAL = "Landroid/graphics/Canvas;->drawOval(Landroid/graphics/RectF;Landroid/graphics/Paint;)V";
+
+    /** Mirrors AvatarShape.kt's tileShapeFlag: a (Z)V that makes an OvalShape and a RectShape, sets one, and branches first on the flag. */
+    static boolean tileShapeFlag(Method method) {
+        if (AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"V".equals(method.getReturnType()) || method.getParameterTypes().size() != 1 ||
+            !"Z".contentEquals(method.getParameterTypes().get(0)) || method.getImplementation() == null) return false;
+        var code = instructions(method);
+        var created = new HashSet<String>();
+        boolean sets = false;
+        Instruction branch = null;
+        for (var i : code) {
+            if (i.getOpcode() == Opcode.NEW_INSTANCE && ((ReferenceInstruction) i).getReference() instanceof TypeReference type) created.add(type.getType());
+            if (TILE_SET_SHAPE.equals(ref(i))) sets = true;
+            if (branch == null && i instanceof OffsetInstruction) branch = i;
+        }
+        if (!created.contains("Landroid/graphics/drawable/shapes/OvalShape;") || !created.contains("Landroid/graphics/drawable/shapes/RectShape;") || !sets) return false;
+        int flag = parameterSlot(method, 1);
+        if (branch == null || (branch.getOpcode() != Opcode.IF_EQZ && branch.getOpcode() != Opcode.IF_NEZ) || register(branch) != flag) return false;
+        return flag <= 15 && !mediaTargets(method).contains(0);
+    }
+
+    /** Mirrors AvatarShape.kt's tilePath: the setter's class, one Path parameter, made into a PathShape, and the setter called. */
+    static boolean tilePath(Method method, String setter) {
+        if (!setter.startsWith(method.getDefiningClass() + "->") || AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+            !"V".equals(method.getReturnType()) || method.getImplementation() == null) return false;
+        var types = method.getParameterTypes();
+        int paths = 0, index = -1, words = 1;
+        for (int i = 0; i < types.size(); i++) {
+            String type = types.get(i).toString();
+            if ("Landroid/graphics/Path;".equals(type)) { paths++; if (index < 0) index = words; }
+            words += "J".equals(type) || "D".equals(type) ? 2 : 1;
+        }
+        if (paths != 1) return false;
+        var code = instructions(method);
+        boolean shaped = false, set = false;
+        for (var i : code) { shaped |= TILE_PATH_SHAPE.equals(ref(i)); set |= setter.equals(ref(i)); }
+        return shaped && set && parameterSlot(method, index) <= 15 && !mediaTargets(method).contains(0);
+    }
+
+    /** Mirrors AvatarShape.kt's tileOvals: the placeholder's draw(Canvas), every oval it draws an invoke-virtual drawOval. */
+    static boolean tileOvals(Method method) {
+        if (!"draw".equals(method.getName()) || AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"V".equals(method.getReturnType()) ||
+            method.getParameterTypes().size() != 1 || !"Landroid/graphics/Canvas;".contentEquals(method.getParameterTypes().get(0)) ||
+            method.getImplementation() == null) return false;
+        int ovals = 0;
+        for (var i : instructions(method)) {
+            if (!TILE_DRAW_OVAL.equals(ref(i))) continue;
+            if (i.getOpcode() != Opcode.INVOKE_VIRTUAL) return false;
+            ovals++;
+        }
+        return ovals > 0;
+    }
+
+    /**
+     * avatar_shape: Vito's one RoundingOptions constructor in its proven shape, the one legacy rounding helper, then the
+     * user tile's one shape setter, the one setup in its class that hands it a clip path, and the draw of the placeholder
+     * type that setup takes. Mirrors AvatarShape.kt.
+     */
+    static List<Method> avatarShape(List<ClassDef> classes) {
+        ClassDef vito = null;
+        String circle = null;
+        for (var cls : classes) {
+            String field = vitoCircle(cls);
+            if (field == null) continue;
+            if (vito != null) return List.of();
+            vito = cls;
+            circle = field;
+        }
+        if (vito == null) return List.of();
+        Method constructor = null;
+        for (var method : vito.getMethods()) {
+            if (!vitoRounding(method, circle)) continue;
+            if (constructor != null) return List.of();
+            constructor = method;
+        }
+        if (constructor == null) return List.of();
+        Method legacy = null;
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (!legacyRounding(method)) continue;
+            if (legacy != null) return List.of();
+            legacy = method;
+        }
+        if (legacy == null) return List.of();
+        Method setter = null;
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (!tileShapeFlag(method)) continue;
+            if (setter != null) return List.of();
+            setter = method;
+        }
+        if (setter == null) return List.of();
+        String setterId = hookId(setter);
+        var byType = new HashMap<String, ClassDef>();
+        for (var cls : classes) byType.put(cls.getType(), cls);
+        var tile = byType.get(setter.getDefiningClass());
+        if (tile == null) return List.of();
+        Method setup = null;
+        for (var method : tile.getMethods()) {
+            if (!tilePath(method, setterId)) continue;
+            if (setup != null) return List.of();
+            setup = method;
+        }
+        if (setup == null) return List.of();
+        Method placeholder = null;
+        for (var type : new LinkedHashSet<String>(setup.getParameterTypes().stream().map(Object::toString).toList())) {
+            var cls = byType.get(type);
+            if (cls == null) continue;
+            for (var method : cls.getMethods()) {
+                if (!tileOvals(method)) continue;
+                if (placeholder != null) return List.of();
+                placeholder = method;
+            }
+        }
+        return placeholder == null ? List.of() : List.of(constructor, legacy, setter, setup, placeholder);
+    }
+
+    static final String RTC_NOTIFICATION_SERVICE ="Lcom/facebook/rtc/notification/RtcNotificationForegroundService;";
 
     /** The one register a String.valueOf(boolean) call reads, in either invoke form, or -1. */
     static int booleanText(Instruction i) {
@@ -5230,6 +5576,8 @@ public class CompatReport {
         found.get("wifi_identity").addAll(wifiIdentityReads(classes));
         found.get("phone_id_sync").addAll(phoneIdSync(classes));
         found.get("story_hold").addAll(storyHold(classes));
+        found.get("share_story").addAll(shareStory(classes));
+        found.get("avatar_shape").addAll(avatarShape(classes));
         found.get("quiet_call_ring").addAll(quietCallRing(classes));
         found.get("quiet_call_notification").addAll(quietCallNotification(classes));
         var markRead = markReadButton(classes);
@@ -6122,6 +6470,463 @@ public class CompatReport {
     }
 
     /**
+     * What LegacyDrawer.kt's prepareLegacyDrawer checks in Messenger before Open settings from menu edits anything: the
+     * side menu's refresh handoff, the Settings row and its icon, the Settings key, the metadata map and the native
+     * section. Its checks on HushMessenger's own extension stub and helpers are left out, since a stock APK has none.
+     * A miss here is the same miss that stops the patch, reported before anyone patches.
+     */
+    static List<String> legacyDrawerProblems(List<ClassDef> classes, List<Method> menu) {
+        var adds = menu.stream().filter(m -> "Ljava/util/ArrayList;".equals(m.getReturnType())).toList();
+        var refreshes = menu.stream().filter(m -> "V".equals(m.getReturnType()) && m.getParameterTypes().isEmpty()).toList();
+        if (adds.size() != 1 || refreshes.size() != 1)
+            return List.of("legacy drawer needs one menu builder and one refresh, found " + adds.size() + " and " + refreshes.size());
+        var byType = new HashMap<String, ClassDef>();
+        for (var c : classes) byType.put(c.getType(), c);
+        try {
+            new LegacyDrawer(byType).check(refreshes.get(0), adds.get(0));
+            return List.of();
+        } catch (LegacyDrawer.Changed e) {
+            return List.of(e.getMessage());
+        } catch (RuntimeException e) {
+            // The patch would stop on the same surprise, just with a stack trace instead of a reason.
+            return List.of("legacy drawer preflight stopped: " + e);
+        }
+    }
+
+    /** LegacyDrawer.kt's checks, line for line, with its PatchException messages. */
+    static final class LegacyDrawer {
+        static final String MODEL = "Lcom/facebook/messaging/navigation/home/drawer/model/";
+        static final String KEY = MODEL + "DrawerFolderKey;";
+        static final String SETTINGS_KEY = MODEL + "SettingsFolderKey;";
+        static final String METADATA = "Lcom/facebook/xapp/messaging/map/HeterogeneousMap;";
+        static final String SECTION = "Lcom/facebook/messaging/navigation/plugins/drawerfoldersections/settingsfoldersection/SettingsDrawerFolderSectionImplementation;";
+        static final String REFRESH = "HomeDrawerFragmentBase.refreshDrawerItems";
+        static final String CONTEXT = "Landroid/content/Context;";
+        static final String LIST = "Ljava/util/List;";
+        static final String INTEGER = "Ljava/lang/Integer;";
+        static final String STRING = "Ljava/lang/String;";
+        static final String FRAGMENT = "Landroidx/fragment/app/Fragment;";
+        static final Set<Opcode> OBJECT_MOVES = EnumSet.of(Opcode.MOVE_OBJECT, Opcode.MOVE_OBJECT_FROM16, Opcode.MOVE_OBJECT_16);
+
+        static final class Changed extends RuntimeException {
+            Changed(String detail) { super("legacy drawer " + detail); }
+        }
+
+        final Map<String, ClassDef> classes;
+        LegacyDrawer(Map<String, ClassDef> classes) { this.classes = classes; }
+
+        static Changed changed(String detail) { return new Changed(detail); }
+        static List<Instruction> code(Method m) {
+            if (m.getImplementation() == null) throw changed(m.getName() + " has no code");
+            return instructions(m);
+        }
+        static List<String> params(MethodReference m) {
+            var out = new ArrayList<String>();
+            for (var p : m.getParameterTypes()) out.add(p.toString());
+            return out;
+        }
+        static Object reference(Instruction i) { return i instanceof ReferenceInstruction r ? r.getReference() : null; }
+        static boolean is(AccessFlags flag, int flags) { return flag.isSet(flags); }
+        static List<Method> methods(ClassDef c) {
+            var out = new ArrayList<Method>();
+            c.getMethods().forEach(out::add);
+            return out;
+        }
+        static List<Field> fields(ClassDef c) {
+            var out = new ArrayList<Field>();
+            c.getFields().forEach(out::add);
+            return out;
+        }
+        static boolean folderKey(String type) { return type.startsWith(MODEL) && type.endsWith("FolderKey;"); }
+        static boolean definesEquality(ClassDef c) {
+            return methods(c).stream().anyMatch(m -> m.getName().equals("equals") || m.getName().equals("hashCode"));
+        }
+
+        /** Follow one register only within its straight-line path; an incoming branch makes its value ambiguous. */
+        static int origin(Method m, int before, int register) {
+            var code = code(m);
+            var landings = mediaTargets(m);
+            int wanted = register;
+            for (int i = before - 1; i >= 0; i--) {
+                var instruction = code.get(i);
+                if (instruction instanceof OffsetInstruction || landings.contains(i + 1)) throw changed(m.getName() + " has ambiguous model values");
+                if (!instruction.getOpcode().setsRegister() || register(instruction) != wanted) continue;
+                if (OBJECT_MOVES.contains(instruction.getOpcode())) wanted = ((TwoRegisterInstruction) instruction).getRegisterB();
+                else return i;
+            }
+            throw changed(m.getName() + " has an uninitialized model value");
+        }
+
+        /** The only folder row built with SettingsFolderKey.A00 as its key. */
+        static int settingsRowCall(Method add) {
+            var code = code(add);
+            var settings = new ArrayList<Integer>();
+            for (int i = 0; i < code.size(); i++) {
+                if (code.get(i).getOpcode() != Opcode.INVOKE_DIRECT_RANGE || !(reference(code.get(i)) instanceof MethodReference call) ||
+                    !"<init>".equals(call.getName()) || params(call).size() <= 3 || !KEY.equals(params(call).get(3))) continue;
+                var args = callArgs(code.get(i));
+                if (args.size() <= 4) throw changed("settings row key is missing");
+                int key = origin(add, i, args.get(4));
+                if (code.get(key).getOpcode() == Opcode.SGET_OBJECT && (SETTINGS_KEY + "->A00:" + SETTINGS_KEY).equals(ref(code.get(key))))
+                    settings.add(i);
+            }
+            if (settings.size() != 1) throw changed("builder makes " + settings.size() + " Settings rows, expected 1");
+            return settings.get(0);
+        }
+
+        /** ControlHooks.kt's menuFolderItemType: the row class, when the builder makes only rows, one inline icon and folder keys. */
+        static String menuFolderItemType(Method add) {
+            var code = code(add);
+            var types = new LinkedHashSet<String>();
+            for (var i : code) if (i.getOpcode() == Opcode.NEW_INSTANCE) types.add(((TypeReference) reference(i)).getType());
+            int rowCall = settingsRowCall(add);
+            String row = ((MethodReference) reference(code.get(rowCall))).getDefiningClass();
+            var extras = types.stream().filter(t -> !t.equals(row) && !folderKey(t)).toList();
+            int iconAt = -1;
+            var rowArgs = callArgs(code.get(rowCall));
+            if (extras.size() == 1 && rowArgs.size() > 3) iconAt = origin(add, rowCall, rowArgs.get(3));
+            String icon = null;
+            if (iconAt >= 0 && code.get(iconAt).getOpcode() == Opcode.NEW_INSTANCE) {
+                String type = ((TypeReference) reference(code.get(iconAt))).getType();
+                var inserted = iconAt + 1 < code.size() ? code.get(iconAt + 1) : null;
+                if (type.equals(extras.get(0)) && inserted instanceof FiveRegisterInstruction five && inserted.getOpcode() == Opcode.INVOKE_DIRECT &&
+                    reference(inserted) instanceof MethodReference ctor && ctor.getDefiningClass().equals(type) && "<init>".equals(ctor.getName()) &&
+                    five.getRegisterC() == register(code.get(iconAt))) icon = type;
+            }
+            boolean unexpected = !types.contains(row);
+            for (var type : types) if (!type.equals(row) && !type.equals(icon) && !folderKey(type)) unexpected = true;
+            if (unexpected) throw changed("menu settings item builder creates " + types.size() + " types, expected its rows, icons and folder keys");
+            return row;
+        }
+
+        void refresh(Method m) {
+            var code = code(m);
+            int registers = m.getImplementation().getRegisterCount();
+            long markers = code.stream().filter(i -> reference(i) instanceof StringReference s && REFRESH.equals(s.getString())).count();
+            if (!m.getParameterTypes().isEmpty() || !"V".equals(m.getReturnType()) || is(AccessFlags.STATIC, m.getAccessFlags()) ||
+                registers < 1 || registers > 16 || markers != 1) throw changed("refresh signature changed");
+            int receiver = registers - 1;
+            var candidates = new ArrayList<Integer>();
+            for (int i = 0; i < code.size(); i++)
+                if (code.get(i).getOpcode() == Opcode.IPUT_OBJECT && reference(code.get(i)) instanceof FieldReference f &&
+                    f.getDefiningClass().equals(m.getDefiningClass()) && "A0G".equals(f.getName()) && LIST.equals(f.getType())) candidates.add(i);
+            if (candidates.size() != 1 || candidates.get(0) < 2) throw changed("refresh must store one section list");
+            int store = candidates.get(0);
+            var put = (TwoRegisterInstruction) code.get(store);
+            var call = code.get(store - 2);
+            if (!(reference(call) instanceof MethodReference producer)) throw changed("refresh section producer changed");
+            var producerArgs = callArgs(call);
+            var landings = mediaTargets(m);
+            if (put.getRegisterB() != receiver || put.getRegisterA() == receiver || put.getRegisterA() < 0 || put.getRegisterA() >= registers ||
+                code.get(store - 1).getOpcode() != Opcode.MOVE_RESULT_OBJECT || register(code.get(store - 1)) != put.getRegisterA() ||
+                call.getOpcode() != Opcode.INVOKE_INTERFACE || !"Ljava/util/ArrayList;".equals(producer.getReturnType()) ||
+                !producer.getParameterTypes().isEmpty() || producerArgs.size() != 1 ||
+                producerArgs.get(0) < 0 || producerArgs.get(0) >= registers ||
+                landings.contains(store - 1) || landings.contains(store)) throw changed("refresh list handoff changed");
+            var owner = classes.get(m.getDefiningClass());
+            if (owner == null) throw changed("refresh owner is missing");
+            if (fields(owner).stream().filter(f -> !is(AccessFlags.STATIC, f.getAccessFlags()) && "A0G".equals(f.getName()) &&
+                LIST.equals(f.getType())).count() != 1) throw changed("refresh list field changed");
+            var provider = classes.get(producer.getDefiningClass());
+            if (provider == null) throw changed("section provider is missing");
+            String producerId = producer.toString();
+            if (!is(AccessFlags.INTERFACE, provider.getAccessFlags()) || methods(provider).stream()
+                .filter(p -> hookId(p).equals(producerId) && !is(AccessFlags.STATIC, p.getAccessFlags())).count() != 1)
+                throw changed("section provider changed");
+            ClassDef ancestor = owner;
+            for (int depth = 0; depth < 32; depth++) {
+                if (ancestor != null && FRAGMENT.equals(ancestor.getType())) {
+                    var getters = methods(ancestor).stream().filter(g -> g.getName().equals("getContext") && g.getParameterTypes().isEmpty() &&
+                        CONTEXT.equals(g.getReturnType()) && is(AccessFlags.PUBLIC, g.getAccessFlags()) &&
+                        !is(AccessFlags.STATIC, g.getAccessFlags())).toList();
+                    if (getters.size() != 1) throw changed("fragment context getter changed");
+                    if (getters.get(0).getImplementation() == null) throw changed("fragment context getter has no code");
+                    return;
+                }
+                ancestor = ancestor == null || ancestor.getSuperclass() == null ? null : classes.get(ancestor.getSuperclass());
+            }
+            throw changed("refresh owner is not a supported fragment");
+        }
+
+        ClassDef type(String name) {
+            var model = classes.get(name);
+            if (model == null || !is(AccessFlags.PUBLIC, model.getAccessFlags())) throw changed("model " + name + " is missing or inaccessible");
+            return model;
+        }
+
+        ClassDef allocatable(String name) {
+            var model = type(name);
+            if (is(AccessFlags.ABSTRACT, model.getAccessFlags()) || is(AccessFlags.INTERFACE, model.getAccessFlags()))
+                throw changed("model " + name + " cannot be allocated");
+            return model;
+        }
+
+        /** All factory arguments checked here are nonnull. That path must return without doing any work. */
+        void nullCheck(MethodReference call) {
+            String id = call.toString();
+            var checks = methods(type(call.getDefiningClass())).stream().filter(m -> hookId(m).equals(id)).toList();
+            if (checks.size() != 1) throw changed("model null check is missing");
+            var check = checks.get(0);
+            var body = code(check);
+            int registers = check.getImplementation().getRegisterCount();
+            var first = body.isEmpty() ? null : body.get(0);
+            if (!is(AccessFlags.PUBLIC, check.getAccessFlags()) || !is(AccessFlags.STATIC, check.getAccessFlags()) ||
+                !check.getImplementation().getTryBlocks().isEmpty() || registers < 2 || first == null ||
+                first.getOpcode() != Opcode.IF_NEZ || register(first) != registers - 2 || !(first instanceof OffsetInstruction))
+                throw changed("model null check changed");
+            int offset = ((OffsetInstruction) first).getCodeOffset();
+            int address = 0;
+            Instruction target = null;
+            for (var instruction : body) {
+                if (address == offset) { target = instruction; break; }
+                address += instruction.getCodeUnits();
+            }
+            if (target == null || target.getOpcode() != Opcode.RETURN_VOID) throw changed("model null check has side effects on nonnull values");
+        }
+
+        void field(FieldReference reference, boolean isStatic) {
+            var found = fields(type(reference.getDefiningClass())).stream()
+                .filter(f -> f.getName().equals(reference.getName()) && f.getType().equals(reference.getType())).toList();
+            if (found.size() != 1) throw changed("model field " + reference + " is missing");
+            if (!is(AccessFlags.PUBLIC, found.get(0).getAccessFlags()) || is(AccessFlags.STATIC, found.get(0).getAccessFlags()) != isStatic)
+                throw changed("model field " + reference + " changed access");
+        }
+
+        /** The name an enum constant is declared with: its initializer loads exactly one string after the previous store. */
+        String enumName(FieldReference constant) {
+            var inits = methods(type(constant.getDefiningClass())).stream().filter(m -> m.getName().equals("<clinit>")).toList();
+            if (inits.size() != 1) throw changed("enum " + constant.getDefiningClass() + " has no initializer");
+            var code = code(inits.get(0));
+            var stores = new ArrayList<Integer>();
+            for (int i = 0; i < code.size(); i++) if (code.get(i).getOpcode() == Opcode.SPUT_OBJECT) stores.add(i);
+            var matching = stores.stream().filter(i -> constant.toString().equals(ref(code.get(i)))).toList();
+            if (matching.size() != 1) throw changed("enum constant " + constant + " is not stored once");
+            int store = matching.get(0);
+            int previous = -1;
+            for (int at : stores) if (at < store) previous = at;
+            var names = new ArrayList<String>();
+            for (int i = previous + 1; i < store; i++) if (reference(code.get(i)) instanceof StringReference s) names.add(s.getString());
+            if (names.size() != 1) throw changed("enum constant " + constant + " has no single name");
+            return names.get(0);
+        }
+
+        boolean subtype(String child, String parent) {
+            var pending = new ArrayDeque<String>();
+            var seen = new HashSet<String>();
+            pending.add(child);
+            while (!pending.isEmpty() && seen.size() < 32) {
+                String name = pending.removeFirst();
+                if (name.equals(parent)) return true;
+                if (!seen.add(name)) continue;
+                var model = classes.get(name);
+                if (model == null) continue;
+                if (model.getSuperclass() != null) pending.add(model.getSuperclass());
+                pending.addAll(model.getInterfaces());
+            }
+            return false;
+        }
+
+        /** Constructors may only check allowed arguments, invoke Object's constructor and store their own parameters. */
+        Method constructor(String owner, List<String> params, List<String> names, Set<Integer> checked, boolean isPublic, boolean allocated) {
+            var model = allocated ? allocatable(owner) : type(owner);
+            var ctors = methods(model).stream().filter(m -> m.getName().equals("<init>") && params(m).equals(params)).toList();
+            if (ctors.size() != 1) throw changed("model constructor " + owner + " changed");
+            var method = ctors.get(0);
+            if (!"V".equals(method.getReturnType()) || is(AccessFlags.STATIC, method.getAccessFlags()) ||
+                (isPublic && !is(AccessFlags.PUBLIC, method.getAccessFlags())) ||
+                (method.getImplementation() != null && !method.getImplementation().getTryBlocks().isEmpty()))
+                throw changed("model constructor " + owner + " changed access");
+            var code = code(method);
+            int receiver = method.getImplementation().getRegisterCount() - params.size() - 1;
+            if (receiver < 0 || code.isEmpty() || code.get(code.size() - 1).getOpcode() != Opcode.RETURN_VOID ||
+                code.stream().filter(i -> i.getOpcode() == Opcode.RETURN_VOID).count() != 1) throw changed("model constructor " + owner + " changed exits");
+            var declared = fields(model).stream().filter(f -> !is(AccessFlags.STATIC, f.getAccessFlags())).map(Field::getName).toList();
+            if (!new HashSet<>(declared).equals(new HashSet<>(names)) || declared.size() != names.size())
+                throw changed("model fields " + owner + " changed");
+            var writes = new HashSet<Integer>();
+            int baseCalls = 0;
+            for (var instruction : code) switch (instruction.getOpcode()) {
+                case IPUT_OBJECT, IPUT_BOOLEAN -> {
+                    if (!(reference(instruction) instanceof FieldReference stored)) throw changed("model store changed");
+                    int slot = names.indexOf(stored.getName());
+                    var store = (TwoRegisterInstruction) instruction;
+                    if (slot < 0 || !stored.getDefiningClass().equals(owner) || !stored.getType().equals(params.get(slot)) ||
+                        store.getRegisterB() != receiver || store.getRegisterA() != receiver + slot + 1 || !writes.add(slot) ||
+                        (instruction.getOpcode() == Opcode.IPUT_BOOLEAN) != "Z".equals(params.get(slot)))
+                        throw changed("model parameter store changed");
+                    field(stored, false);
+                }
+                case INVOKE_DIRECT -> {
+                    if (!"Ljava/lang/Object;-><init>()V".equals(ref(instruction)) || !callArgs(instruction).equals(List.of(receiver)))
+                        throw changed("model constructor " + owner + " has an unsupported call");
+                    baseCalls++;
+                }
+                case INVOKE_STATIC -> {
+                    if (!(reference(instruction) instanceof MethodReference call)) throw changed("model check changed");
+                    var arguments = callArgs(instruction);
+                    if (!"V".equals(call.getReturnType()) || !params(call).equals(List.of("Ljava/lang/Object;", "I")) || arguments.size() != 2 ||
+                        !checked.contains(arguments.get(0) - receiver - 1))
+                        throw changed("model constructor " + owner + " checks unsupported parameters");
+                    nullCheck(call);
+                }
+                case CONST_4 -> {
+                    if (register(instruction) >= receiver) throw changed("model constructor " + owner + " overwrites a parameter");
+                }
+                case RETURN_VOID -> { }
+                default -> throw changed("model constructor " + owner + " contains unsupported instructions");
+            }
+            if (writes.size() != params.size() || baseCalls != 1) throw changed("model constructor " + owner + " is incomplete");
+            return method;
+        }
+
+        void check(Method refreshMethod, Method add) {
+            refresh(refreshMethod);
+            String row = menuFolderItemType(add);
+            var addCode = code(add);
+            int rowCallAt = settingsRowCall(add);
+            var rowCall = (MethodReference) reference(addCode.get(rowCallAt));
+            if (!rowCall.getDefiningClass().equals(row)) throw changed("settings row constructor call changed");
+            var rowParams = params(rowCall);
+            if (rowParams.size() != 8 || !CONTEXT.equals(rowParams.get(0)) || !KEY.equals(rowParams.get(3)) || !METADATA.equals(rowParams.get(4)) ||
+                !rowParams.subList(5, 8).equals(List.of(INTEGER, STRING, LIST)) || !rowParams.get(1).startsWith("L") ||
+                !rowParams.get(2).startsWith("L")) throw changed("settings row constructor signature changed");
+            type(rowParams.get(1));
+            type(rowParams.get(2));
+            constructor(row, rowParams, List.of("A00", "A01", "A02", "A03", "A04", "A05", "A06", "A07"), Set.of(3, 6), true, true);
+            var rowArgs = callArgs(addCode.get(rowCallAt));
+            int addRegisters = add.getImplementation().getRegisterCount();
+            if (rowArgs.size() != 9 || rowArgs.stream().anyMatch(r -> r < 0 || r >= addRegisters)) throw changed("settings row constructor arguments changed");
+            int rowAt = origin(add, rowCallAt, rowArgs.get(0));
+            if (addCode.get(rowAt).getOpcode() != Opcode.NEW_INSTANCE || !row.equals(ref(addCode.get(rowAt)))) throw changed("settings row receiver changed");
+            int iconResult = origin(add, rowCallAt, rowArgs.get(3));
+            String iconType;
+            List<String> iconCtorParams;
+            boolean iconCtorPublic;
+            FieldReference settingsGlyph;
+            if (addCode.get(iconResult).getOpcode() == Opcode.NEW_INSTANCE) {
+                // 584.1 builds the Settings icon in place, straight into the row constructor's icon argument.
+                if (!(reference(addCode.get(iconResult)) instanceof TypeReference allocated)) throw changed("settings icon construction changed");
+                iconType = allocated.getType();
+                type(iconType);
+                if (!subtype(iconType, rowParams.get(2))) throw changed("settings icon type changed");
+                int ctorAt = iconResult + 1;
+                var ctorInsn = ctorAt < addCode.size() ? addCode.get(ctorAt) : null;
+                if (ctorInsn == null || ctorInsn.getOpcode() != Opcode.INVOKE_DIRECT || !(reference(ctorInsn) instanceof MethodReference ctor) ||
+                    !ctor.getDefiningClass().equals(iconType) || !"<init>".equals(ctor.getName())) throw changed("settings icon construction changed");
+                var ctorArgs = callArgs(ctorInsn);
+                iconCtorParams = params(ctor);
+                if (iconCtorParams.size() != 2 || ctorArgs.size() != 3 || ctorArgs.get(0) != register(addCode.get(iconResult)))
+                    throw changed("settings icon construction changed");
+                int glyphAt = origin(add, ctorAt, ctorArgs.get(1));
+                int colorAt = origin(add, ctorAt, ctorArgs.get(2));
+                if (!(reference(addCode.get(glyphAt)) instanceof FieldReference glyph)) throw changed("settings glyph changed");
+                if (!(reference(addCode.get(colorAt)) instanceof FieldReference color)) throw changed("settings icon color changed");
+                if (addCode.get(glyphAt).getOpcode() != Opcode.SGET_OBJECT || addCode.get(colorAt).getOpcode() != Opcode.SGET_OBJECT ||
+                    !glyph.getType().equals(iconCtorParams.get(0)) || !subtype(color.getType(), iconCtorParams.get(1)))
+                    throw changed("settings icon contract changed");
+                field(glyph, true);
+                field(color, true);
+                settingsGlyph = glyph;
+                iconCtorPublic = true;
+            } else {
+                // 584 calls the icon's static factory with the glyph.
+                var factoryCall = iconResult >= 1 ? addCode.get(iconResult - 1) : null;
+                if (factoryCall == null || !(reference(factoryCall) instanceof MethodReference icon)) throw changed("settings icon factory changed");
+                if (addCode.get(iconResult).getOpcode() != Opcode.MOVE_RESULT_OBJECT || factoryCall.getOpcode() != Opcode.INVOKE_STATIC ||
+                    icon.getParameterTypes().size() != 1 || !subtype(icon.getReturnType(), rowParams.get(2))) throw changed("settings icon flow changed");
+                String iconId = icon.toString();
+                var factories = methods(type(icon.getDefiningClass())).stream().filter(m -> hookId(m).equals(iconId)).toList();
+                if (factories.size() != 1) throw changed("settings icon factory is missing");
+                var iconFactory = factories.get(0);
+                var factoryArgs = callArgs(factoryCall);
+                if (factoryArgs.size() != 1) throw changed("settings icon flow changed");
+                int glyphAt = origin(add, iconResult - 1, factoryArgs.get(0));
+                if (!(reference(addCode.get(glyphAt)) instanceof FieldReference glyph)) throw changed("settings glyph changed");
+                if (addCode.get(glyphAt).getOpcode() != Opcode.SGET_OBJECT || !glyph.getType().equals(params(icon).get(0)) ||
+                    !is(AccessFlags.PUBLIC, iconFactory.getAccessFlags()) || !is(AccessFlags.STATIC, iconFactory.getAccessFlags()) ||
+                    (iconFactory.getImplementation() != null && !iconFactory.getImplementation().getTryBlocks().isEmpty()))
+                    throw changed("settings icon contract changed");
+                var iconCode = code(iconFactory);
+                var builds = new ArrayList<Integer>();
+                for (int i = 0; i < iconCode.size(); i++) if (iconCode.get(i).getOpcode() == Opcode.INVOKE_DIRECT) builds.add(i);
+                if (builds.size() != 1) throw changed("settings icon construction changed");
+                if (!(reference(iconCode.get(builds.get(0))) instanceof MethodReference iconCtor)) throw changed("settings icon constructor changed");
+                var iconArgs = callArgs(iconCode.get(builds.get(0)));
+                var ctorParams = params(iconCtor);
+                // 584.1's second arm64 family keeps the factory on the icon's parent type (G7K.A00 returns a new G7P).
+                if (!subtype(icon.getReturnType(), icon.getDefiningClass()) || !iconCtor.getDefiningClass().equals(icon.getReturnType()) ||
+                    !"<init>".equals(iconCtor.getName()) || ctorParams.size() != 2 || !ctorParams.get(0).equals(glyph.getType()) ||
+                    iconArgs.size() != 3 || iconArgs.get(1) != iconFactory.getImplementation().getRegisterCount() - 1 ||
+                    iconCode.size() != 4 || iconCode.get(0).getOpcode() != Opcode.SGET_OBJECT || iconCode.get(1).getOpcode() != Opcode.NEW_INSTANCE ||
+                    !icon.getReturnType().equals(ref(iconCode.get(1))) || register(iconCode.get(1)) != iconArgs.get(0) ||
+                    iconCode.get(3).getOpcode() != Opcode.RETURN_OBJECT || register(iconCode.get(3)) != iconArgs.get(0) ||
+                    register(iconCode.get(0)) != iconArgs.get(2)) throw changed("settings icon is not freshly constructed");
+                if (!(reference(iconCode.get(0)) instanceof FieldReference color)) throw changed("settings icon color changed");
+                if (!subtype(color.getType(), ctorParams.get(1))) throw changed("settings icon color type changed");
+                field(color, true);
+                iconType = icon.getReturnType();
+                iconCtorParams = ctorParams;
+                iconCtorPublic = false;
+                settingsGlyph = glyph;
+            }
+            constructor(iconType, iconCtorParams, List.of("A00", "A01"), Set.of(0, 1), iconCtorPublic, true);
+            // Obfuscated glyph names move between versions; the enum's own name for the Settings gear doesn't.
+            if (!"SETTINGS".equals(enumName(settingsGlyph))) throw changed("settings glyph is not the Settings gear");
+            field(settingsGlyph, true);
+            var key = allocatable(SETTINGS_KEY);
+            var keyCtors = methods(key).stream().filter(m -> m.getName().equals("<init>") && m.getParameterTypes().isEmpty()).toList();
+            if (keyCtors.size() != 1) throw changed("settings key constructor changed");
+            var keyCtor = keyCtors.get(0);
+            var keyCode = code(keyCtor);
+            int keyRegisters = keyCtor.getImplementation().getRegisterCount();
+            if (!KEY.equals(key.getSuperclass()) || !key.getInterfaces().contains("Landroid/os/Parcelable;") ||
+                !is(AccessFlags.PUBLIC, keyCtor.getAccessFlags()) || is(AccessFlags.STATIC, keyCtor.getAccessFlags()) ||
+                !"V".equals(keyCtor.getReturnType()) || !keyCtor.getImplementation().getTryBlocks().isEmpty() ||
+                keyCode.size() != 3 || keyCode.get(0).getOpcode() != Opcode.CONST_STRING ||
+                !(reference(keyCode.get(0)) instanceof StringReference label && "Settings".equals(label.getString())) ||
+                keyCode.get(1).getOpcode() != Opcode.INVOKE_DIRECT || !(KEY + "-><init>(" + STRING + ")V").equals(ref(keyCode.get(1))) ||
+                keyCode.get(2).getOpcode() != Opcode.RETURN_VOID ||
+                !callArgs(keyCode.get(1)).equals(List.of(keyRegisters - 1, register(keyCode.get(0)))) ||
+                definesEquality(key) || definesEquality(type(KEY))) throw changed("settings key is not independently constructible");
+            constructor(KEY, List.of(STRING), List.of("A00"), Set.of(), false, false);
+            constructor(METADATA, List.of("Ljava/util/Map;"), List.of("A00"), Set.of(), true, true);
+            var sources = methods(type(SECTION)).stream().filter(m -> m.getParameterTypes().isEmpty() && m.getReturnType().startsWith("LX/")).toList();
+            if (sources.size() != 1) throw changed("native settings section factory changed");
+            var sectionSource = sources.get(0);
+            if (is(AccessFlags.STATIC, sectionSource.getAccessFlags()) || !is(AccessFlags.PUBLIC, sectionSource.getAccessFlags()) ||
+                (sectionSource.getImplementation() != null && !sectionSource.getImplementation().getTryBlocks().isEmpty()))
+                throw changed("native section factory changed access");
+            String section = sectionSource.getReturnType();
+            var sectionParams = List.of("Landroid/view/View$OnClickListener;", INTEGER, INTEGER, STRING, STRING, STRING, LIST, "Z");
+            var sectionCtor = constructor(section, sectionParams, List.of("A00", "A02", "A01", "A05", "A03", "A04", "A06", "A07"), Set.of(6), true, true);
+            var sectionCode = code(sectionSource);
+            String ctorId = hookId(sectionCtor);
+            var calls = new ArrayList<Integer>();
+            for (int i = 0; i < sectionCode.size(); i++) if (ctorId.equals(ref(sectionCode.get(i)))) calls.add(i);
+            if (calls.size() != 1) throw changed("native settings section constructor call changed");
+            int sectionAt = calls.get(0);
+            var sectionArgs = callArgs(sectionCode.get(sectionAt));
+            int sourceRegisters = sectionSource.getImplementation().getRegisterCount();
+            if (sectionCode.get(sectionAt).getOpcode() != Opcode.INVOKE_DIRECT_RANGE || sectionArgs.size() != 9 ||
+                sectionArgs.stream().anyMatch(r -> r < 0 || r >= sourceRegisters)) throw changed("native section arguments changed");
+            int allocation = origin(sectionSource, sectionAt, sectionArgs.get(0));
+            var returns = sectionCode.stream().filter(i -> i.getOpcode() == Opcode.RETURN_OBJECT).toList();
+            if (sectionCode.get(allocation).getOpcode() != Opcode.NEW_INSTANCE || !section.equals(ref(sectionCode.get(allocation))) ||
+                returns.size() != 1 || register(returns.get(0)) != sectionArgs.get(0)) throw changed("native section return changed");
+            int kindAt = origin(sectionSource, sectionAt, sectionArgs.get(2));
+            int stateAt = origin(sectionSource, sectionAt, sectionArgs.get(3));
+            if (!(reference(sectionCode.get(kindAt)) instanceof FieldReference kind)) throw changed("native section kind changed");
+            if (!(reference(sectionCode.get(stateAt)) instanceof FieldReference state)) throw changed("native section state changed");
+            if (sectionCode.get(kindAt).getOpcode() != Opcode.SGET_OBJECT || sectionCode.get(stateAt).getOpcode() != Opcode.SGET_OBJECT ||
+                !"A1P".equals(kind.getName()) || !"A01".equals(state.getName()) || !INTEGER.equals(kind.getType()) ||
+                !INTEGER.equals(state.getType()) || !kind.getDefiningClass().equals(state.getDefiningClass()))
+                throw changed("native section constants changed");
+            field(kind, true);
+            field(state, true);
+        }
+    }
+
+    /**
      * What MaterialYouPatch.kt finds by shape when it patches: one DarkColorScheme token resolver, one dark mode
      * check called by FDSColors' (Context, ?, ?)I resolvers, FDSColors' int returns, and the constants and calls
      * routes 3 and 4 rewrite. The patch quietly skips its FDS half when it can't find it, so this is where a build
@@ -6443,6 +7248,10 @@ public class CompatReport {
                 if(!nativeBubbleActivityAvailable(apk)) failures.add("native bubble activity is not a direct enabled embedded/resizable activity");
                 if(!found.fields.containsKey("nativeBubbleRoutes")) failures.add("native notification/conversation/long-lived shortcut routes are missing");
                 if(!failures.isEmpty()) blockers.add("Allow chat bubbles");
+            }
+            if ("Open settings from menu".equals(patchName)) {
+                failures.addAll(legacyDrawerProblems(classes, controls.getOrDefault("menu_settings", List.of())));
+                if (!failures.isEmpty()) blockers.add(patchName);
             }
             if (expected != null) {
                 failures.addAll(differences(expected, found, hookKeys));
