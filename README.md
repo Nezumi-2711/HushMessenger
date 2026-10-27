@@ -45,11 +45,15 @@ Long-press Messenger's icon on your home screen and tap **Patch controls**. The 
 
 The **Controls** tab groups the switches into sections that fold up under their headers. They start closed, and the ones you open stay open. The search box finds every word you type, in any order, and opens whatever section a match sits in. A switch that's on shows when Messenger last checked it. The **App** tab has the restart button at the top, then **Quick setups** (Quiet, Privacy or Back to defaults in one tap), appearance, **Save choices to a file** and **Restore choices from a file**, and **Copy setup**, which copies your versions and switch states with no chats or account details in it. **Report a problem** opens a new GitHub issue with your versions, phone model and the switches that are on already filled in. Issues are public, so look it over before you send it. **Check for updates** is off by default. When it's on, it asks GitHub at most once an hour and sends nothing but the request.
 
-The screenshots below show the settings in the current release, in the dark and light themes.
+These screenshots come from the code on this page, so they can be a step ahead of the release you have installed. Each pair shows the Controls tab, then the App tab with its ways in.
 
 <p>
-  <img src="assets/settings-dark.png" width="300" alt="Controls tab in the dark theme, with search and category filters">
-  <img src="assets/settings-light.png" width="300" alt="Controls tab in the light theme, with search and category filters">
+  <img src="assets/settings-dark.png" width="200" alt="Controls tab in the dark theme, with search and the Inbox section open">
+  <img src="assets/settings-app-dark.png" width="200" alt="App tab in the dark theme, with the restart button and the Quick access section open">
+</p>
+<p>
+  <img src="assets/settings-light.png" width="200" alt="Controls tab in the light theme, with search and the Inbox section open">
+  <img src="assets/settings-app-light.png" width="200" alt="App tab in the light theme, with the restart button and the Quick access section open">
 </p>
 
 ### What each switch does

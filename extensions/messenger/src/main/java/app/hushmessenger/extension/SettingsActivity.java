@@ -1683,7 +1683,7 @@ public final class SettingsActivity extends Activity {
         section(content, "usage", usage, 8);
         Button source = ui.button(text.get("source"));
         source.setTag("source_licenses");
-        source.setOnClickListener(view -> openPage("https://github.com/SysAdminDoc/HushMessenger#research-and-credits"));
+        source.setOnClickListener(view -> openPage("https://github.com/SysAdminDoc/HushMessenger#credits"));
         ui.add(content, source, 16);
         // Built when tapped, so the controls listed are the ones on right then.
         ui.add(content, linkPanel("report_problem", "report", () -> openPage(ProblemReport.issueUrl(reportFacts()))), 12);
