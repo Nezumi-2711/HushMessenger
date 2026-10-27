@@ -207,6 +207,10 @@ final class SettingsText {
         ENGLISH.put("account_help", "Your choices apply to every Messenger account in this installation.");
         ENGLISH.put("missing", "Missing a control?");
         ENGLISH.put("missing_help", "Pick it in Morphe Manager and patch Messenger again. Updating the patch source alone doesn't add new controls.");
+        ENGLISH.put("log_out", "Log out");
+        ENGLISH.put("log_out_help", "Signs you out of this account on this phone, the same way Messenger's own Log out does.");
+        ENGLISH.put("log_out_unavailable", "Messenger's Log out wasn't found in this build, so use the one in Messenger's menu.");
+        ENGLISH.put("log_out_failed", "Messenger's Log out didn't open. The one in Messenger's menu still works.");
         ENGLISH.put("source", "Source and licenses");
         ENGLISH.put("no_browser", "No web browser found on this phone");
         ENGLISH.put("page_blocked", "Your phone didn't allow opening that page");

@@ -4,6 +4,7 @@
 
 ### New
 
+- **Log out** is back. It's a row on the App page of the HushMessenger settings, and tapping it signs you out of the account on this phone the same way Messenger's own Log out does. You end up on Messenger's login screen, ready for the same account or a different one. There's no extra "are you sure" step. If a Messenger build ever moves its Log out, the row says so and points you to the one in Messenger's menu. Refs #88.
 - **Square profile pictures** is a new switch under Theme, and it starts off. After a restart, profile pictures in the chat list, the stories row, chat headers and suggestions turn into squares, or rounded squares if you also turn on **Round the corners**. People who are online, the ones with the green dot, keep the same size as everyone else in the stories row. Notification pictures stay round. Refs #89.
 - **Custom launcher icon** is a new patch that starts unselected. It turns Messenger's home screen icon white on black, or black on white if you pick that style, using Messenger's own logo. Themed icons on Android 13 and up still work. Patch again without it to get the normal icon back. Refs #107.
 - HushMessenger's settings speak Traditional Chinese when your phone is set to it, in Taiwan, Hong Kong or Macau. Simplified Chinese still shows English for now. Thanks to @JhouHank for the translation. Refs #98.

@@ -88,6 +88,7 @@ internal val settingsExtension = bytecodePatch(description = "Load HushMessenger
         followShortcutWrites(classes)
         mutableClassDefBy(HOST_SCREENS).methods.single { it.hookId() == ORIGINAL_BUILD }
             .writeOriginalBuild(originalBuild(packageMetadata.versionName, packageMetadata.versionCode))
+        resolveLogoutRoute(classes, mutableClassDefBy(HOST_SCREENS).methods.singleOrNull { it.hookId() == LOGOUT_ROUTE })
     }
     finalize {
         discoveredControls = emptyMap()

@@ -1685,6 +1685,17 @@ public final class SettingsActivity extends Activity {
         ui.add(help, ui.text(text.get("missing_help"), 13, ui.muted, false), 6);
         ui.add(usage, help, 12);
         section(content, "usage", usage, 8);
+        // #88: Messenger's own Log out, no dialog in front of it. A build the patch found none in says where to go instead.
+        LinearLayout logOut = linkPanel("log_out", "log_out", this::logOut);
+        if (!LogOut.available()) {
+            logOut.setOnClickListener(null);
+            logOut.setEnabled(false);
+            logOut.setClickable(false);
+            logOut.getChildAt(0).setAlpha(0.6f);
+            ((TextView) logOut.getChildAt(1)).setText(text.get("log_out_unavailable"));
+            logOut.setContentDescription(text.get("log_out") + ". " + text.get("log_out_unavailable"));
+        }
+        ui.add(content, logOut, 16);
         Button source = ui.button(text.get("source"));
         source.setTag("source_licenses");
         source.setOnClickListener(view -> openPage("https://github.com/SysAdminDoc/HushMessenger#credits"));
@@ -3530,6 +3541,12 @@ public final class SettingsActivity extends Activity {
             android.util.Log.w("HushMessenger", "The phone refused to open a web page from settings");
             feedback(text.get("page_blocked"), Toast.LENGTH_LONG);
         }
+    }
+
+    /** Hands over to Messenger's account screen, which signs out, and closes settings so Back doesn't land here. */
+    private void logOut() {
+        if (LogOut.start(this, HostScreens.logoutRoute())) finish();
+        else feedback(text.get("log_out_failed"), Toast.LENGTH_LONG);
     }
 
     /** One toast at a time, built on the app context so no destroyed page is kept alive. */
