@@ -109,6 +109,17 @@ public class ShimmerTitleTest {
         assertSame(first, title.getPaint().getShader());
     }
 
+    /** Laid out before the loop's first frame, the title is already in the gradient, never plain white. */
+    @Test public void aTitleIsInTheGradientFromItsFirstDraw() {
+        TextView title = title("HushMessenger");
+        ShimmerTitle.wear(title, false);
+        assertNull(title.getPaint().getShader());
+        title.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        title.layout(0, 0, title.getMeasuredWidth(), title.getMeasuredHeight());
+        assertNotNull("the first draw shows the gradient", title.getPaint().getShader());
+    }
+
     /** A worn title doesn't keep itself, or the screen it belongs to, in memory. */
     @Test public void aWornTitleCanBeLetGo() {
         java.lang.ref.WeakReference<TextView> gone = wornAndDropped();

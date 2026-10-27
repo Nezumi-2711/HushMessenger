@@ -20,7 +20,7 @@ import java.util.WeakHashMap;
  * {@link #PERIOD_MS} after, a white sheen sweeps over them. It runs its own frame loop rather than an animator, so it
  * moves whatever Android's animation scale says (the S22 runs with all three at 0, where an animator holds still).
  */
-final class ShimmerTitle implements Runnable, View.OnAttachStateChangeListener {
+final class ShimmerTitle implements Runnable, View.OnAttachStateChangeListener, View.OnLayoutChangeListener {
     /** One sheen sweep and the wait after it. */
     static final long PERIOD_MS = 6000;
     /** How long a sheen sweep runs. */
@@ -74,6 +74,7 @@ final class ShimmerTitle implements Runnable, View.OnAttachStateChangeListener {
         // The gradient replaces the color, and a full-strength color keeps it full strength.
         title.setTextColor(Color.WHITE);
         title.addOnAttachStateChangeListener(shimmer);
+        title.addOnLayoutChangeListener(shimmer);
         if (title.isAttachedToWindow()) shimmer.onViewAttachedToWindow(title);
     }
 
@@ -87,6 +88,12 @@ final class ShimmerTitle implements Runnable, View.OnAttachStateChangeListener {
             running = true;
             title.postOnAnimationDelayed(this, FRAME_MS);
         }
+    }
+
+    /** Shaded as soon as there are words to shade, so the first frame drawn isn't plain white while the loop's first frame waits. */
+    @Override public void onLayoutChange(View view, int left, int top, int right, int bottom,
+            int oldLeft, int oldTop, int oldRight, int oldBottom) {
+        frame(startedAt < 0L ? 0L : AnimationUtils.currentAnimationTimeMillis() - startedAt);
     }
 
     @Override public void onViewDetachedFromWindow(View view) {
