@@ -173,6 +173,48 @@ public class AvatarShapeTest {
         assertEquals(List.of("oval", "rect", "round " + corner + " " + corner), canvas.drawn);
     }
 
+    // Online people's story tiles cut the dot out of the oval, and the curves around the cut measure far past the tile.
+    // Two half-circle cubics put their control points a third of the radius outside, like the device's path.
+    @Test @Config(sdk = 36) @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void aTileWithItsDotCutOutKeepsTheSameSquare() {
+        float reach = 50f * 4 / 3;
+        Path badged = new Path();
+        badged.moveTo(20, 70);
+        badged.cubicTo(20, 70 - reach, 120, 70 - reach, 120, 70);
+        badged.cubicTo(120, 70 + reach, 20, 70 + reach, 20, 70);
+        badged.close();
+        Path dot = new Path();
+        dot.addCircle(110, 110, 18, Path.Direction.CW);
+        badged.op(dot, Path.Op.DIFFERENCE);
+        assertFalse(badged.isConvex());
+        RectF measured = new RectF();
+        badged.computeBounds(measured, true);
+        assertTrue("Control points overshoot: " + measured, measured.right > 121 || measured.bottom > 121);
+        assertEquals(new RectF(20, 20, 120, 120), Settings.coveredBounds(badged));
+
+        // A dent makes it concave, and the bottom curve reaches 150 while its control point sits at 180.
+        Path bulge = new Path();
+        bulge.moveTo(20, 20);
+        bulge.lineTo(70, 50);
+        bulge.lineTo(120, 20);
+        bulge.lineTo(120, 120);
+        bulge.quadTo(70, 180, 20, 120);
+        bulge.close();
+        RectF loose = new RectF();
+        bulge.computeBounds(loose, true);
+        assertEquals("Control points overshoot", 180f, loose.bottom, 0.01f);
+        assertEquals(new RectF(20, 20, 120, 150), Settings.coveredBounds(bulge));
+
+        Settings.avatarShape = -1;
+        Settings.preferences.edit().putBoolean(Settings.AVATAR_SHAPE, true).commit();
+        Path square = Settings.avatarPath(badged);
+        assertTrue(covers(square, 21, 21));
+        assertTrue("The dot's corner is filled", covers(square, 118, 118));
+        assertFalse("Nothing past the tile", covers(square, 121, 70));
+        assertFalse(covers(square, 70, 121));
+        assertFalse(covers(square, 19, 70));
+    }
+
     @Test public void theRowSaysToRestartAndTheRestartRowShowsUp() {
         String[] spec = null;
         for (String[] control : SettingsActivity.CONTROLS) if (control[0].equals(Settings.AVATAR_SHAPE)) spec = control;

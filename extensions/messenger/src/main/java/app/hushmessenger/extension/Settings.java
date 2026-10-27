@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
+import android.graphics.Region;
 import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
@@ -656,8 +657,7 @@ public final class Settings {
         try {
             int shape = avatarShape();
             if (shape == AVATAR_CIRCLE) return path;
-            RectF bounds = new RectF();
-            path.computeBounds(bounds, true);
+            RectF bounds = coveredBounds(path);
             Path square = new Path();
             if (shape == AVATAR_SQUARE) {
                 square.addRect(bounds, Path.Direction.CW);
@@ -670,6 +670,20 @@ public final class Settings {
             hookFailed(AVATAR_SHAPE, "Can't change the profile picture shape", error);
             return path;
         }
+    }
+
+    /**
+     * The area a clip path covers. computeBounds measures curve control points, which for a plain oval is the oval's box,
+     * but the arcs around a badge cutout (online people in the story tray) push it about a fifth past the tile on each side.
+     */
+    static RectF coveredBounds(Path path) {
+        RectF bounds = new RectF();
+        path.computeBounds(bounds, true);
+        if (path.isConvex()) return bounds;
+        Region clip = new Region((int) Math.floor(bounds.left), (int) Math.floor(bounds.top),
+                (int) Math.ceil(bounds.right), (int) Math.ceil(bounds.bottom));
+        Region covered = new Region();
+        return covered.setPath(path, clip) ? new RectF(covered.getBounds()) : bounds;
     }
 
     /** The placeholder tile's background and outline, which Messenger draws as an oval behind the initials. */
