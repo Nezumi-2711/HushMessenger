@@ -198,6 +198,7 @@ public class CompatReport {
         PATCHES.put("Fix videos that won't send", List.of("xhe_audio", "xhe_transcode"));
         PATCHES.put("Ignore the swipe up for disappearing messages", List.of("disappearing_swipe"));
         PATCHES.put("Hide the recent photo card", List.of("recent_media"));
+        PATCHES.put("Hide Your story when sharing", List.of("share_story"));
         PATCHES.put("Use the phone's camera app", List.of("system_camera"));
         PATCHES.put("Open your gallery app", List.of("external_gallery"));
         PATCHES.put("Stop analytics uploads", List.of("analytics_uploads"));
@@ -4569,7 +4570,122 @@ public class CompatReport {
         return List.of();
     }
 
-    static final String RTC_NOTIFICATION_SERVICE = "Lcom/facebook/rtc/notification/RtcNotificationForegroundService;";
+    static final String HOISTED_SHARE_LOADER = "Lcom/facebook/messaging/sharing/broadcastflow/mutation/loader/plugins/sections/" +
+        "morewaystoshare/hoisted/BroadcastFlowHoistedMoreWaysToShareSectionsLoader;";
+    static final String UNHOISTED_SHARE_TRACE = "messaging.sharing.broadcastflow.mutation.loader.sections.morewaystoshare.unhoisted." +
+        "BroadcastFlowUnhoistedMoreWaysToShareSectionsLoader";
+
+    static String created(Instruction i) {
+        return i.getOpcode() == Opcode.NEW_INSTANCE ? ((TypeReference) ((ReferenceInstruction) i).getReference()).getType() : null;
+    }
+
+    static String text(Instruction i) {
+        return i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr ? sr.getString() : null;
+    }
+
+    static List<Integer> reads(Instruction i) {
+        var out = new ArrayList<Integer>();
+        if (i instanceof FiveRegisterInstruction call) {
+            int[] all = {call.getRegisterC(), call.getRegisterD(), call.getRegisterE(), call.getRegisterF(), call.getRegisterG()};
+            for (int r = 0; r < call.getRegisterCount(); r++) out.add(all[r]);
+        } else if (i instanceof RegisterRangeInstruction range) {
+            for (int r = 0; r < range.getRegisterCount(); r++) out.add(range.getStartRegister() + r);
+        }
+        return out;
+    }
+
+    static boolean storyRow(ClassDef cls) {
+        for (var method : cls.getMethods()) {
+            if (!"getId".equals(method.getName()) || !"Ljava/lang/String;".equals(method.getReturnType()) ||
+                !method.getParameterTypes().isEmpty() || AccessFlags.STATIC.isSet(method.getAccessFlags())) continue;
+            var code = instructions(method);
+            if (code.size() == 2 && code.get(0).getOpcode() == Opcode.CONST_STRING && "ADD_TO_STORY_ID".equals(text(code.get(0))) &&
+                code.get(1).getOpcode() == Opcode.RETURN_OBJECT) return true;
+        }
+        return false;
+    }
+
+    /** The gate kind on the one row this method creates: 1 hoisted, 2 unhoisted, 0 neither. Mirrors ShareStory.kt. */
+    static int storyGate(Method method, String row) {
+        var code = instructions(method);
+        int at = -1;
+        for (int i = 0; i < code.size(); i++) {
+            if (!row.equals(created(code.get(i)))) continue;
+            if (at >= 0) return 0;
+            at = i;
+        }
+        if (at < 0) return 0;
+        if (hoistedStoryGate(method, code, at)) return 1;
+        return unhoistedStoryGate(method, code, at) ? 2 : 0;
+    }
+
+    static boolean hoistedStoryGate(Method method, List<Instruction> code, int at) {
+        if (!HOISTED_SHARE_LOADER.equals(method.getDefiningClass()) || AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+            !method.getParameterTypes().isEmpty() || !"V".equals(method.getReturnType()) || at < 3) return false;
+        int gate = at - 1;
+        if (code.get(gate).getOpcode() != Opcode.IF_EQZ || mediaTarget(code, gate) <= at) return false;
+        int value = register(code.get(gate));
+        if (code.get(at - 2).getOpcode() != Opcode.MOVE_RESULT || register(code.get(at - 2)) != value || value > 15) return false;
+        if (code.get(at - 3).getOpcode() != Opcode.INVOKE_STATIC || !(code.get(at - 3) instanceof ReferenceInstruction ri) ||
+            !(ri.getReference() instanceof MethodReference call) || !"Z".equals(call.getReturnType())) return false;
+        return !mediaTargets(method).contains(gate);
+    }
+
+    static boolean unhoistedStoryGate(Method method, List<Instruction> code, int at) {
+        boolean traced = false;
+        for (var i : code) if (UNHOISTED_SHARE_TRACE.equals(text(i))) traced = true;
+        if (!traced) return false;
+        int gate = -1;
+        for (int i = at - 1; i >= 1; i--) if (code.get(i).getOpcode() == Opcode.IF_EQ) { gate = i; break; }
+        if (gate < 0) return false;
+        var compare = (TwoRegisterInstruction) code.get(gate);
+        int state = compare.getRegisterA(), skip = compare.getRegisterB();
+        if (state > 15 || skip > 15 || state == skip) return false;
+        var read = code.get(gate - 1);
+        if (read.getOpcode() != Opcode.IGET_OBJECT || ((TwoRegisterInstruction) read).getRegisterA() != state ||
+            !(((ReferenceInstruction) read).getReference() instanceof FieldReference field) ||
+            !field.getDefiningClass().equals(method.getDefiningClass()) || !"Ljava/lang/Object;".equals(field.getType())) return false;
+        boolean started = false;
+        for (int i = gate + 1; i < at; i++) if (UNHOISTED_SHARE_TRACE.equals(text(code.get(i)))) started = true;
+        if (!started) return false;
+        int skipTo = mediaTarget(code, gate);
+        if (skipTo <= at || at + 2 >= code.size() || skipTo + 1 >= code.size()) return false;
+        int made = register(code.get(at));
+        var list = code.get(at + 2);
+        if (list.getOpcode() != Opcode.INVOKE_STATIC ||
+            !(IMMUTABLE_LIST + "->of(Ljava/lang/Object;)" + IMMUTABLE_LIST).equals(ref(list)) || !reads(list).equals(List.of(made))) return false;
+        var first = code.get(skipTo);
+        var write = code.get(skipTo + 1);
+        if (!(first instanceof FiveRegisterInstruction) && !(first instanceof RegisterRangeInstruction)) return false;
+        if (reads(first).contains(state) || (write.getOpcode() != Opcode.MOVE_RESULT && write.getOpcode() != Opcode.MOVE_RESULT_OBJECT) ||
+            register(write) != state) return false;
+        return !mediaTargets(method).contains(gate);
+    }
+
+    /**
+     * share_story: the one class whose getId() is just ADD_TO_STORY_ID, and the two methods that create it, each creating
+     * it once behind its proven gate, one of them in the hoisted more-ways-to-share loader. Mirrors ShareStory.kt.
+     */
+    static List<Method> shareStory(List<ClassDef> classes) {
+        var rows = new ArrayList<String>();
+        for (var cls : classes) if (storyRow(cls)) rows.add(cls.getType());
+        if (rows.size() != 1) return List.of();
+        var row = rows.get(0);
+        var creators = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            for (var i : instructions(method)) if (row.equals(created(i))) { creators.add(method); break; }
+        }
+        if (creators.size() != 2) return List.of();
+        int hoisted = 0;
+        for (var method : creators) {
+            int kind = storyGate(method, row);
+            if (kind == 0) return List.of();
+            if (kind == 1) hoisted++;
+        }
+        return hoisted == 1 ? creators : List.of();
+    }
+
+    static final String RTC_NOTIFICATION_SERVICE ="Lcom/facebook/rtc/notification/RtcNotificationForegroundService;";
 
     /** The one register a String.valueOf(boolean) call reads, in either invoke form, or -1. */
     static int booleanText(Instruction i) {
@@ -5230,6 +5346,7 @@ public class CompatReport {
         found.get("wifi_identity").addAll(wifiIdentityReads(classes));
         found.get("phone_id_sync").addAll(phoneIdSync(classes));
         found.get("story_hold").addAll(storyHold(classes));
+        found.get("share_story").addAll(shareStory(classes));
         found.get("quiet_call_ring").addAll(quietCallRing(classes));
         found.get("quiet_call_notification").addAll(quietCallNotification(classes));
         var markRead = markReadButton(classes);
