@@ -3337,7 +3337,10 @@ public final class SettingsActivity extends Activity {
         TextView chevron = ui.text(String.valueOf((char) 0x203a), 20, ui.muted, true);
         chevron.setGravity(android.view.Gravity.CENTER);
         chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        header.addView(chevron, new LinearLayout.LayoutParams(ui.dp(24), ui.dp(24)));
+        // Square and as big as the glyph, which grows with the text size: it turns a quarter round as the section opens.
+        int side = Math.max(ui.dp(24), (int) Math.ceil(Math.max(chevron.getPaint().getFontSpacing(),
+            chevron.getPaint().measureText(chevron.getText().toString()))));
+        header.addView(chevron, new LinearLayout.LayoutParams(side, side));
         header.setOnClickListener(view -> toggleSection(id));
         header.setAccessibilityDelegate(new View.AccessibilityDelegate() {
             @Override public void onInitializeAccessibilityNodeInfo(View host, android.view.accessibility.AccessibilityNodeInfo info) {
