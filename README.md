@@ -166,14 +166,14 @@ With **Hide read receipts** on, a chat you open stays unread on your phone, beca
 | --- | --- |
 | Package | `com.facebook.orca` |
 | Version | `584.1.0.61.98` |
-| Version codes, arm64-v8a | `346816935`, `346816937`, `346816939`, `346816940`, `346816951`, `346816955`, `346816969`, `346816972`, `346816973`, `346817004`, `346817005`, `346817021`, `346817022`, `346817023`, `346817024`, `346817025` |
+| Version codes, arm64-v8a | `346816935`, `346816937`, `346816939`, `346816940`, `346816951`, `346816955`, `346816969`, `346816972`, `346816973`, `346817004`, `346817005`, `346817008`, `346817021`, `346817022`, `346817023`, `346817024`, `346817025`, `346817026` |
 | Version codes, armeabi-v7a | `346816949`, `346816966`, `346817019` |
 | Icons for every screen density | `346816935`, `346816951`, `346817004`, `346817021` |
-| Icons for one screen density | 120-160 dpi `346816969`, `346817005`, `346817022`. 240 dpi `346816937`, `346817023`, `346817025`. 320 dpi `346817024`. 480 dpi `346816939`, `346816955`, `346816972` and every armeabi-v7a build. 640 dpi `346816940`, `346816973` |
+| Icons for one screen density | 120-160 dpi `346816969`, `346817005`, `346817022`. 240 dpi `346816937`, `346817023`. 320 dpi `346817024`. 480 dpi `346816939`, `346816955`, `346816972`, `346817008`, `346817025` and every armeabi-v7a build. 640 dpi `346816940`, `346816973`, `346817026` |
 | Minimum Android version | Android 9 (API 28) |
 | APKMirror download | [584.1.0.61.98](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/) |
 
-HushMessenger takes all 18 builds APKMirror lists for 584.1.0.61.98. The patch checks the version code before it changes anything and stops on a build that isn't listed. Older Messenger versions aren't supported by current bundles. v0.26.0 still takes 584.0.0.49.98, v0.25.0 takes 583.0.0.29.95 and v0.23.0 takes 582.0.0.61.92.
+HushMessenger takes all 21 builds APKMirror lists for 584.1.0.61.98. The patch checks the version code before it changes anything and stops on a build that isn't listed. Older Messenger versions aren't supported by current bundles. v0.26.0 still takes 584.0.0.49.98, v0.25.0 takes 583.0.0.29.95 and v0.23.0 takes 582.0.0.61.92.
 
 SHA-256 of the stock APKs the checks ran against:
 
@@ -191,12 +191,14 @@ SHA-256 of the stock APKs the checks ran against:
 346816973  408e8d6eaed0e4d05b0d4f9e1d7c2dfa58ac670a70af6ac25ee911227615757b
 346817004  d5dbfd946a634ba16b5c600dc8773eb30e860a9f25acb6eb8c0c4e66fe8f78b4
 346817005  635f2f6dd2ff5acb5a4fde275afe6a342fae07927d95f0e8f09b1727deea8498
+346817008  6856b2547ef156fc49239e51c02eac90edb791b11c7e23298d32bc4b662829fa
 346817019  ac74c2cdaed9a3149b20e5b6fa6cd60943b3414aa918fe3f18c347d083650e73
 346817021  3bf305f38645dc35a85a25a153ad11d2ac30db61c0ab37dcb61e808fc8d1c661
 346817022  4c647f78f5b2865f1385ceadc124c4e244c22c157a66d19208dc814bde207ed5
 346817023  6f189f035d72b532ad0286b0e6d766aaeb0c4465e71beabb143f9118d3bd02e5
 346817024  c5dcc7ef13eb1edba576953468c6a4493cfe6a52000fbf32bac958a5254e628a
 346817025  5172d0c9154e9d6e9d9a48f2cd07db31cb49ca5a9220332eca77ea9230d0b306
+346817026  e7287c33dfa4627fa91d09012082d5bb70e9dd98286c4469b543a2dd74c06125
 ```
 
 On Windows, compare your file with `Get-FileHash -Algorithm SHA256 .\messenger.apk`. Meta sometimes publishes different APKs under one version name.
