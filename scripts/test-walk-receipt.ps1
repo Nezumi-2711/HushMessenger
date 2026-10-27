@@ -62,6 +62,23 @@ try {
     $good = Test-WalkReceipt -Path (Write-Walk -Applied @('Hide Meta AI')) -BundlePath $bundle
     Assert-WalkContract ($good.Valid -and $good.Receipt.screens -eq 7) "A full walk of an APK without the sheet patches was refused: $($good.Reason)"
 
+    # Below Android 13 the message log is FLAG_SECURE, so its window entry stands in for its screenshot.
+    $oldEmulator = @{ serial = 'emulator-5596'; device = 'sdk_gphone64_x86_64'; emulator = $true; sdk = 32 }
+    $secureLog = { param($w, $f) Set-WalkFixtureSecureShot $w $f 'message-log' }
+    $good = Test-WalkReceipt -Path (Write-Walk $oldEmulator $secureLog) -BundlePath $bundle
+    Assert-WalkContract ($good.Valid -and $good.Receipt.screens -eq 9) "A secure message log on Android 12 was refused: $($good.Reason)"
+    $windowLines = $WalkFixtureSecureWindow -split "`n"
+    Assert-WalkContract (Test-WalkSecureWindow (Get-WalkSettingsWindows $windowLines)) "The settings window's SECURE flag should read."
+    Assert-WalkContract ((Get-WalkSettingsWindows $windowLines) -notmatch 'MainActivity') "Messenger's own window isn't a settings window."
+    $notLog = $WalkFixtureSecureWindow.Replace('fl=DIM_BEHIND SECURE', 'fl=DIM_BEHIND')
+    Assert-WalkContract ($notLog -cne $WalkFixtureSecureWindow) 'The fixture should carry the SECURE flag this test takes out.'
+    $mainSecure = $notLog + ' SECURE'
+    Assert-WalkContract (-not (Test-WalkSecureWindow $mainSecure)) "Messenger's window being secure says nothing about the log's."
+    Assert-WalkContract (-not (Test-WalkSecureWindow (Get-WalkSettingsWindows ($mainSecure -split "`n")))) 'Only the settings entries should be kept.'
+    $privateOnly = $notLog.Replace('pfl=USE_BLAST', 'pfl=SECURE USE_BLAST')
+    Assert-WalkContract ($privateOnly -cne $notLog) 'The fixture should have the private flags line this test changes.'
+    Assert-WalkContract (-not (Test-WalkSecureWindow $privateOnly)) 'A SECURE word among the private flags is not FLAG_SECURE.'
+
     $restore = '<node index="1" text="Restore your Facebook chats" resource-id="" class="android.widget.TextView" package="com.facebook.orca" content-desc="" enabled="true" selected="false" bounds="[0,300][1080,400]" />'
     $login = '<node index="1" text="Log in" resource-id="" class="android.widget.Button" package="com.facebook.orca" content-desc="" enabled="true" selected="false" bounds="[0,300][1080,400]" />'
     $restoreDesc = '<node index="1" text="" resource-id="" class="android.view.View" package="com.facebook.orca" content-desc="Restore your chats" enabled="true" selected="false" bounds="[0,300][1080,400]" />'
@@ -143,7 +160,24 @@ try {
                 '*story-settings left no UI dump, with com.zhiliaoapp.musically in front instead of Messenger*'),
             # The same screen twice, marker and all.
             @(@{}, { param($w, $f) Set-WalkFixtureEvidence $w $f 'contact-settings' ((Get-WalkFixtureXml 'story-settings').Replace('text="Who can see your stories?"', 'text="Manage contacts"')) },
-                '*contact-settings showed the same screen as story-settings*'))) {
+                '*contact-settings showed the same screen as story-settings*'),
+            # A secure window stands in only for the log, only below Android 13, and only when it shows the flag.
+            @(@{ sdk = 33 }, $secureLog, '*message-log has no screenshot, and only below Android SDK 33 does its window keep one out*'),
+            @(@{}, $secureLog, '*message-log has no screenshot, and only below Android SDK 33*'),
+            @(@{ sdk = 0 }, $secureLog, '*message-log has no screenshot, and only below Android SDK 33*'),
+            @(@{ sdk = '32' }, $secureLog, '*message-log has no screenshot, and only below Android SDK 33*'),
+            @($oldEmulator, { param($w, $f) Set-WalkFixtureSecureShot $w $f 'message-log' $WalkFixtureSecureWindow.Replace(' SECURE', '') },
+                "*message-log has no screenshot, and its window entry doesn't show FLAG_SECURE*"),
+            @($oldEmulator, { param($w, $f) Set-WalkFixtureSecureShot $w $f 'message-log' $mainSecure },
+                "*message-log has no screenshot, and its window entry doesn't show FLAG_SECURE*"),
+            @($oldEmulator, { param($w, $f) Set-WalkFixtureSecureShot $w $f 'auto-reply' }, "*auto-reply doesn't name its screenshot*"),
+            @($oldEmulator, { param($w, $f) Set-WalkFixtureSecureShot $w $f 'settings' }, "*settings doesn't name its screenshot*"),
+            @($oldEmulator, { param($w, $f) & $secureLog $w $f; [IO.File]::AppendAllText((Join-Path $f 'steps/message-log.window.txt'), ' ') },
+                "*message-log's secureWindow changed after the walk*"),
+            @($oldEmulator, { param($w, $f) & $secureLog $w $f; Remove-Item -LiteralPath (Join-Path $f 'steps/message-log.window.txt') },
+                "*message-log's secureWindow isn't beside the receipt*"),
+            @($oldEmulator, { param($w, $f) & $secureLog $w $f; (Step $w 'message-log').secureWindow = '../message-log.window.txt' },
+                "*message-log doesn't name its secureWindow*"))) {
         $path = Write-Walk $badWalk[0] $badWalk[1]
         $bad = Test-WalkReceipt -Path $path -BundlePath $bundle
         Assert-WalkContract (-not $bad.Valid -and $bad.Reason -like $badWalk[2]) "Expected the walk refusal [$($badWalk[2])], got [$($bad.Reason)]."

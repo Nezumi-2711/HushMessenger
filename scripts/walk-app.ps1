@@ -22,7 +22,8 @@
     A step passes when Messenger is in front on the activity the step expects and the UI dump shows
     the step's marker, no login or Restore prompt, and a screen no earlier step showed. Each step's
     screenshot and UI dump go to steps/<id>.png and steps/<id>.xml beside the receipt, which hashes
-    them, and publish reads them again.
+    them, and publish reads them again. Below Android 13 the message log's window is FLAG_SECURE and
+    screencap can't take it, so that step keeps its window's dumpsys entry (steps/<id>.window.txt).
 
     Screens open by their fb-messenger:// links (am start -W -a VIEW -d ...), the inbox through
     its launcher activity, and the chat by -Thread, the user id of a chat on the signed-in account. The chat goes first: opening it by its
@@ -430,6 +431,8 @@ function Invoke-WalkApp {
         }
         $reportedSerial = @((Invoke-WalkAdb @('get-serialno')).Stdout)[0]
         $deviceModel = @((Invoke-WalkAdb @('shell', 'getprop', 'ro.product.model')).Stdout)[0]
+        $deviceSdk = 0
+        [void][int]::TryParse(([string]@((Invoke-WalkAdb @('shell', 'getprop', 'ro.build.version.sdk')).Stdout)[0]).Trim(), [ref]$deviceSdk)
         if ($reportedSerial -cne $Serial -or $deviceModel -cne $ExpectedModel) {
             throw "$Serial answers as $reportedSerial, model $deviceModel, not the expected $ExpectedModel. Nothing was changed on it."
         }
@@ -557,7 +560,21 @@ function Invoke-WalkApp {
             [void](Invoke-WalkAdb @('shell', 'screencap', '-p', $shotOnDevice))
             $shot = Invoke-WalkAdb @('pull', $shotOnDevice, $pngFile)
             if (-not $problem) { $problem = Test-WalkStepScreen -Definition $definition -Activity $activity -Xml $xml }
-            if (-not $problem -and ($shot.ExitCode -ne 0 -or -not (Test-WalkPng $pngFile))) { $problem = "$($definition.Id) left no screenshot" }
+            $windowFile = Join-Path $evidenceDir "$name.window.txt"
+            $secureShot = $false
+            if (-not $problem -and ($shot.ExitCode -ne 0 -or -not (Test-WalkPng $pngFile))) {
+                # Screencap can't take a FLAG_SECURE window. Where the step's window is secure by design, its
+                # dumpsys entry stands in, and only when that entry shows the flag.
+                if ($definition.SecureBelowSdk -and $deviceSdk -gt 0 -and $deviceSdk -lt $definition.SecureBelowSdk) {
+                    $entry = Get-WalkSettingsWindows @((Invoke-WalkAdb @('shell', 'dumpsys', 'window', 'windows')).Stdout)
+                    if (Test-WalkSecureWindow $entry) {
+                        [IO.File]::WriteAllText($windowFile, $entry)
+                        Remove-Item -LiteralPath $pngFile -Force -ErrorAction SilentlyContinue
+                        $secureShot = $true
+                    }
+                }
+                if (-not $secureShot) { $problem = "$($definition.Id) left no screenshot" }
+            }
             if (-not $problem) {
                 $shape = Get-WalkScreenSignature -Xml $xml
                 if ($shapesSeen.ContainsKey($shape)) { $problem = "$($definition.Id) showed the same screen as $($shapesSeen[$shape])" }
@@ -575,11 +592,16 @@ function Invoke-WalkApp {
             }
             if ($definition.Kind -ceq 'extra') { continue }
             $hashOf = { param($file) if (Test-Path -LiteralPath $file -PathType Leaf) { (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant() } else { '' } }
-            $stepRecords.Add([ordered]@{
+            $record = [ordered]@{
                 id = $definition.Id; activity = $activity; opened = -not $problem; problem = [string]$problem
                 screenshot = "steps/$name.png"; screenshotSha256 = (& $hashOf $pngFile)
                 uiDump = "steps/$name.xml"; uiDumpSha256 = (& $hashOf $xmlFile)
-            })
+            }
+            if ($secureShot) {
+                $record.screenshot = ''; $record.screenshotSha256 = ''
+                $record.secureWindow = "steps/$name.window.txt"; $record.secureWindowSha256 = (& $hashOf $windowFile)
+            }
+            $stepRecords.Add($record)
         }
         [void](Invoke-WalkAdb @('shell', 'rm', '-f', $dumpOnDevice, $shotOnDevice))
         Remove-Item -LiteralPath (Join-Path $OutDir 'walk-probe.xml') -Force -ErrorAction SilentlyContinue
@@ -609,7 +631,7 @@ function Invoke-WalkApp {
 
         $full = $skips.Count -eq 0 -and $problems.Count -eq 0
         $result = Resolve-WalkOutcome -Screens $screens -Crashes $fatal.Count -Problems ([string[]]$problems) -Full $full
-        $receipt = New-WalkReceipt -Result $result -Full $full -Serial $Serial -Device $deviceModel `
+        $receipt = New-WalkReceipt -Result $result -Full $full -Serial $Serial -Device $deviceModel -Sdk $deviceSdk `
             -AppVersion ([string]$appVersion) -BundleSha256 $bundleSha256 -PatchedApkSha256 $patchedSha -InstalledApkSha256 $installedSha `
             -Started $started -Finished ([DateTimeOffset]::UtcNow) -AppliedPatches $applied -Steps $stepRecords.ToArray() `
             -Crashes $fatal.Count -Problems ([string[]]$problems)

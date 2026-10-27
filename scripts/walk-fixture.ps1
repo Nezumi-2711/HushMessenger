@@ -46,7 +46,7 @@ function New-WalkFixture {
         [Parameter(Mandatory = $true)][string]$Folder,
         [Parameter(Mandatory = $true)][string]$BundleSha256,
         [string[]]$AppliedPatches = $WalkFixturePatches,
-        [string]$Serial = 'TESTPHONE01', [string]$Device = 'SM-S908U1', [string]$ApkSha256 = ('4' * 64)
+        [string]$Serial = 'TESTPHONE01', [string]$Device = 'SM-S908U1', [string]$ApkSha256 = ('4' * 64), [int]$Sdk = 36
     )
     $records = foreach ($id in (Get-WalkRequiredSteps -AppliedPatches $AppliedPatches)) {
         $png = [byte[]](0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + [Text.Encoding]::ASCII.GetBytes("fixture screenshot $id")
@@ -56,9 +56,34 @@ function New-WalkFixture {
             uiDump = "steps/$id.xml"; uiDumpSha256 = (Write-WalkFixtureFile (Join-Path $Folder "steps/$id.xml") ([Text.Encoding]::UTF8.GetBytes((Get-WalkFixtureXml $id))))
         }
     }
-    return New-WalkReceipt -Result PASS -Full $true -Serial $Serial -Device $Device -AppVersion '584.1.0.61.98' `
+    return New-WalkReceipt -Result PASS -Full $true -Serial $Serial -Device $Device -Sdk $Sdk -AppVersion '584.1.0.61.98' `
         -BundleSha256 $BundleSha256 -PatchedApkSha256 $ApkSha256 -InstalledApkSha256 $ApkSha256 `
         -Started '2026-10-26T16:00:00Z' -Finished '2026-10-26T16:30:00Z' -AppliedPatches $AppliedPatches -Steps @($records) -Crashes 0
+}
+
+# dumpsys window windows on the API 32 emulator with the message log open (2026-10-27, cut down): the log's
+# dialog window under SettingsActivity's name, fl= on a wrapped mAttrs line, then a Messenger window after it.
+$WalkFixtureSecureWindow = @(
+    '  Window #10 Window{176f3f5 u0 com.facebook.orca/app.hushmessenger.extension.SettingsActivity}:'
+    '    mDisplayId=0 rootTaskId=86 mSession=Session{5248708 17461:u0a10156} mClient=android.os.BinderProxy@464cd2c'
+    '    mOwnerUid=10156 showForAllUsers=false package=com.facebook.orca appop=NONE'
+    '    mAttrs={(0,0)(fillxfill) gr=CENTER sim={adjust=resize} ty=APPLICATION wanim=0x10302ff surfaceInsets=Rect(84, 84 - 84, 84)'
+    '      fl=DIM_BEHIND SECURE SPLIT_TOUCH HARDWARE_ACCELERATED'
+    '      pfl=USE_BLAST'
+    '  Window #12 Window{7a8b9c0 u0 com.facebook.orca/com.facebook.messenger.neue.MainActivity}:'
+    '    mAttrs={(0,0)(fillxfill) sim={adjust=resize} ty=BASE_APPLICATION'
+    '      fl=LAYOUT_IN_SCREEN LAYOUT_INSET_DECOR SPLIT_TOUCH HARDWARE_ACCELERATED'
+) -join "`n"
+
+function Set-WalkFixtureSecureShot {
+    <# Swaps step -Id's screenshot in -Folder for a secure window entry, -Entry, the way walk-app.ps1 records one. #>
+    param([Parameter(Mandatory = $true)]$Receipt, [Parameter(Mandatory = $true)][string]$Folder,
+        [Parameter(Mandatory = $true)][string]$Id, [string]$Entry = $WalkFixtureSecureWindow)
+    $step = @($Receipt.steps | Where-Object { $_.id -ceq $Id })[0]
+    Remove-Item -LiteralPath (Join-Path $Folder $step.screenshot) -Force
+    $step.screenshot = ''; $step.screenshotSha256 = ''
+    $step.secureWindow = "steps/$Id.window.txt"
+    $step.secureWindowSha256 = Write-WalkFixtureFile (Join-Path $Folder $step.secureWindow) ([Text.Encoding]::UTF8.GetBytes($Entry))
 }
 
 function Set-WalkFixtureEvidence {
