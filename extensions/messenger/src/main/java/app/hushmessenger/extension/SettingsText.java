@@ -86,8 +86,6 @@ final class SettingsText {
     static {
         ENGLISH.put("controls", "Controls");
         ENGLISH.put("app", "App");
-        ENGLISH.put("section_expanded", "Expanded");
-        ENGLISH.put("section_collapsed", "Collapsed");
         ENGLISH.put("inbox", "Inbox");
         ENGLISH.put("navigation", "Navigation");
         ENGLISH.put("stickers", "Stickers");

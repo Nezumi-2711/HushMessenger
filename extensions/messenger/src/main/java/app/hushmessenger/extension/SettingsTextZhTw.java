@@ -7,8 +7,6 @@ final class SettingsTextZhTw {
     static final String[][] TEXT = {
         {"controls", "功能控制"},
         {"app", "應用程式"},
-        {"section_expanded", "已展開"},
-        {"section_collapsed", "已收合"},
         {"inbox", "收件匣"},
         {"navigation", "導覽"},
         {"stickers", "貼圖"},

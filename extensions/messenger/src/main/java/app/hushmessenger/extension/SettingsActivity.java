@@ -3411,7 +3411,8 @@ public final class SettingsActivity extends Activity {
         ((TextView) header.getChildAt(0)).setTextColor(shown ? ui.accent : ui.muted);
         header.getChildAt(2).setRotation(shown ? -90 : 90);
         header.setActivated(shown);
-        if (Build.VERSION.SDK_INT >= 30) header.setStateDescription(text.get(shown ? "section_expanded" : "section_collapsed"));
+        // No state description: TalkBack already says "collapsed" or "expanded" from the expand and collapse actions,
+        // and a description of our own made it say the state twice.
     }
 
     private void showPage(String name) {
