@@ -17,6 +17,7 @@
 - With large text, the little arrow on each settings section shows whole again. At 200% it was cut down to a sliver.
 - **Source and licenses** under About opens the README's Credits section again. It pointed at a heading the README no longer has, so it landed at the top of the page.
 - With **Open your gallery app** on and no default gallery set, the list Android shows you now holds only your gallery apps. It could slip in other pickers, like Contacts. Whichever gallery you tap still opens with your photos and videos together. Refs #94.
+- If Messenger crashed in the last three days, **Report a problem** now adds a line saying where in the code it happened. It's only the names of the failing code, never the error text, so no file names or chat content go in. Refs #103.
 - Gallery selections are checked off the UI thread before returning to the chat. A canceled, revoked or timed-out selection returns no media, and Report a problem includes a fixed gallery result category without file paths. Refs #94.
 - Patching now reports when discovery stages start and finish. The Wi-Fi scan reads method signatures directly instead of formatting every reference in Messenger, which cuts that scan's time and temporary allocations. Refs #93, #99, #100.
 - In **Auto reply**, a picture always lands on the card you picked it for, and it's always the one you picked last. Before, a slow copy of an earlier pick could finish late and replace the newer picture, or put one back after you tapped Clear. Save waits while a picture is still copying.
