@@ -94,6 +94,8 @@ final class SettingsTextZhTw {
         {"bubble_settings_missing", "找不到此畫面。請開啟應用程式資訊，再選擇「通知」。"},
         {"facebook_keep_profile", "保留個人檔案按鈕"},
         {"facebook_keep_profile_help", "保留聊天室詳細資料頁面中的個人檔案按鈕，讓你仍可開啟對方的 Facebook 個人檔案。其他 Facebook 捷徑仍會隱藏。"},
+        {"avatar_shape_rounded", "圓角"},
+        {"avatar_shape_rounded_help", "讓方形大頭貼照的邊角變圓，而不是直角。"},
         {"tab_badges_keep_chats", "保留聊天室標記"},
         {"tab_badges_keep_people", "保留聯絡人標記"},
         {"tab_badges_keep_notifications", "保留通知標記"},
@@ -459,6 +461,8 @@ final class SettingsTextZhTw {
         {"material_you.description", "在 Android 12 以上版本中，依桌布配色為 Messenger 深色模式上色；在 Android 11 中則使用固定藍色。請先在 Messenger 中啟用深色模式。"},
         {"app_icons.title", "解鎖應用程式圖示"},
         {"app_icons.description", "不需訂閱，即可在 Messenger 的「應用程式圖示」設定中選擇任何圖示。該設定是否顯示仍由 Messenger 決定。停用此選項後，可能會恢復預設圖示。"},
+        {"avatar_shape.title", "方形大頭貼照"},
+        {"avatar_shape.description", "以方形取代圓形顯示用戶的大頭貼照。開啟下方的「圓角」可改為圓角方形。重新啟動 Messenger 後生效。"},
         {"custom_font.title", "使用自訂字型"},
         {"custom_font.description", "以手機字型取代 Meta 字型來顯示 Messenger 文字，也可使用下方選取的 .ttf 或 .otf 字型檔案，並調整大小或上下位置。表情符號不受影響。重新啟動 Messenger 後即可看到變更。"},
     };

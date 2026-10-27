@@ -305,6 +305,7 @@ public final class Settings {
         Map<String, String> owners = new LinkedHashMap<>();
         owners.put(BUBBLE_CHAT_HEADS, "bubbles");
         owners.put(KEEP_FACEBOOK_PROFILE, "facebook");
+        owners.put(Settings.AVATAR_ROUNDED, Settings.AVATAR_SHAPE);
         for (String keep : KEEP_BADGES.values()) owners.put(keep, TAB_BADGES);
         SUB_SWITCHES = Collections.unmodifiableMap(owners);
     }
@@ -393,6 +394,11 @@ public final class Settings {
             Set<String> now = badgesToHide();
             // Still hiding what a restart would show again reads as held on; any other change is waiting to take effect.
             return badges.equals(now) ? null : !badges.isEmpty() && now.isEmpty();
+        }
+        if (AVATAR_SHAPE.equals(key)) {
+            int shape = avatarShape, now = avatarShapeNow();
+            // Square to rounded and back takes effect after a restart; only going back to circles stays in effect.
+            return shape < 0 || shape == now ? null : now == AVATAR_CIRCLE;
         }
         Boolean held = "meta_ai".equals(key) ? metaAiTab : "emoji_drawer".equals(key) ? oldEmojiDrawer
             : OwnFont.KEY.equals(key) ? customFont : bottomTabs.get(key);
@@ -548,6 +554,93 @@ public final class Settings {
      */
     public static Object shareStorySection(Object state, Object skip) {
         return state != skip && enabled(SHARE_STORY) ? skip : state;
+    }
+    static final String AVATAR_SHAPE = "avatar_shape";
+    /** Under Square profile pictures: rounds the square's corners. */
+    static final String AVATAR_ROUNDED = "avatar_shape_rounded";
+    /** Neither hook knows how big the picture is, so every size gets the same corners. */
+    static final float AVATAR_CORNER_DP = 8f;
+    static final int AVATAR_CIRCLE = 0, AVATAR_SQUARE = 1, AVATAR_ROUNDED_SQUARE = 2;
+    /** First shape this process gave, or -1 before Messenger built a rounded picture. */
+    static volatile int avatarShape = -1;
+    private static final Object AVATAR_SHAPE_LOCK = new Object();
+
+    /** The shape the saved switches, Pause and safe mode ask for now. */
+    static int avatarShapeNow() {
+        if (!wouldUse(AVATAR_SHAPE)) return AVATAR_CIRCLE;
+        SharedPreferences prefs = preferences;
+        return prefs != null && prefs.getBoolean(AVATAR_ROUNDED, false) ? AVATAR_ROUNDED_SQUARE : AVATAR_SQUARE;
+    }
+
+    /**
+     * Held for the run: Vito builds its two circle presets once, in a static initializer, so a shape that followed the
+     * switch would leave those on the old shape and everything else on the new one until a restart anyway.
+     */
+    static int avatarShape() {
+        int held = avatarShape;
+        if (held < 0) {
+            // Started before the lock below, so nothing waits on HostScreens' startup lock while holding it.
+            if (!HostScreens.started) HostScreens.initializeLate();
+            synchronized (AVATAR_SHAPE_LOCK) {
+                if (avatarShape < 0) avatarShape = avatarShapeNow();
+                held = avatarShape;
+            }
+        }
+        if (held != AVATAR_CIRCLE) activeAt.put(AVATAR_SHAPE, System.currentTimeMillis());
+        return held;
+    }
+
+    static float avatarCornerPx() {
+        return AVATAR_CORNER_DP * android.content.res.Resources.getSystem().getDisplayMetrics().density;
+    }
+
+    /** Asked as each Vito picture's rounding and each legacy rounded layer is set up; false makes a circle a rectangle. */
+    public static boolean avatarCircle(boolean circle) {
+        if (!circle) return false;
+        try {
+            return avatarShape() == AVATAR_CIRCLE;
+        } catch (RuntimeException error) {
+            hookFailed(AVATAR_SHAPE, "Can't change the profile picture shape", error);
+            return true;
+        }
+    }
+
+    /** Vito's corner radius: 0 for a square, the fixed corner for a rounded one, Messenger's own for anything else. */
+    public static float avatarRadius(boolean circle, float radius) {
+        if (!circle) return radius;
+        try {
+            int shape = avatarShape();
+            return shape == AVATAR_CIRCLE ? radius : shape == AVATAR_SQUARE ? 0f : avatarCornerPx();
+        } catch (RuntimeException error) {
+            hookFailed(AVATAR_SHAPE, "Can't change the profile picture shape", error);
+            return radius;
+        }
+    }
+
+    /** Vito's corner radii, which win over the radius, so a former circle drops them and the radius decides. */
+    public static float[] avatarVitoRadii(boolean circle, float[] radii) {
+        if (!circle) return radii;
+        try {
+            return avatarShape() == AVATAR_CIRCLE ? radii : null;
+        } catch (RuntimeException error) {
+            hookFailed(AVATAR_SHAPE, "Can't change the profile picture shape", error);
+            return radii;
+        }
+    }
+
+    /** The legacy layer's corner radii, top left to bottom left, two per corner. */
+    public static float[] avatarRadii(float[] radii, boolean circle) {
+        if (!circle) return radii;
+        try {
+            int shape = avatarShape();
+            if (shape == AVATAR_CIRCLE) return radii;
+            float[] corners = new float[8];
+            if (shape == AVATAR_ROUNDED_SQUARE) Arrays.fill(corners, avatarCornerPx());
+            return corners;
+        } catch (RuntimeException error) {
+            hookFailed(AVATAR_SHAPE, "Can't change the profile picture shape", error);
+            return radii;
+        }
     }
     /** Messenger's own original-upload check allows 25 MB, so a bigger video keeps its re-encode. */
     static final long ORIGINAL_VIDEO_MAX_BYTES = 25L * 1024 * 1024;
