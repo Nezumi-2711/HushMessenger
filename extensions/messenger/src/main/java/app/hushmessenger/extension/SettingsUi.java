@@ -22,10 +22,11 @@ final class SettingsUi {
     /** accent is for text and lines on the page; accentFill is Messenger's blue behind white text, like its own buttons. */
     final int background, surface, text, muted, accent, accentFill, line, outline, selected, warning, warningSurface;
     final int track, thumb, ripple, infoSurface, infoBorder, selectedText, error, selection;
-    final boolean largeText;
+    final boolean largeText, light;
 
     SettingsUi(Context context, boolean light) {
         this.context = context;
+        this.light = light;
         background = light ? 0xfff0f2f5 : 0xff000000;
         surface = light ? 0xffffffff : 0xff10151d;
         text = light ? 0xff050505 : 0xfff3f5f9;
@@ -74,6 +75,13 @@ final class SettingsUi {
         view.setTypeface(Typeface.create(bold && size < 18 ? "sans-serif-medium" : "sans-serif", bold && size >= 18 ? Typeface.BOLD : Typeface.NORMAL));
         view.setIncludeFontPadding(false);
         view.setLineSpacing(dp(2), 1);
+        return view;
+    }
+
+    /** A HushMessenger title: bold text in Messenger's moving gradient. */
+    TextView title(String value, int size) {
+        TextView view = text(value, size, text, true);
+        ShimmerTitle.wear(view, light);
         return view;
     }
 

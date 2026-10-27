@@ -562,7 +562,7 @@ public final class SettingsActivity extends Activity {
         brand = ui.row();
         if (ui.largeText) brand.setOrientation(LinearLayout.VERTICAL);
         LinearLayout wordmark = ui.column();
-        TextView title = ui.text("HushMessenger", 20, ui.text, true);
+        TextView title = ui.title("HushMessenger", 20);
         title.setTag("wordmark");
         title.setAccessibilityHeading(true);
         // Linear font scaling on Android 13 and older could otherwise split the wordmark mid-word.
@@ -825,7 +825,9 @@ public final class SettingsActivity extends Activity {
         }
         emptyState = ui.panel();
         emptyState.setTag("empty_state");
-        ui.add(emptyState, ui.text(text.get("empty_title"), 18, ui.text, true), 0);
+        TextView emptyTitle = ui.title(text.get("empty_title"), 18);
+        emptyTitle.setTag("empty_title");
+        ui.add(emptyState, emptyTitle, 0);
         ui.add(emptyState, ui.text(text.get("empty_help"), 14, ui.muted, false), 10);
         Button clearSearch = ui.button(text.get("clear"));
         clearSearch.setTag("clear_filters");
@@ -2167,7 +2169,7 @@ public final class SettingsActivity extends Activity {
                     if (result.setAside) {
                         LinearLayout notice = ui.panel();
                         notice.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-                        notice.addView(ui.text(text.get("message_log_set_aside"), 18, ui.text, true));
+                        notice.addView(ui.title(text.get("message_log_set_aside"), 18));
                         ui.add(notice, ui.text(text.get("message_log_set_aside_help"), 14, ui.muted, false), 8);
                         Button remove = ui.button(text.get("message_log_set_aside_remove"));
                         remove.setTag("message_log_set_aside_remove");
@@ -2182,7 +2184,9 @@ public final class SettingsActivity extends Activity {
                         View accent = new View(this);
                         accent.setBackground(ui.shape(ui.accent, 0, 2));
                         empty.addView(accent, new LinearLayout.LayoutParams(ui.dp(36), ui.dp(4)));
-                        ui.add(empty, ui.text(text.get("message_log_empty"), 18, ui.text, true), 16);
+                        TextView emptyLog = ui.title(text.get("message_log_empty"), 18);
+                        emptyLog.setTag("message_log_empty_title");
+                        ui.add(empty, emptyLog, 16);
                         ui.add(empty, ui.text(text.get(Settings.wouldUse(MessageLog.KEY) ? "message_log_empty_on" : "message_log_empty_off"), 14, ui.muted, false), 8);
                         // The settings page's Undo sits behind this sheet.
                         if (messageLogUndo) {
