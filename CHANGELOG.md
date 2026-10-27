@@ -8,7 +8,7 @@
 
 ### Changed and fixed
 
-- HushMessenger now targets Messenger 584.1.0.61.98 and takes all 18 builds APKMirror lists for it, arm64 and armv7 alike. 584.0.0.49.98 is no longer supported, so update Messenger before you patch. Each build was checked patch by patch, and Morphe Desktop applied and rebuilt every one of them. Refs #106.
+- HushMessenger now targets Messenger 584.1.0.61.98 and takes 19 builds of it, arm64 and armv7 alike, including the 240 dpi arm64 build `346817025` that APKMirror listed after the first 18. 584.0.0.49.98 is no longer supported, so update Messenger before you patch. Each build was checked patch by patch, and Morphe Desktop applied and rebuilt every one of them. Refs #106.
 - Patches are built with Morphe patcher 2.0.1, which uses less memory while patching. You'll need Morphe Manager 2.2.0 or newer, or Morphe Desktop 1.19.1.
 - The HushMessenger settings got a tighter layout, modeled on HushFacebook's. Every section folds up under its own header and starts closed, so the whole list fits on a couple of screens. Open the ones you use and they stay open next time. Searching still finds any control, whether its section is open or not. The banner with "Make Messenger yours" and the Inbox, Chats and More chips are gone. The colors now follow Messenger's own blue in both the light and dark theme, and Restart Messenger sits at the top of the App tab.
 - Gallery selections are checked off the UI thread before returning to the chat. A canceled, revoked or timed-out selection returns no media, and Report a problem includes a fixed gallery result category without file paths. Refs #94.

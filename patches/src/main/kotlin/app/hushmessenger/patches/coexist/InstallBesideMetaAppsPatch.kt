@@ -148,6 +148,7 @@ internal val expectedDexSitesByBuild: Map<Int, Map<String, String>> = mapOf(
     346817022 to expectedDexSites346816951,
     346817023 to expectedDexSites346816951,
     346817024 to expectedDexSites346816951,
+    346817025 to expectedDexSites346816951,
     346816949 to expectedDexSites346816966,
     346816966 to expectedDexSites346816966,
     346817019 to expectedDexSites346816966,
