@@ -69,6 +69,7 @@ private fun mirrored(classes: Iterable<ClassDef>, skip: Set<String>, find: (List
             val savedPicture = autoReplyPictureRecipe
             val savedGallery = galleryRoute
             val savedCircle = vitoCircleField
+            val savedTile = tileShapeSetter
             try {
                 val starvedFound = find(starved)
                 val starvedDiffer = disagreements(starved, starvedFound, CompatMirror.controls(starved).filterKeys { it !in skip }, proved)
@@ -83,6 +84,7 @@ private fun mirrored(classes: Iterable<ClassDef>, skip: Set<String>, find: (List
                 autoReplyPictureRecipe = savedPicture
                 galleryRoute = savedGallery
                 vitoCircleField = savedCircle
+                tileShapeSetter = savedTile
             }
         }
     }

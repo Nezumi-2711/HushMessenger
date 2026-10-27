@@ -2,6 +2,10 @@ package app.hushmessenger.extension;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
 import android.net.Uri;
 import android.os.Build;
 import android.os.SystemClock;
@@ -640,6 +644,50 @@ public final class Settings {
         } catch (RuntimeException error) {
             hookFailed(AVATAR_SHAPE, "Can't change the profile picture shape", error);
             return radii;
+        }
+    }
+
+    /**
+     * A user tile's clip path, an oval cut away where a badge sits: a square (or rounded square) of the same bounds
+     * instead, so the photo and the placeholder letters fill it. The badge then sits on the picture's corner.
+     */
+    public static Path avatarPath(Path path) {
+        if (path == null) return null;
+        try {
+            int shape = avatarShape();
+            if (shape == AVATAR_CIRCLE) return path;
+            RectF bounds = new RectF();
+            path.computeBounds(bounds, true);
+            Path square = new Path();
+            if (shape == AVATAR_SQUARE) {
+                square.addRect(bounds, Path.Direction.CW);
+            } else {
+                float corner = Math.min(avatarCornerPx(), Math.min(bounds.width(), bounds.height()) / 2f);
+                square.addRoundRect(bounds, corner, corner, Path.Direction.CW);
+            }
+            return square;
+        } catch (RuntimeException error) {
+            hookFailed(AVATAR_SHAPE, "Can't change the profile picture shape", error);
+            return path;
+        }
+    }
+
+    /** The placeholder tile's background and outline, which Messenger draws as an oval behind the initials. */
+    public static void avatarOval(Canvas canvas, RectF oval, Paint paint) {
+        int shape;
+        try {
+            shape = avatarShape();
+        } catch (RuntimeException error) {
+            hookFailed(AVATAR_SHAPE, "Can't change the profile picture shape", error);
+            shape = AVATAR_CIRCLE;
+        }
+        if (shape == AVATAR_CIRCLE) {
+            canvas.drawOval(oval, paint);
+        } else if (shape == AVATAR_SQUARE) {
+            canvas.drawRect(oval, paint);
+        } else {
+            float corner = Math.min(avatarCornerPx(), Math.min(oval.width(), oval.height()) / 2f);
+            canvas.drawRoundRect(oval, corner, corner, paint);
         }
     }
     /** Messenger's own original-upload check allows 25 MB, so a bigger video keeps its re-encode. */

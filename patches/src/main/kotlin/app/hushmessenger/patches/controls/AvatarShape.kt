@@ -1,6 +1,8 @@
 package app.hushmessenger.patches.controls
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
+import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.PatchException
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
 import com.android.tools.smali.dexlib2.AccessFlags
@@ -18,10 +20,12 @@ import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
 
 /**
- * Profile pictures are round because Fresco is told to round them, in one of two ways. Vito, the newer image view,
- * gets a RoundingOptions whose isCircular is true, and every Vito path (drawable, decode-time rounding, Litho clip,
- * the Vito2 shape) reads that flag off the one constructor. The older drawee views get a RoundingParams whose
- * roundAsCircle flag one static helper hands to each rounded layer, followed by its corner radii.
+ * Profile pictures are round in three ways. Vito, the newer image view, gets a RoundingOptions whose isCircular is
+ * true, and every Vito path (drawable, decode-time rounding, Litho clip, the Vito2 shape) reads that flag off the one
+ * constructor. The older drawee views get a RoundingParams whose roundAsCircle flag one static helper hands to each
+ * rounded layer, followed by its corner radii. And Messenger's own user tile, which 584.1 draws every inbox row, story
+ * tray and chat header picture with, masks the photo with an OvalShape or an oval clip path and paints an oval behind
+ * the initials placeholder.
  */
 internal const val AVATAR_SHAPE = "avatar_shape"
 
@@ -142,32 +146,125 @@ internal fun Method.legacyRounding(): LegacyRounding? {
     return LegacyRounding(layer, params, flag, radii, spare, circle.toString())
 }
 
+private const val SET_SHAPE = "Landroid/graphics/drawable/ShapeDrawable;->setShape(Landroid/graphics/drawable/shapes/Shape;)V"
+private const val PATH_SHAPE = "Landroid/graphics/drawable/shapes/PathShape;-><init>(Landroid/graphics/Path;FF)V"
+internal const val DRAW_OVAL = "Landroid/graphics/Canvas;->drawOval(Landroid/graphics/RectF;Landroid/graphics/Paint;)V"
+internal const val TILE_OVAL = "$SETTINGS->avatarOval(Landroid/graphics/Canvas;Landroid/graphics/RectF;Landroid/graphics/Paint;)V"
+
+/** The user tile's shape setter, proved by findAvatarShape before the tile setup that calls it is checked again. */
+internal var tileShapeSetter: String = ""
+
+private fun Instruction.createdType() =
+    if (opcode == Opcode.NEW_INSTANCE) ((this as ReferenceInstruction).reference as? com.android.tools.smali.dexlib2.iface.reference.TypeReference)?.type else null
+
+/**
+ * The register of the flag that picks the user tile's shape: Messenger's photo tiles (inbox rows, the story tray, chat
+ * headers) mask the picture with a ShapeDrawable, an OvalShape when the flag is set and a RectShape when it isn't.
+ */
+internal fun Method.tileShapeFlag(): Int? {
+    if (AccessFlags.STATIC.isSet(accessFlags) || returnType != "V" || parameterTypes.map { it.toString() } != listOf("Z")) return null
+    val code = code()
+    val created = code.mapNotNull { it.createdType() }
+    if ("Landroid/graphics/drawable/shapes/OvalShape;" !in created || "Landroid/graphics/drawable/shapes/RectShape;" !in created) return null
+    if (code.none { it.invoked()?.toString() == SET_SHAPE }) return null
+    val flag = parameterRegister(1)
+    val branch = code.firstOrNull { it is OffsetInstruction } ?: return null
+    if (branch.opcode !in setOf(Opcode.IF_EQZ, Opcode.IF_NEZ) || (branch as OneRegisterInstruction).registerA != flag) return null
+    if (flag > 15 || 0 in jumpTargets()) return null
+    return flag
+}
+
+/** The register of the clip path the tile setup gets: an oval, cut away where a badge sits, that the photo and the
+ * initials placeholder are both drawn through. It's the setup's one Path, made into the photo's PathShape. */
+internal fun Method.tilePath(setter: String = tileShapeSetter): Int? {
+    if (setter.isEmpty() || definingClass != setter.substringBefore("->") || AccessFlags.STATIC.isSet(accessFlags) || returnType != "V") return null
+    val types = parameterTypes.map { it.toString() }
+    if (types.count { it == "Landroid/graphics/Path;" } != 1) return null
+    val code = code()
+    if (code.none { it.invoked()?.toString() == PATH_SHAPE } || code.none { it.invoked()?.toString() == setter }) return null
+    val index = types.indexOf("Landroid/graphics/Path;")
+    val path = parameterRegister(1 + types.take(index).sumOf { if (it == "J" || it == "D") 2 else 1 })
+    if (path > 15 || 0 in jumpTargets()) return null
+    return path
+}
+
+/** The initials placeholder's draw: the oval it fills and strokes behind the letters, each an invoke of drawOval. */
+internal fun Method.tileOvals(): List<Int>? {
+    if (name != "draw" || AccessFlags.STATIC.isSet(accessFlags) || returnType != "V" ||
+        parameterTypes.map { it.toString() } != listOf("Landroid/graphics/Canvas;")) return null
+    val ovals = code().withIndex().filter { it.value.invoked()?.toString() == DRAW_OVAL }
+    if (ovals.isEmpty() || ovals.any { it.value.opcode != Opcode.INVOKE_VIRTUAL }) return null
+    return ovals.map { it.index }
+}
+
 /**
  * The one RoundingOptions class by its toString(), its one constructor in the proven shape, and the one legacy helper.
- * A second of either, or either in another shape, leaves the switch unapplied rather than rounding only some pictures.
+ * Then the user tile: its one shape setter, the one setup in that class that hands it a clip path, and the draw of the
+ * placeholder type that setup takes. A second of any, or any in another shape, leaves the switch unapplied rather than
+ * changing only some pictures.
  */
 internal fun findAvatarShape(classes: Iterable<ClassDef>): List<Method> {
     vitoCircleField = ""
+    tileShapeSetter = ""
     val all = classes.toList()
     val vito = all.mapNotNull { cls -> cls.vitoCircle()?.let { cls to it } }.singleOrNull() ?: return emptyList()
     val constructors = vito.first.methods.filter { it.vitoRounding(vito.second) != null }
     val constructor = constructors.singleOrNull() ?: return emptyList()
     val legacy = all.flatMap { cls -> cls.methods.filter { it.legacyRounding() != null } }.singleOrNull() ?: return emptyList()
+    val setter = all.flatMap { cls -> cls.methods.filter { it.tileShapeFlag() != null } }.singleOrNull() ?: return emptyList()
+    val tile = all.singleOrNull { it.type == setter.definingClass } ?: return emptyList()
+    val setup = tile.methods.filter { it.tilePath(setter.hookId()) != null }.singleOrNull() ?: return emptyList()
+    val byType = all.associateBy { it.type }
+    val placeholders = setup.parameterTypes.map { it.toString() }.distinct()
+        .mapNotNull { byType[it] }.flatMap { cls -> cls.methods.filter { it.tileOvals() != null } }
+    val placeholder = placeholders.singleOrNull() ?: return emptyList()
     vitoCircleField = vito.second
-    return listOf(constructor, legacy)
+    tileShapeSetter = setter.hookId()
+    return listOf(constructor, legacy, setter, setup, placeholder)
 }
 
 internal fun MutableMethod.validateAvatarShape() {
-    if (name == "<init>") vitoRounding() ?: avatarShapeChanged("Vito's rounding options in ${hookId()}")
-    else legacyRounding() ?: avatarShapeChanged("the rounded layer helper ${hookId()}")
+    when {
+        name == "<init>" -> vitoRounding() ?: avatarShapeChanged("Vito's rounding options in ${hookId()}")
+        name == "draw" -> tileOvals() ?: avatarShapeChanged("the placeholder tile ${hookId()}")
+        hookId() == tileShapeSetter -> tileShapeFlag() ?: avatarShapeChanged("the tile shape ${hookId()}")
+        parameterTypes.any { it.toString() == "Landroid/graphics/Path;" } -> tilePath() ?: avatarShapeChanged("the tile setup ${hookId()}")
+        else -> legacyRounding() ?: avatarShapeChanged("the rounded layer helper ${hookId()}")
+    }
 }
 
 /**
  * Vito's options are rewritten as they're built: a circle becomes a rectangle with Settings' corner radius and no
  * radii, so the radius decides. The radius and radii are worked out from the original isCircular before it changes.
  * The legacy helper hands each layer the same answers. Pictures that weren't circles to begin with are left alone.
+ * The user tile asks for its shape on the way in, gets a rectangle of its clip path's bounds in place of the oval, and
+ * its placeholder fills that rectangle instead of the oval.
  */
 internal fun MutableMethod.injectAvatarShape() {
+    validateAvatarShape()
+    if (name == "draw") {
+        for (at in tileOvals()!!) {
+            val call = getInstruction<FiveRegisterInstruction>(at)
+            replaceInstruction(at, "invoke-static {v${call.registerC}, v${call.registerD}, v${call.registerE}}, $TILE_OVAL")
+        }
+        return
+    }
+    if (hookId() == tileShapeSetter) {
+        val flag = tileShapeFlag()!!
+        addInstructions(0, """
+            invoke-static {v$flag}, $SETTINGS->avatarCircle(Z)Z
+            move-result v$flag
+        """.trimIndent())
+        return
+    }
+    if (name != "<init>" && legacyRounding() == null) {
+        val path = tilePath()!!
+        addInstructions(0, """
+            invoke-static {v$path}, $SETTINGS->avatarPath(Landroid/graphics/Path;)Landroid/graphics/Path;
+            move-result-object v$path
+        """.trimIndent())
+        return
+    }
     if (name == "<init>") {
         val vito = vitoRounding() ?: avatarShapeChanged("Vito's rounding options in ${hookId()}")
         addInstructions(1, """

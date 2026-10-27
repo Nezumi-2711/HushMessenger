@@ -65,17 +65,59 @@ iget v0, p1, $PARAMS->A00:F
 invoke-interface {p0, v1, v0}, $LAYER->DSU(IF)V
 return-void"""
 
+private const val TILE = "LX/Av10;"
+private const val PLACEHOLDER = "LX/Av11;"
+internal const val SYNTHETIC_TILE_SHAPE = "$TILE->A0E(Z)V"
+internal const val SYNTHETIC_TILE_SETUP = "$TILE->A09(Landroid/graphics/Path;$PLACEHOLDER)V"
+internal const val SYNTHETIC_TILE_PLACEHOLDER = "$PLACEHOLDER->draw(Landroid/graphics/Canvas;)V"
+private const val TILE_PATH = "$SETTINGS->avatarPath(Landroid/graphics/Path;)Landroid/graphics/Path;"
+
+/** The user tile's shape setter as 584.1 writes it: an OvalShape when the flag is set, a RectShape when it isn't. */
+private const val TILE_SHAPE_BODY = """iget-object v1, p0, $TILE->A07:Landroid/graphics/drawable/ShapeDrawable;
+if-eqz p1, :rect
+new-instance v0, Landroid/graphics/drawable/shapes/OvalShape;
+invoke-direct {v0}, Landroid/graphics/drawable/shapes/OvalShape;-><init>()V
+:set
+invoke-virtual {v1, v0}, Landroid/graphics/drawable/ShapeDrawable;->setShape(Landroid/graphics/drawable/shapes/Shape;)V
+return-void
+:rect
+new-instance v0, Landroid/graphics/drawable/shapes/RectShape;
+invoke-direct {v0}, Landroid/graphics/drawable/shapes/RectShape;-><init>()V
+goto :set"""
+
+/** Its setup, cut down: the clip path becomes the photo's PathShape and the placeholder's clip, then the shape is set. */
+private const val TILE_SETUP_BODY = """new-instance v0, Landroid/graphics/drawable/shapes/PathShape;
+const/high16 v1, 0x3f800000
+invoke-direct {v0, p1, v1, v1}, Landroid/graphics/drawable/shapes/PathShape;-><init>(Landroid/graphics/Path;FF)V
+iput-object p1, p2, $PLACEHOLDER->A01:Landroid/graphics/Path;
+const/4 v1, 0x1
+invoke-virtual {p0, v1}, $SYNTHETIC_TILE_SHAPE
+return-void"""
+
+/** The placeholder fills an oval, then strokes it. */
+private const val PLACEHOLDER_BODY = """iget-object v0, p0, $PLACEHOLDER->A08:Landroid/graphics/RectF;
+iget-object v1, p0, $PLACEHOLDER->A07:Landroid/graphics/Paint;
+invoke-virtual {p1, v0, v1}, $DRAW_OVAL
+invoke-virtual {p1, v0, v1}, $DRAW_OVAL
+return-void"""
+
 private val STATIC = AccessFlags.PUBLIC.value or AccessFlags.STATIC.value
 
 private fun printer(body: String = PRINTER_BODY, type: String = OPTIONS) = fixtureMethod("$type->toString()Ljava/lang/String;", body.replace(OPTIONS, type), 5)
 private fun constructor(body: String = CONSTRUCTOR_BODY, id: String = SYNTHETIC_VITO_ROUNDING) = fixtureMethod(id, body, 6)
 private fun legacy(body: String = LEGACY_BODY, id: String = SYNTHETIC_LEGACY_ROUNDING) = fixtureMethod(id, body, 4, STATIC)
+private fun tileShape(body: String = TILE_SHAPE_BODY, id: String = SYNTHETIC_TILE_SHAPE) = fixtureMethod(id, body, 4)
+private fun tileSetup(body: String = TILE_SETUP_BODY) = fixtureMethod(SYNTHETIC_TILE_SETUP, body, 5)
+private fun placeholder(body: String = PLACEHOLDER_BODY) = fixtureMethod(SYNTHETIC_TILE_PLACEHOLDER, body, 4)
 
-/** Vito's options class and the legacy helper's class. */
+/** Vito's options class, the legacy helper's class, the user tile and its placeholder. */
 internal fun avatarShapeFixture(
     options: List<MutableMethod> = listOf(printer(), constructor()),
     helper: MutableMethod = legacy(),
-): List<MutableClass> = listOf(fixtureClass(OPTIONS, options), fixtureClass("LX/Av2;", listOf(helper)))
+    tile: List<MutableMethod> = listOf(tileShape(), tileSetup()),
+    placeholderDraw: List<MutableMethod> = listOf(placeholder()),
+): List<MutableClass> = listOf(fixtureClass(OPTIONS, options), fixtureClass("LX/Av2;", listOf(helper)),
+    fixtureClass(TILE, tile), fixtureClass(PLACEHOLDER, placeholderDraw))
 
 private fun Method.code() = implementation!!.instructions.toList()
 
@@ -91,17 +133,26 @@ class AvatarShapeTest {
 
     private fun found(classes: List<MutableClass>) = mirroredControls(classes).getValue(AVATAR_SHAPE).map { it.hookId() }.toSet()
 
-    @Test fun theVitoConstructorAndTheLegacyHelperAreFound() {
-        assertEquals(setOf(SYNTHETIC_VITO_ROUNDING, SYNTHETIC_LEGACY_ROUNDING), found(avatarShapeFixture()))
+    @Test fun theVitoConstructorTheLegacyHelperAndTheUserTileAreFound() {
+        assertEquals(setOf(SYNTHETIC_VITO_ROUNDING, SYNTHETIC_LEGACY_ROUNDING, SYNTHETIC_TILE_SHAPE, SYNTHETIC_TILE_SETUP, SYNTHETIC_TILE_PLACEHOLDER),
+            found(avatarShapeFixture()))
         assertEquals("$OPTIONS->A02:Z", vitoCircleField)
         validateControls(mirroredControls(avatarShapeFixture()), setOf(AVATAR_SHAPE))
     }
 
     @Test fun eachFamilyMapsItsOwnHooks() {
-        assertEquals(setOf("LX/4wU;-><init>([FFZZZ)V", "LX/OaT;->A04(LX/RNd;LX/4j2;)V"), PROFILE_346816935.hooks.getValue(AVATAR_SHAPE))
-        assertEquals(setOf("LX/4sN;-><init>([FFZZZ)V", "LX/4zO;->A04(LX/5Jl;LX/4es;)V"), PROFILE_346816951.hooks.getValue(AVATAR_SHAPE))
-        assertEquals(setOf("LX/4uP;-><init>([FFZZZ)V", "LX/Ioi;->A04(LX/LSY;LX/4gu;)V"), PROFILE_346816973.hooks.getValue(AVATAR_SHAPE))
-        assertEquals(setOf("LX/4t1;-><init>([FFZZZ)V", "LX/LpG;->A04(LX/OP6;LX/4fW;)V"), PROFILE_346816966.hooks.getValue(AVATAR_SHAPE))
+        fun tile(tile: String, a: String, b: String, placeholder: String) = setOf("LX/$tile;->A0E(Z)V",
+            "LX/$tile;->A09(Landroid/content/Context;Landroid/graphics/Path;Landroid/graphics/drawable/Drawable;" +
+                "Lcom/facebook/auth/usersession/FbUserSession;LX/$a;LX/$b;LX/$placeholder;FIIZZ)V",
+            "LX/$placeholder;->draw(Landroid/graphics/Canvas;)V")
+        assertEquals(setOf("LX/4wU;-><init>([FFZZZ)V", "LX/OaT;->A04(LX/RNd;LX/4j2;)V") + tile("2qY", "2pB", "2ql", "2rf"),
+            PROFILE_346816935.hooks.getValue(AVATAR_SHAPE))
+        assertEquals(setOf("LX/4sN;-><init>([FFZZZ)V", "LX/4zO;->A04(LX/5Jl;LX/4es;)V") + tile("2rR", "2q4", "2re", "2sY"),
+            PROFILE_346816951.hooks.getValue(AVATAR_SHAPE))
+        assertEquals(setOf("LX/4uP;-><init>([FFZZZ)V", "LX/Ioi;->A04(LX/LSY;LX/4gu;)V") + tile("2rR", "2q4", "2re", "2sY"),
+            PROFILE_346816973.hooks.getValue(AVATAR_SHAPE))
+        assertEquals(setOf("LX/4t1;-><init>([FFZZZ)V", "LX/LpG;->A04(LX/OP6;LX/4fW;)V") + tile("2rr", "2qU", "2s4", "2sy"),
+            PROFILE_346816966.hooks.getValue(AVATAR_SHAPE))
     }
 
     // Only some pictures changing would look broken, so anything we can't prove about either path gets no hook at all.
@@ -135,6 +186,17 @@ class AvatarShapeTest {
             "no free register after the radii" to helper("iget v1, p1, $PARAMS->A02:I", "invoke-interface {p0}, $LAYER->Da2()V\niget v1, p1, $PARAMS->A02:I"),
             "a branch back into the start" to avatarShapeFixture(helper = legacy(LEGACY_BODY
                 .replace("iget-object v0", ":mid\niget-object v0").replace("return-void", "if-eqz v1, :mid\nreturn-void"))),
+            "no user tile" to avatarShapeFixture(tile = emptyList()),
+            "two tile shape setters" to avatarShapeFixture(tile = listOf(tileShape(), tileSetup(), tileShape(id = "$TILE->A0F(Z)V"))),
+            "a tile that never draws an oval" to avatarShapeFixture(tile = listOf(tileShape(TILE_SHAPE_BODY.replace("OvalShape", "ArcShape")), tileSetup())),
+            "a shape setter that branches on something else" to avatarShapeFixture(tile = listOf(tileShape(TILE_SHAPE_BODY.replace("if-eqz p1", "if-eqz v1")), tileSetup())),
+            "no tile setup" to avatarShapeFixture(tile = listOf(tileShape())),
+            "a setup without the path shape" to avatarShapeFixture(tile = listOf(tileShape(), tileSetup(TILE_SETUP_BODY
+                .replace("invoke-direct {v0, p1, v1, v1}, Landroid/graphics/drawable/shapes/PathShape;-><init>(Landroid/graphics/Path;FF)V\n", "")))),
+            "a setup that never sets the shape" to avatarShapeFixture(tile = listOf(tileShape(), tileSetup(TILE_SETUP_BODY
+                .replace("invoke-virtual {p0, v1}, $SYNTHETIC_TILE_SHAPE\n", "")))),
+            "a placeholder without an oval" to avatarShapeFixture(placeholderDraw = listOf(placeholder(PLACEHOLDER_BODY
+                .replace("invoke-virtual {p1, v0, v1}, $DRAW_OVAL\n", "")))),
         )
         for ((case, classes) in cases) {
             assertTrue(found(classes).isEmpty(), case)
@@ -178,12 +240,47 @@ class AvatarShapeTest {
         assertEquals(before.drop(3).map { it.opcode }, code.drop(8).map { it.opcode })
     }
 
+    @Test fun theUserTileAsksForItsShapeItsPathAndItsPlaceholderOval() {
+        found(avatarShapeFixture())
+        val shape = tileShape()
+        val shapeBefore = shape.code()
+        injectControl(AVATAR_SHAPE, mapOf(AVATAR_SHAPE to listOf(shape)))
+        val shapeAfter = shape.code()
+        // p1 is v3 in four registers; the flag is rewritten before the branch reads it.
+        assertEquals(CIRCLE to listOf(3), call(shapeAfter, 0))
+        assertEquals(listOf(Opcode.MOVE_RESULT, 3), (shapeAfter[1] as OneRegisterInstruction).let { listOf(it.opcode, it.registerA) })
+        assertEquals(shapeBefore.map { it.opcode }, shapeAfter.drop(2).map { it.opcode })
+
+        val setup = tileSetup()
+        val setupBefore = setup.code()
+        injectControl(AVATAR_SHAPE, mapOf(AVATAR_SHAPE to listOf(setup)))
+        val setupAfter = setup.code()
+        // p1, the Path, is v3 in five registers.
+        assertEquals(TILE_PATH to listOf(3), call(setupAfter, 0))
+        assertEquals(listOf(Opcode.MOVE_RESULT_OBJECT, 3), (setupAfter[1] as OneRegisterInstruction).let { listOf(it.opcode, it.registerA) })
+        assertEquals(setupBefore.map { it.opcode }, setupAfter.drop(2).map { it.opcode })
+
+        val draw = placeholder()
+        val drawBefore = draw.code()
+        injectControl(AVATAR_SHAPE, mapOf(AVATAR_SHAPE to listOf(draw)))
+        val drawAfter = draw.code()
+        assertEquals(drawBefore.size, drawAfter.size)
+        for (at in listOf(2, 3)) {
+            assertEquals(Opcode.INVOKE_STATIC, drawAfter[at].opcode)
+            // Canvas p1 is v3, then the RectF and Paint the oval was drawn with.
+            assertEquals(TILE_OVAL to listOf(3, 0, 1), call(drawAfter, at))
+        }
+    }
+
     @Test fun anUnprovedMethodRefusesTheSwitchBeforeAnyEdit() {
         found(avatarShapeFixture())
         val cases = mapOf(
             "a constructor that computes" to constructor(CONSTRUCTOR_BODY.replace("iput p2", "neg-float p2, p2\niput p2")),
             "a constructor of another class" to constructor(CONSTRUCTOR_BODY.replace(OPTIONS, "LX/Av5;"), "LX/Av5;-><init>([FFZZZ)V"),
             "a helper with the radii first" to legacy(LEGACY_BODY.replace("iget-boolean v0, p1, $PARAMS->A06:Z", "iget-object v0, p1, $PARAMS->A07:[F")),
+            "a shape setter that branches on something else" to tileShape(TILE_SHAPE_BODY.replace("if-eqz p1", "if-eqz v1")),
+            "a setup without the path shape" to tileSetup(TILE_SETUP_BODY.replace("PathShape;-><init>", "PathShape;->A00")),
+            "a placeholder without an oval" to placeholder(PLACEHOLDER_BODY.replace(DRAW_OVAL, "Landroid/graphics/Canvas;->drawRect(Landroid/graphics/RectF;Landroid/graphics/Paint;)V")),
         )
         for ((case, bad) in cases) {
             val badBefore = bad.code()
@@ -192,7 +289,7 @@ class AvatarShapeTest {
         }
     }
 
-    @Test fun everySupportedBuildRoundsThroughTheSameTwoHooks() {
+    @Test fun everySupportedBuildRoundsThroughTheSameFiveHooks() {
         val root = System.getenv("HUSH_NATIVE_FIXTURES")
         assumeTrue(root != null, "Set HUSH_NATIVE_FIXTURES to the exact stock fixture directory")
         val apks = Files.list(Path.of(root!!)).use { it.filter { p -> p.toString().endsWith(".apk") }.sorted().toList() }
@@ -213,9 +310,21 @@ class AvatarShapeTest {
                 val before = method.code()
                 method.injectAvatarShape()
                 val after = method.code()
-                val added = if (hook.name == "<init>") 6 else 5
-                assertEquals(before.size + added, after.size, "$code ${hook.hookId()}")
-                assertEquals(CIRCLE, (after[if (hook.name == "<init>") 5 else 1] as ReferenceInstruction).reference.toString(), code)
+                val id = "$code ${hook.hookId()}"
+                fun asked(at: Int) = (after[at] as ReferenceInstruction).reference.toString()
+                when {
+                    hook.name == "<init>" -> { assertEquals(before.size + 6, after.size, id); assertEquals(CIRCLE, asked(5), id) }
+                    hook.name == "draw" -> {
+                        assertEquals(before.size, after.size, id)
+                        assertTrue(after.none { (it as? ReferenceInstruction)?.reference?.toString() == DRAW_OVAL }, id)
+                        assertTrue(after.any { (it as? ReferenceInstruction)?.reference?.toString() == TILE_OVAL }, id)
+                    }
+                    hook.hookId() == tileShapeSetter -> { assertEquals(before.size + 2, after.size, id); assertEquals(CIRCLE, asked(0), id) }
+                    hook.parameterTypes.any { it.toString() == "Landroid/graphics/Path;" } -> {
+                        assertEquals(before.size + 2, after.size, id); assertEquals(TILE_PATH, asked(0), id)
+                    }
+                    else -> { assertEquals(before.size + 5, after.size, id); assertEquals(CIRCLE, asked(1), id) }
+                }
             }
         }
         // All builds at once, so one run shows every family's ids.

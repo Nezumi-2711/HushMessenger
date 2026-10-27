@@ -2,11 +2,18 @@ package app.hushmessenger.extension;
 
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.graphics.Region;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.Switch;
 import android.widget.TextView;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.After;
@@ -17,6 +24,7 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 import static org.junit.Assert.*;
 
 /** Square profile pictures (#89): circles become squares, or rounded squares, until the next restart changes it. */
@@ -116,6 +124,53 @@ public class AvatarShapeTest {
         assertNull(Settings.heldUntilRestart(Settings.AVATAR_SHAPE));
         Settings.preferences.edit().putBoolean(Settings.AVATAR_SHAPE, true).commit();
         assertEquals("Turning it on mid-run waits too", Boolean.FALSE, Settings.heldUntilRestart(Settings.AVATAR_SHAPE));
+    }
+
+    /** Remembers which shape each call drew, so the user tile's placeholder can be checked without pixels. */
+    private static final class Recorder extends Canvas {
+        final List<String> drawn = new ArrayList<>();
+        @Override public void drawOval(RectF oval, Paint paint) { drawn.add("oval"); }
+        @Override public void drawRect(RectF rect, Paint paint) { drawn.add("rect"); }
+        @Override public void drawRoundRect(RectF rect, float rx, float ry, Paint paint) { drawn.add("round " + rx + " " + ry); }
+    }
+
+    private static boolean covers(Path path, int x, int y) {
+        Region region = new Region();
+        region.setPath(path, new Region(0, 0, 200, 200));
+        return region.contains(x, y);
+    }
+
+    // 584.1's user tile (inbox rows, the story tray, chat headers) clips through a path and fills an oval behind the initials.
+    @Test @Config(sdk = 36) @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    public void theUserTileGetsASquareClipAndASquarePlaceholder() {
+        Path oval = new Path();
+        oval.addOval(new RectF(0, 0, 100, 100), Path.Direction.CW);
+        RectF bounds = new RectF(0, 0, 100, 100);
+        Recorder canvas = new Recorder();
+
+        assertSame("Off leaves the clip alone", oval, Settings.avatarPath(oval));
+        Settings.avatarOval(canvas, bounds, new Paint());
+        assertNull(Settings.avatarPath(null));
+
+        Settings.avatarShape = -1;
+        Settings.preferences.edit().putBoolean(Settings.AVATAR_SHAPE, true).commit();
+        Path square = Settings.avatarPath(oval);
+        assertNotSame(oval, square);
+        assertFalse("The oval leaves its corners out", covers(oval, 2, 2));
+        assertTrue("The square fills them", covers(square, 2, 2));
+        assertFalse(covers(square, 101, 50));
+        Settings.avatarOval(canvas, bounds, new Paint());
+
+        Settings.avatarShape = -1;
+        Settings.preferences.edit().putBoolean(Settings.AVATAR_ROUNDED, true).commit();
+        float corner = Settings.avatarCornerPx();
+        Path rounded = Settings.avatarPath(oval);
+        assertFalse("A rounded corner is still cut", covers(rounded, 0, 0));
+        assertTrue("Past the corner it's square", covers(rounded, (int) Math.ceil(corner) + 1, 1));
+        assertTrue(covers(rounded, 1, (int) Math.ceil(corner) + 1));
+        Settings.avatarOval(canvas, bounds, new Paint());
+
+        assertEquals(List.of("oval", "rect", "round " + corner + " " + corner), canvas.drawn);
     }
 
     @Test public void theRowSaysToRestartAndTheRestartRowShowsUp() {

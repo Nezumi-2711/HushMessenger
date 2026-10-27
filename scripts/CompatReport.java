@@ -4798,7 +4798,66 @@ public class CompatReport {
             parameter.contentEquals(target.getParameterTypes().get(0)) && reads(call).equals(List.of(layer, value));
     }
 
-    /** avatar_shape: Vito's one RoundingOptions constructor in its proven shape, and the one legacy rounding helper. Mirrors AvatarShape.kt. */
+    static final String TILE_SET_SHAPE = "Landroid/graphics/drawable/ShapeDrawable;->setShape(Landroid/graphics/drawable/shapes/Shape;)V";
+    static final String TILE_PATH_SHAPE = "Landroid/graphics/drawable/shapes/PathShape;-><init>(Landroid/graphics/Path;FF)V";
+    static final String TILE_DRAW_OVAL = "Landroid/graphics/Canvas;->drawOval(Landroid/graphics/RectF;Landroid/graphics/Paint;)V";
+
+    /** Mirrors AvatarShape.kt's tileShapeFlag: a (Z)V that makes an OvalShape and a RectShape, sets one, and branches first on the flag. */
+    static boolean tileShapeFlag(Method method) {
+        if (AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"V".equals(method.getReturnType()) || method.getParameterTypes().size() != 1 ||
+            !"Z".contentEquals(method.getParameterTypes().get(0)) || method.getImplementation() == null) return false;
+        var code = instructions(method);
+        var created = new HashSet<String>();
+        boolean sets = false;
+        Instruction branch = null;
+        for (var i : code) {
+            if (i.getOpcode() == Opcode.NEW_INSTANCE && ((ReferenceInstruction) i).getReference() instanceof TypeReference type) created.add(type.getType());
+            if (TILE_SET_SHAPE.equals(ref(i))) sets = true;
+            if (branch == null && i instanceof OffsetInstruction) branch = i;
+        }
+        if (!created.contains("Landroid/graphics/drawable/shapes/OvalShape;") || !created.contains("Landroid/graphics/drawable/shapes/RectShape;") || !sets) return false;
+        int flag = parameterSlot(method, 1);
+        if (branch == null || (branch.getOpcode() != Opcode.IF_EQZ && branch.getOpcode() != Opcode.IF_NEZ) || register(branch) != flag) return false;
+        return flag <= 15 && !mediaTargets(method).contains(0);
+    }
+
+    /** Mirrors AvatarShape.kt's tilePath: the setter's class, one Path parameter, made into a PathShape, and the setter called. */
+    static boolean tilePath(Method method, String setter) {
+        if (!setter.startsWith(method.getDefiningClass() + "->") || AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+            !"V".equals(method.getReturnType()) || method.getImplementation() == null) return false;
+        var types = method.getParameterTypes();
+        int paths = 0, index = -1, words = 1;
+        for (int i = 0; i < types.size(); i++) {
+            String type = types.get(i).toString();
+            if ("Landroid/graphics/Path;".equals(type)) { paths++; if (index < 0) index = words; }
+            words += "J".equals(type) || "D".equals(type) ? 2 : 1;
+        }
+        if (paths != 1) return false;
+        var code = instructions(method);
+        boolean shaped = false, set = false;
+        for (var i : code) { shaped |= TILE_PATH_SHAPE.equals(ref(i)); set |= setter.equals(ref(i)); }
+        return shaped && set && parameterSlot(method, index) <= 15 && !mediaTargets(method).contains(0);
+    }
+
+    /** Mirrors AvatarShape.kt's tileOvals: the placeholder's draw(Canvas), every oval it draws an invoke-virtual drawOval. */
+    static boolean tileOvals(Method method) {
+        if (!"draw".equals(method.getName()) || AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"V".equals(method.getReturnType()) ||
+            method.getParameterTypes().size() != 1 || !"Landroid/graphics/Canvas;".contentEquals(method.getParameterTypes().get(0)) ||
+            method.getImplementation() == null) return false;
+        int ovals = 0;
+        for (var i : instructions(method)) {
+            if (!TILE_DRAW_OVAL.equals(ref(i))) continue;
+            if (i.getOpcode() != Opcode.INVOKE_VIRTUAL) return false;
+            ovals++;
+        }
+        return ovals > 0;
+    }
+
+    /**
+     * avatar_shape: Vito's one RoundingOptions constructor in its proven shape, the one legacy rounding helper, then the
+     * user tile's one shape setter, the one setup in its class that hands it a clip path, and the draw of the placeholder
+     * type that setup takes. Mirrors AvatarShape.kt.
+     */
     static List<Method> avatarShape(List<ClassDef> classes) {
         ClassDef vito = null;
         String circle = null;
@@ -4823,7 +4882,37 @@ public class CompatReport {
             if (legacy != null) return List.of();
             legacy = method;
         }
-        return legacy == null ? List.of() : List.of(constructor, legacy);
+        if (legacy == null) return List.of();
+        Method setter = null;
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (!tileShapeFlag(method)) continue;
+            if (setter != null) return List.of();
+            setter = method;
+        }
+        if (setter == null) return List.of();
+        String setterId = hookId(setter);
+        var byType = new HashMap<String, ClassDef>();
+        for (var cls : classes) byType.put(cls.getType(), cls);
+        var tile = byType.get(setter.getDefiningClass());
+        if (tile == null) return List.of();
+        Method setup = null;
+        for (var method : tile.getMethods()) {
+            if (!tilePath(method, setterId)) continue;
+            if (setup != null) return List.of();
+            setup = method;
+        }
+        if (setup == null) return List.of();
+        Method placeholder = null;
+        for (var type : new LinkedHashSet<String>(setup.getParameterTypes().stream().map(Object::toString).toList())) {
+            var cls = byType.get(type);
+            if (cls == null) continue;
+            for (var method : cls.getMethods()) {
+                if (!tileOvals(method)) continue;
+                if (placeholder != null) return List.of();
+                placeholder = method;
+            }
+        }
+        return placeholder == null ? List.of() : List.of(constructor, legacy, setter, setup, placeholder);
     }
 
     static final String RTC_NOTIFICATION_SERVICE ="Lcom/facebook/rtc/notification/RtcNotificationForegroundService;";
