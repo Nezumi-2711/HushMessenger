@@ -1,7 +1,7 @@
 ![HushMessenger. Keep the conversation. Cut the friction.](assets/readme-hero.png)
 
 <p align="center">
-  <a href="https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.26.0"><img src="https://img.shields.io/badge/version-0.26.0-0084FF" alt="Version 0.26.0"></a>
+  <a href="https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.27.0"><img src="https://img.shields.io/badge/version-0.27.0-0084FF" alt="Version 0.27.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
   <img src="https://img.shields.io/badge/platform-Android%209%2B%20arm64%20%7C%20armv7-3DDC84" alt="Platform Android 9 or newer, arm64 and armv7">
   <img src="https://img.shields.io/badge/Messenger-584.1.0.61.98-0084FF" alt="Messenger 584.1.0.61.98">
@@ -21,7 +21,7 @@
 
 HushMessenger is a set of [Morphe](https://morphe.software) patches for Facebook Messenger. You bring the Messenger APK, Morphe patches it on your phone, and you get a Messenger with a settings screen full of switches that stock Messenger doesn't have. Hide the ads, the suggested people, the stories row and Meta AI. Stop sending read receipts and typing indicators. Watch stories without showing up in the viewer list. Keep a log of messages so an unsend can't take them back. Send photos at their real quality, use your own font, let Material You color the app, and more.
 
-Every switch starts off, so a freshly patched Messenger behaves like stock until you turn something on. The current release has 63 patches. What changed in each version is in the [changelog](CHANGELOG.md).
+Every switch starts off, so a freshly patched Messenger behaves like stock until you turn something on. The current release has 66 patches. What changed in each version is in the [changelog](CHANGELOG.md).
 
 **[Add HushMessenger to Morphe Manager](https://morphe.software/add-source?github=SysAdminDoc%2FHushMessenger)**
 
@@ -30,12 +30,12 @@ Every switch starts off, so a freshly patched Messenger behaves like stock until
 
 ## Install
 
-1. **Get the APK.** The current release, v0.26.0, patches arm64 Messenger 584.0.0.49.98. Download it from [APKMirror's 584.0.0.49.98 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-0-0-49-98-release/). That version only comes as a `120-160dpi` build, so icons can look a bit soft on a sharp screen. A 584.1 APK won't patch with it yet. Support for 584.1.0.61.98 is done (every arm64 and armv7 build, `nodpi` ones included) and comes with the next release.
-2. **Add the source.** Open the link above on your phone with Morphe Manager (2.2.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **63 patches**. If it shows an older version, tap its refresh button.
+1. **Get the APK.** The current release, v0.27.0, patches Messenger 584.1.0.61.98. Download it from [APKMirror's 584.1.0.61.98 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/). Every build listed there works, arm64 and armv7. Pick a `nodpi` one if your phone's type has it, since those keep the icons sharp.
+2. **Add the source.** Open the link above on your phone with Morphe Manager (2.2.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **66 patches**. If it shows an older version, tap its refresh button.
 3. **Patch Messenger.** The default selection includes every switch. Four patches start unselected because they change the app itself, with no switch to undo them: **Clone install under another package name**, **Spoof package version**, **Custom new-message sound** and **Custom launcher icon**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
 4. **Keep one source.** Don't add the remote source and a local copy together, and don't mix in Messenger patches from other sources.
 
-Prefer a local source? Download [`patches-0.26.0.mpp`](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.26.0) and add it through **Sources > + > Local**. It won't update itself. The `.mpp` file is a patch bundle, not a Messenger APK. Morphe Desktop 1.19.1 or newer can load the same source too.
+Prefer a local source? Download [`patches-0.27.0.mpp`](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.27.0) and add it through **Sources > + > Local**. It won't update itself. The `.mpp` file is a patch bundle, not a Messenger APK. Morphe Desktop 1.19.1 or newer can load the same source too.
 
 ## Settings
 
@@ -206,10 +206,10 @@ On Windows, compare your file with `Get-FileHash -Algorithm SHA256 .\messenger.a
 
 ## Verify a download
 
-The [v0.26.0 release](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.26.0) ships `SHA256SUMS.txt` beside the bundle. Compare its `.mpp` hash with your download.
+The [v0.27.0 release](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.27.0) ships `SHA256SUMS.txt` beside the bundle. Compare its `.mpp` hash with your download.
 
 ```text
-3c43ed798c5c1cc24ec7b4bac56bcd404a07fa7551c90380576d994047c65eac  patches-0.26.0.mpp
+362f6be6b4f53b4f7819dd89a990c4a7b6b734dff8f7b59f7cabd259a745cf0e  patches-0.27.0.mpp
 ```
 
 `SHA256SUMS.txt.sig` is an SSH signature made with the project's release key. Its fingerprint is `SHA256:Z+UfHy7IUbtgNRO/wHkIr68+u4I+SIKPY9avfx/VAPU` and its public half is in [`scripts/release_signers`](scripts/release_signers). Morphe doesn't check this signature, so checking it is up to you. Download the three files from the same tag and run this in a terminal (OpenSSH 8.1 or newer, which Windows 10 and later include). In PowerShell, wrap it in `cmd /c "..."`.

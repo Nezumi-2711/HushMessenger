@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.27.0 (2026-10-27)
 
 ### New
 
@@ -21,8 +21,8 @@
 - **Source and licenses** under About opens the README's Credits section again. It pointed at a heading the README no longer has, so it landed at the top of the page.
 - With **Open your gallery app** on and no default gallery set, the list Android shows you now holds only your gallery apps. It could slip in other pickers, like Contacts. Whichever gallery you tap still opens with your photos and videos together. Refs #94.
 - If Messenger crashed in the last three days, **Report a problem** now adds a line saying where in the code it happened. It's only the names of the failing code, never the error text, so no file names or chat content go in. Refs #103.
-- Gallery selections are checked off the UI thread before returning to the chat. A canceled, revoked or timed-out selection returns no media, and Report a problem includes a fixed gallery result category without file paths. Refs #94.
-- Patching now reports when discovery stages start and finish. The Wi-Fi scan reads method signatures directly instead of formatting every reference in Messenger, which cuts that scan's time and temporary allocations. Refs #93, #99, #100.
+- Checking what you picked from your gallery no longer holds up Messenger's screen. If you cancel, or the pick times out or loses its permission, you're back in the chat with nothing attached. Report a problem now notes how the last gallery pick ended, without any file names. Refs #94.
+- The patch log now shows when each search through Messenger's code starts and finishes. The Wi-Fi search is faster and lighter on memory too, since it reads Messenger's code directly instead of building text for every reference it passes. Refs #93, #99, #100.
 - In **Auto reply**, a picture always lands on the card you picked it for, and it's always the one you picked last. Before, a slow copy of an earlier pick could finish late and replace the newer picture, or put one back after you tapped Clear. Save waits while a picture is still copying.
 - Picking a picture for an auto reply is safer with huge or slow files. HushMessenger reads the file once into its own copy, turns away files over 32 MB or 64 megapixels, and gives up after 30 seconds, then tells you which of those happened. Picking again or tapping Clear stops the earlier copy right away, and the picture you had before stays put.
 - Some APKMirror downloads of Messenger only carry icons for one small screen size, so on a sharper phone the launcher icon and the icons in Messenger's settings look blurry and jagged. HushMessenger's settings now say so under About when your download is one of those, and the README lists which builds have icons for every screen. Patching a `nodpi` build fixes it. Refs #91.
@@ -36,7 +36,7 @@
 - The README's settings screenshots are new, and they now show the App tab too. They're rendered from the settings code, with a small record of which switches they show and each image's checksum. A release stops when a switch was added, renamed or retired since then, or when an image no longer matches. Any link from the app into the README has to reach a heading that exists.
 - When another app takes the phone's screen in the middle of a walk, the failed step now says which app it was, instead of only saying it left no screen dump.
 - The whole-app walk now has to show every screen it opened. Counting them is no longer enough. Each required step (a chat, both settings tabs, the message log and auto reply sheets when those patches are in, and each native screen) saves a screenshot and a UI dump next to the receipt, with their checksums. Publish reads those files again and refuses the walk when a step is missing or listed twice, a file is missing or changed, a screen shows the Restore or login prompt, two steps landed on the same screen, or a step ended up somewhere it shouldn't. An older receipt that only counted screens doesn't count anymore.
-- Every Messenger screen in the walk now has to be its own page, not just any Messenger screen. Each step checks the page it lands on and a label only that page has, so a link that drops back to the inbox fails. Messenger 584.1 ignores most of its old links when another app sends them (the inbox, Active now, stories, new message, stickers and Marketplace). The walk now opens the inbox from Messenger's own launcher and adds the story and contact settings pages, which still open by link.
+- Every Messenger screen in the walk now has to land on its own page. Any Messenger screen no longer passes. Each step checks the page it lands on and a label only that page has, so a link that drops back to the inbox fails. Messenger 584.1 ignores most of its old links when another app sends them (the inbox, Active now, stories, new message, stickers and Marketplace). The walk now opens the inbox from Messenger's own launcher and adds the story and contact settings pages, which still open by link.
 - On Android 12 and older the walk can now pass the message log. Before Android 13 the log blocks screenshots to keep chat text out of Recents, so that one step keeps a record showing its window is locked instead. Every other step still needs its screenshot.
 
 ## 0.26.0 (2026-10-22)
