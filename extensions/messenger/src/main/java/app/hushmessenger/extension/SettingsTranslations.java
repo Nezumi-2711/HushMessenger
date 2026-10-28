@@ -21,6 +21,9 @@ final class SettingsTranslations {
         add("zh-TW", SettingsTextZhTw.TEXT);
         // Traditional Chinese anywhere else (zh-Hant-HK, and zh-HK or zh-MO, which imply it). Simplified stays English.
         add("zh-Hant", SettingsTextZhTw.TEXT);
+        
+        // Add Vietnamese language support.
+        add("vi-VN", SettingsTextViVN.TEXT);
     }
 
     /** Refuses a table that gives one id twice, since the later line would quietly replace the earlier one. */
