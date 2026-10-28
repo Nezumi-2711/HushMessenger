@@ -1,8 +1,8 @@
 package app.hushmessenger.extension;
 
-/** Vietnamese text for the settings screen. */
-final class SettingsTextVi {
-    private SettingsTextVi() { }
+/** Vietnamese (Vietnam) text for the settings screen. */
+final class SettingsTextViVN {
+    private SettingsTextViVN() { }
 
     static final String[][] TEXT = {
         {"controls", "Điều khiển tính năng"},
@@ -27,7 +27,7 @@ final class SettingsTextVi {
         {"hide_drawer_icon_help", "Vẫn có thể mở cài đặt thông qua menu của Messenger hoặc phím tắt trên màn hình chính."},
         {"hide_menu_row", "Ẩn mục cài đặt trong menu"},
         {"hide_menu_row_help", "Xóa mục HushMessenger khỏi tab 'Menu' và menu bên của Messenger. Nhấn giữ logo Messenger ở đầu 'Đoạn chat', hoặc nhấn giữ biểu tượng Messenger trên màn hình chính và chọn 'Điều khiển bản vá (Patch controls)' để quay lại đây. Nếu cả hai lối vào này đều không khả dụng, mục trong menu sẽ được hiển thị lại."},
-        {"menu_row_needs_shortcut", "Vui lòng mở cài đặt ít nhất một lần thông qua phím tắt nhấn giữ (nhấn giữ biểu tượng Messenger trên màn hình chính, sau đó chọn 'Điều khiển bản vá (Patch controls)') để đảm bảo bạn vẫn có thể quay lại đây sau khi ẩn mục menu."},
+        {"menu_row_needs_shortcut", "Vui lòng mở cài đặt ít nhất một lần thông qua phím tắt nhấn giữ (nhấn giữ biểu tượng Messenger trên màn hình chính, sau đó chọn 'Điều khiển bản vá (Patch controls)'), để đảm bảo bạn vẫn có thể quay lại đây sau khi ẩn mục menu."},
         {"shared_install_help", "Gỡ cài đặt mục này cũng sẽ xóa Messenger và dữ liệu cục bộ của ứng dụng. Vui lòng sử dụng 'Ẩn biểu tượng trong ngăn kéo ứng dụng' thay thế."},
         {"access_help_hosted", "Nhấn giữ biểu tượng Messenger trên màn hình chính để chọn 'Điều khiển bản vá (Patch controls)' hoặc 'Khởi động lại Messenger (Restart Messenger)'. Khi cài đặt bằng Root Mount, sẽ không có biểu tượng cài đặt riêng trong ngăn kéo ứng dụng."},
         {"access_help_hosted_menu", "Mở cài đặt từ mục HushMessenger trong tab 'Menu' hoặc menu bên của Messenger, hoặc nhấn giữ logo Messenger ở đầu 'Đoạn chat'. Nhấn giữ biểu tượng Messenger trên màn hình chính để chọn 'Điều khiển bản vá (Patch controls)' hoặc 'Khởi động lại Messenger (Restart Messenger)'. Khi cài đặt bằng Root Mount, sẽ không có biểu tượng cài đặt riêng trong ngăn kéo ứng dụng."},
