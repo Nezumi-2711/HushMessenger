@@ -146,17 +146,48 @@ function Get-WalkSkips {
     return [string[]]$skips
 }
 
+# An x86_64 emulator runs Messenger's arm64 code through its ARM translator, libndk_translation. A child process
+# Messenger forks can abort inside that translator while it sets the child up, before any Messenger code runs there
+# (fdsan in ResetCurrentGuestThreadAfterFork, from Meta's BloksDeviceGpuM probe in 585). A phone has no translator.
+$WalkTranslatorFork = 'libndk_translation\.so \(ndk_translation::ResetCurrentGuestThreadAfterFork\('
+
+function Select-WalkTranslatorAborts {
+    <#
+    .SYNOPSIS
+        The native ">>> name <<<" lines of -Package since -SinceEpoch whose own tombstone shows the emulator's ARM
+        translator aborting while it set up a forked child. A tombstone's lines share crash_dump's pid, the second column.
+    #>
+    param([string[]]$Lines = @(), [Parameter(Mandatory = $true)][string]$Package, [long]$SinceEpoch)
+    $name = [regex]::Escape($Package)
+    $open = @{}
+    $aborts = [Collections.Generic.List[string]]::new()
+    foreach ($line in $Lines) {
+        if ($line -notmatch '^\s*(\d+)\.\d+\s+(\d+)\s') { continue }
+        $at = [long]$Matches[1]
+        $dump = $Matches[2]
+        if ($line -match '>>>') {
+            $open[$dump] = if ($at -ge $SinceEpoch -and $line -match ">>>\s*$name(?![\w.])") { $line } else { $null }
+        } elseif ($open[$dump] -and $line -match $script:WalkTranslatorFork) {
+            $aborts.Add($open[$dump])
+            $open[$dump] = $null
+        }
+    }
+    return [string[]]$aborts
+}
+
 function Select-WalkCrashes {
     <#
     .SYNOPSIS
         The crash buffer lines (logcat -b crash -v epoch) that each mark one crash of -Package, or of
         one of its processes, since -SinceEpoch: the Java "Process:" line and the native ">>> name <<<" line.
+        An abort of the emulator's ARM translator in a forked child isn't one (Select-WalkTranslatorAborts).
     #>
     param([string[]]$Lines = @(), [Parameter(Mandatory = $true)][string]$Package, [long]$SinceEpoch)
     $name = [regex]::Escape($Package)
+    $translator = @(Select-WalkTranslatorAborts -Lines $Lines -Package $Package -SinceEpoch $SinceEpoch)
     return [string[]]@($Lines | Where-Object {
         $_ -match '^\s*(\d+)\.\d+\s' -and [long]$Matches[1] -ge $SinceEpoch -and
-            ($_ -match "Process:\s*$name(?![\w.])" -or $_ -match ">>>\s*$name(?![\w.])")
+            ($_ -match "Process:\s*$name(?![\w.])" -or $_ -match ">>>\s*$name(?![\w.])") -and $translator -cnotcontains $_
     })
 }
 
@@ -528,6 +559,19 @@ function Invoke-WalkApp {
         $size = @((Invoke-WalkAdb @('shell', 'wm', 'size')).Stdout | Where-Object { $_ -match '(\d+)x(\d+)' } |
             ForEach-Object { @([int]$Matches[1], [int]$Matches[2]) }) | Select-Object -Last 2
         $width, $height = if ($size.Count -eq 2) { $size } else { @(1080, 2340) }
+        if ($installApk) {
+            # The first start after an install upgrades Messenger's data. Until that's done a chat link stops on a blank
+            # IntentHandlerActivity and the inbox won't dump (585 over 584.1 did both), so wait for the inbox or the
+            # restore prompt that stands in front of it.
+            # The clock, not a count of sleeps, ends the wait: a dump of a screen that's still busy can take seconds itself.
+            $inboxMarker = (Get-WalkStepDefinition 'inbox').Marker
+            $upgrade = [Diagnostics.Stopwatch]::StartNew()
+            while ($upgrade.Elapsed.TotalSeconds -lt 90) {
+                [string]$front = Read-WalkScreen ''
+                if ($front -match $inboxMarker -or (Test-WalkRestorePrompt $front)) { break }
+                Start-Sleep -Seconds 5
+            }
+        }
         # Scrolls the Controls list to the top, then down until -Text shows, and taps it.
         function Invoke-WalkFindAndTap([string]$Text) {
             $before = ''
@@ -670,9 +714,13 @@ function Invoke-WalkApp {
             $crashLines = @()
         }
         $fatal = @(Select-WalkCrashes -Lines $crashLines -Package $Package -SinceEpoch $startedEpoch)
-        if ($fatal.Count -gt 0) {
+        $translatorAborts = @(Select-WalkTranslatorAborts -Lines $crashLines -Package $Package -SinceEpoch $startedEpoch)
+        if ($fatal.Count -gt 0 -or $translatorAborts.Count -gt 0) {
             [IO.File]::WriteAllLines((Join-Path $OutDir 'crash-buffer.txt'), [string[]]$crashLines)
-            $problems.Add("Messenger crashed during the walk: $($fatal[0].Trim())")
+        }
+        if ($fatal.Count -gt 0) { $problems.Add("Messenger crashed during the walk: $($fatal[0].Trim())") }
+        foreach ($abort in $translatorAborts) {
+            Write-Host "[walk] not counted, the emulator's ARM translator aborted in a forked child (crash-buffer.txt): $($abort.Trim())"
         }
 
         $appVersion = @((Invoke-WalkAdb @('shell', 'dumpsys', 'package', $Package)).Stdout |
