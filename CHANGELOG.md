@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- HushMessenger's settings speak Vietnamese when your phone is set to it, in any region. Thanks to @hautv404 for the translation. Refs #113.
+- **GmsCore support** is a new patch that starts unselected, for phones running microG-RE instead of Google Play services. Messenger gets its push token from microG-RE and stays signed in. Leave it out on a phone with Play services. Refs #119.
+- Material You can use your own colors now. Under Appearance, copy a theme like `{"name": "Sunset", "accent": "#E1306C", "neutral": "#1A1418", "pure_black": true}` and tap **Use copied theme**. The accent replaces Messenger's blues and the neutral tints its grays and backgrounds in dark mode, at Messenger's own brightness so text stays readable. **Copy theme** hands you the colors in use to tweak or share, and **Back to wallpaper colors** drops it. Refs #115.
+
+### Changed and fixed
+
+- HushMessenger now targets Messenger 585.0.0.53.94 and takes all 7 builds APKMirror lists for it, five for arm64 and two for armv7. 584.1.0.61.98 is no longer supported, so update Messenger before you patch. Each build was checked patch by patch, and Morphe Desktop applied and rebuilt every one of them.
+
+### Checks
+
+- `scripts/walk-app.ps1` now patches the stock APK of the build the device already runs when you don't pass `-Apk`. It reads the installed version code and picks that build from `HUSH_NATIVE_FIXTURES`, so the install no longer dies on `INSTALL_FAILED_VERSION_DOWNGRADE` or lands a different ABI or screen density. When no fixture is that build, it stops and says which builds it has.
+- `scripts/walk-app.ps1` now waits up to 90 seconds after it installs Messenger, until the chat list or the restore prompt shows. The first start after an update upgrades Messenger's data, and until that's done a chat link opens a blank screen. On an x86_64 emulator, a crash inside the emulator's ARM translator while Messenger forks a helper process is still reported, but it no longer counts as a Messenger crash, since a phone doesn't run that translator.
+- Publish now writes the GitHub release notes in the layout v0.27.0's notes had to be redone in by hand. They open with the release summary, then carry every CHANGELOG bullet word for word under New in this release, Fixes and changes and Behind the scenes, followed by the reports the release touched, How to update, and What was checked, which comes from the walk that cleared the bundle. Publish stops before tagging when a bullet would go missing or a line uses a dash.
+
 ## 0.27.0 (2026-10-27)
 
 ### New

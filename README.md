@@ -32,7 +32,7 @@ Every switch starts off, so a freshly patched Messenger behaves like stock until
 
 1. **Get the APK.** The current release, v0.27.0, patches Messenger 584.1.0.61.98. Download it from [APKMirror's 584.1.0.61.98 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/). Every build listed there works, arm64 and armv7. Pick a `nodpi` one if your phone's type has it, since those keep the icons sharp.
 2. **Add the source.** Open the link above on your phone with Morphe Manager (2.2.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **66 patches**. If it shows an older version, tap its refresh button.
-3. **Patch Messenger.** The default selection includes every switch. Four patches start unselected because they change the app itself, with no switch to undo them: **Clone install under another package name**, **Spoof package version**, **Custom new-message sound** and **Custom launcher icon**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
+3. **Patch Messenger.** The default selection includes every switch. Five patches start unselected because they change the app itself, with no switch to undo them: **Clone install under another package name**, **Spoof package version**, **Custom new-message sound**, **Custom launcher icon** and **GmsCore support**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
 4. **Keep one source.** Don't add the remote source and a local copy together, and don't mix in Messenger patches from other sources.
 
 Prefer a local source? Download [`patches-0.27.0.mpp`](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.27.0) and add it through **Sources > + > Local**. It won't update itself. The `.mpp` file is a patch bundle, not a Messenger APK. Morphe Desktop 1.19.1 or newer can load the same source too.
@@ -116,7 +116,7 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Allow chat bubbles | **Stock**, **Chat heads** or **Android bubbles** (Android 11 and newer). See [Chat heads and bubbles](#chat-heads-and-bubbles). |
 | Unlock app icons | Every icon in Messenger's App icon setting becomes selectable without a subscription. |
 | Square profile pictures | Profile pictures show as squares instead of circles. Turn on **Round the corners** for rounded squares. Restart Messenger after a change. |
-| Material You theme | In dark mode on Android 12 and newer, Messenger takes the accent color from your wallpaper. A **Pure black dark mode** switch sits under Appearance. |
+| Material You theme | In dark mode on Android 12 and newer, Messenger takes the accent color from your wallpaper. A **Pure black dark mode** switch sits under Appearance. You can paste your own colors there too, as text like `{"name": "Sunset", "accent": "#E1306C", "neutral": "#1A1418"}`, and share them with **Copy theme**. |
 | Use your own font | Replaces Meta's font with your phone's, or with a .ttf or .otf file you pick, with size and position adjustments. Restart Messenger after a change. |
 | Bold and italic text | Adds Bold and Italic to the text selection menu. They change the letters A to Z, accented ones included, and Bold changes digits too. Other alphabets stay as they are. On a Samsung phone, turn them on once under **Manage apps** in that menu. |
 | Open settings from menu | Adds the HushMessenger row to Messenger's Menu tab and side menu, and makes a long press on the Messenger logo at the top of Chats or the Menu tab's title open settings. On by default. The App tab can turn off each way in, as long as one stays on. |
@@ -129,6 +129,7 @@ These screenshots come from the code on this page, so they can be a step ahead o
 - **Spoof package version** gives Messenger a very high version code (2147483647 unless you pick another) so the Play Store stops offering updates. Keep it selected with the same number when you patch a later build, since Android won't install a lower code over a higher one.
 - **Custom new-message sound** plays a sound file you pick when you patch (.ogg, .mp3, .m4a or .wav, 1 MB or less) in place of Messenger's new-message sound.
 - **Custom launcher icon** makes Messenger's home screen icon white on black (the default) or black on white. Pick the style in its option. Patch again without it to get the normal icon back.
+- **GmsCore support** is for phones that run [microG-RE](https://github.com/MorpheApp/MicroG-RE) instead of Google Play services. Messenger then gets its push token from microG-RE and keeps your login. Without microG-RE installed, Messenger gets no Google push at all, so leave it out on a phone with Play services.
 
 ## Help
 
@@ -166,40 +167,26 @@ With **Hide read receipts** on, a chat you open stays unread on your phone, beca
 | Field | Value |
 | --- | --- |
 | Package | `com.facebook.orca` |
-| Version | `584.1.0.61.98` |
-| Version codes, arm64-v8a | `346816935`, `346816937`, `346816939`, `346816940`, `346816951`, `346816955`, `346816969`, `346816972`, `346816973`, `346817004`, `346817005`, `346817008`, `346817021`, `346817022`, `346817023`, `346817024`, `346817025`, `346817026` |
-| Version codes, armeabi-v7a | `346816949`, `346816966`, `346817019` |
-| Icons for every screen density | `346816935`, `346816951`, `346817004`, `346817021` |
-| Icons for one screen density | 120-160 dpi `346816969`, `346817005`, `346817022`. 240 dpi `346816937`, `346817023`. 320 dpi `346817024`. 480 dpi `346816939`, `346816955`, `346816972`, `346817008`, `346817025` and every armeabi-v7a build. 640 dpi `346816940`, `346816973`, `346817026` |
+| Version | `585.0.0.53.94` |
+| Version codes, arm64-v8a | `347014996`, `347015062`, `347015064`, `347015065`, `347015067` |
+| Version codes, armeabi-v7a | `347014974`, `347014990` |
+| Icons for every screen density | `347015062` |
+| Icons for one screen density | 240 dpi `347015064`. 320 dpi `347015065`. 480 dpi `347014996` and both armeabi-v7a builds. 640 dpi `347015067` |
 | Minimum Android version | Android 9 (API 28) |
-| APKMirror download | [584.1.0.61.98](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/) |
+| APKMirror download | [585.0.0.53.94](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-585-0-0-53-94-release/) |
 
-HushMessenger takes all 21 builds APKMirror lists for 584.1.0.61.98. The patch checks the version code before it changes anything and stops on a build that isn't listed. Older Messenger versions aren't supported by current bundles. v0.26.0 still takes 584.0.0.49.98, v0.25.0 takes 583.0.0.29.95 and v0.23.0 takes 582.0.0.61.92.
+HushMessenger takes all 7 builds APKMirror lists for 585.0.0.53.94. The patch checks the version code before it changes anything and stops on a build that isn't listed. Older Messenger versions aren't supported by current bundles. v0.27.0 still takes 584.1.0.61.98, v0.26.0 takes 584.0.0.49.98, v0.25.0 takes 583.0.0.29.95 and v0.23.0 takes 582.0.0.61.92.
 
 SHA-256 of the stock APKs the checks ran against:
 
 ```text
-346816935  0d17e95b2cc6c727860f31d70309674357f4c01ccefa8e5e56035378375efde3
-346816937  efe348484833f9815a3d9a975b7d080278f7925659116e11b6110d0db1196b59
-346816939  9f543b07072ec485e7567700e22e5e8a7786cb9a08061220cf74608166acb205
-346816940  3808a1a8edd925ab7c55a3e26fc0a600ae8dd0e8eb7178dcd0b9b54e884a2a56
-346816949  8d066ab3d6c17bce11867a680bd1993ec49e8ec85ec43c7ed4fbc0be4c660650
-346816951  ff628eca9798996d4922726783dc34001e14ba46a6b771ef032f18edb269b563
-346816955  2608c4a9bc8fa9b2f00fa278e7621b5ab7ffa4944a89e804f0e14406a42c0a22
-346816966  aef8470956cdddbf62b57544e765a0ca09b80cda7a4015228796785e4d777410
-346816969  fb5a52235562a983e832ba356c9aaf0b63770602d963b7298444c4c264cd689d
-346816972  d9656052a93cfb11dd455213c1c0c44613a1a73d1aeb76978d4c0ddabe117f92
-346816973  408e8d6eaed0e4d05b0d4f9e1d7c2dfa58ac670a70af6ac25ee911227615757b
-346817004  d5dbfd946a634ba16b5c600dc8773eb30e860a9f25acb6eb8c0c4e66fe8f78b4
-346817005  635f2f6dd2ff5acb5a4fde275afe6a342fae07927d95f0e8f09b1727deea8498
-346817008  6856b2547ef156fc49239e51c02eac90edb791b11c7e23298d32bc4b662829fa
-346817019  ac74c2cdaed9a3149b20e5b6fa6cd60943b3414aa918fe3f18c347d083650e73
-346817021  3bf305f38645dc35a85a25a153ad11d2ac30db61c0ab37dcb61e808fc8d1c661
-346817022  4c647f78f5b2865f1385ceadc124c4e244c22c157a66d19208dc814bde207ed5
-346817023  6f189f035d72b532ad0286b0e6d766aaeb0c4465e71beabb143f9118d3bd02e5
-346817024  c5dcc7ef13eb1edba576953468c6a4493cfe6a52000fbf32bac958a5254e628a
-346817025  5172d0c9154e9d6e9d9a48f2cd07db31cb49ca5a9220332eca77ea9230d0b306
-346817026  e7287c33dfa4627fa91d09012082d5bb70e9dd98286c4469b543a2dd74c06125
+347014974  5f012086183db46c6ad378e28086da1e5e16e99ff9b77aa6c7689aaaebdba2d8
+347014990  64459c2a982ef14d7aae71d49f342fb0d7d5e99912a722d04fd6152adcffa652
+347014996  b2c15b18456f23016688f0616466f23789b1da2e35f34dea23fcf46cf749f245
+347015062  a2b052a5d245e86c3c1545957dbd866b0987e0bcac8ddd03bdb8c400bb3f576b
+347015064  e89f0d76a5186916d7ff28ea7a503feee75afce4a781fd4aa8622a938bf1460a
+347015065  a2ff26d061d067959bec55c7f336415fe70b726ba8c4638db1bc25e5312fda99
+347015067  a80797f05b60a57f5e852ecce00b081000b95bf03b92e27ba3784d72139e0125
 ```
 
 On Windows, compare your file with `Get-FileHash -Algorithm SHA256 .\messenger.apk`. Meta sometimes publishes different APKs under one version name.
@@ -237,7 +224,7 @@ $env:GITHUB_TOKEN = gh auth token
 python -m unittest discover -s scripts/tests -v
 ```
 
-The bundle lands in `patches/build/libs/`, and clean builds from the same source give the same checksum. `:patches:check` wants the exact stock APK of every supported build in a folder named by `HUSH_NATIVE_FIXTURES`, each file named with its version code after the last dash, like `messenger-584.1-346816935.apk`. `:patches:test` runs without them and skips the tests that replay on those APKs.
+The bundle lands in `patches/build/libs/`, and clean builds from the same source give the same checksum. `:patches:check` wants the exact stock APK of every supported build in a folder named by `HUSH_NATIVE_FIXTURES`, each file named with its version code after the last dash, like `messenger-585.0-347015062.apk`. `:patches:test` runs without them and skips the tests that replay on those APKs.
 
 The development bundle names its discovery stages in the patch log and reports their elapsed time. To compare Wi-Fi finder time, allocation and heap peaks against the previous implementation on one stock APK, run `:patches:benchmarkWifiIdentity -PapkPath=<apk>`.
 

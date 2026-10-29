@@ -947,6 +947,12 @@ class ReleaseChecks(unittest.TestCase):
             release.verify(self.root)
         self.write("README.md", badge + "1. **Get the APK.** HushMessenger patches Messenger 584.1.0.61.98.\n")
         self.assertIn("Release metadata passed", release.verify(self.root))
+        step = "1. **Get the APK.** HushMessenger patches Messenger 584.1.0.61.98.\n"
+        self.write("README.md", badge + "https://img.shields.io/badge/Messenger-585.0.0.53.94-0084FF\n" + step)
+        with self.assertRaisesRegex(ValueError, "Messenger badge"):
+            release.verify(self.root)
+        self.write("README.md", badge + "https://img.shields.io/badge/Messenger-584.1.0.61.98-0084FF\n" + step)
+        self.assertIn("Release metadata passed", release.verify(self.root))
 
     def test_readme_may_link_another_projects_release(self):
         self.write(

@@ -26,8 +26,9 @@
                  walk of this exact bundle on a release phone or an emulator, with the screenshot
                  and UI dump of every required step beside it. Then the annotated
                  tag, pushed on its own, and the GitHub release with the bundle, SHA256SUMS.txt
-                 and the signature. Notes are the whole CHANGELOG section. Each asset is
-                 downloaded back and compared.
+                 and the signature. scripts/release_notes.py writes the notes: the description's
+                 summary, every bullet of the CHANGELOG section, the reports, How to update and
+                 What was checked from the walk. Each asset is downloaded back and compared.
       index      Pushes main, which carries the new source index, then checks that GitHub serves
                  it and that its download URL returns the released bundle.
 
@@ -208,13 +209,6 @@ function Assert-Facts {
     if (-not $heading.StartsWith("$Version (")) { throw "The first CHANGELOG heading is '$heading', not $Version." }
     if ((Get-PublicVersion) -ne $Version) { throw "patches-bundle.json isn't at $Version." }
     Get-PinnedSha256 | Out-Null
-}
-
-function Get-ChangelogSection {
-    $text = Get-Content -LiteralPath (Join-Path $root 'CHANGELOG.md') -Raw
-    $match = [regex]::Match($text, "(?ms)^## $([regex]::Escape($Version)) \([^)]*\)\r?\n(.*?)(?=^## |\z)")
-    if (-not $match.Success -or -not $match.Groups[1].Value.Trim()) { throw "CHANGELOG.md has no section for $Version." }
-    return $match.Groups[1].Value.Trim()
 }
 
 # One code per Messenger build family: records whose hook lines are identical share a mapping.
@@ -450,7 +444,8 @@ switch ($Stage) {
         }
         Write-Step "walked on $($walked.Receipt.device): $($walked.Receipt.screens) screens, no crash"
         $notes = Join-Path $work 'notes.md'
-        Write-Text $notes ((Get-ChangelogSection) + "`n")
+        Invoke-Python -I (Join-Path $root 'scripts/release_notes.py') --root $root --version $Version `
+            --walk (Resolve-Path -LiteralPath $Walk).Path --out $notes
 
         $existing = & git -C $root tag -l $tag
         if (-not $existing) {

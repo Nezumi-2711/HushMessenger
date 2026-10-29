@@ -80,7 +80,7 @@ class ControlDiscoveryTest {
                         invoke-virtual {v2, v1}, $LIST_BUILDER->addAll(Ljava/lang/Iterable;)$LIST_BUILDER
                         invoke-static {v2}, LX/32c;->A00($LIST_BUILDER)$IMMUTABLE_LIST
                         move-result-object v3
-                        return-void
+                        return-object v3
                     """.trimIndent()
                     "ai_search_chip" -> "const/4 v0, 0x0\nreturn-object v0"
                     "typing_mailbox" -> "const-string v0, \"$TYPING_MAILBOX_CALL\"\nconst/4 v0, 0x0\nreturn-object v0"
@@ -103,8 +103,9 @@ class ControlDiscoveryTest {
                     "browser" -> "const/4 v0, 0x0\nreturn v0"
                     else -> error("Missing synthetic resolver fixture for $key")
                 }
-                val staticGate = (key in pluginGates || key == "ai_search" || key == "growth_story_card" || key == APP_ICONS) &&
-                    !id.substringAfter('(').startsWith(')')
+                // 585's Context-reading app icon check is the one instance gate.
+                val staticGate = (key in pluginGates || key == "ai_search" || key == "growth_story_card" ||
+                    (key == APP_ICONS && "Landroid/content/Context;" !in id)) && !id.substringAfter('(').startsWith(')')
                 fixtureMethod(id, body, registers = when (key) { "original_photo" -> 22; ORIGINAL_VIDEO -> 24;"chat_animation", "chat_legacy" -> 5; else -> 8 }, flags = AccessFlags.PUBLIC.value or
                     if (staticGate) AccessFlags.STATIC.value else 0)
             }
