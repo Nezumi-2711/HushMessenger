@@ -375,7 +375,7 @@ final class SettingsTextZhTw {
         {"stories.title", "隱藏限時動態與便利貼"},
         {"stories.description", "隱藏聊天清單上方的限時動態與便利貼列。"},
         {"subtabs.title", "隱藏收件匣分頁"},
-        {"subtabs.description", "隱藏收件匣中的「首頁」與「頻道」分頁。"},
+        {"subtabs.description", "隱藏聊天清單上方的「全部」、「未讀」與「群組」分頁。"},
         {"mark_read_action.title", "隱藏「標示為已讀」"},
         {"mark_read_action.description", "在長按聊天清單中的聊天室所顯示的選單中，隱藏「標示為已讀」，避免誤將聊天室標示為已讀。「標示為未讀」仍會保留。"},
         {"pinned_chats.title", "置頂更多聊天室"},

@@ -1575,7 +1575,7 @@
         },
         {
             "name": "Hide inbox tabs",
-            "description": "Hides the Home and Channels tabs inside your inbox. Starts off. Turn it on in HushMessenger settings > Controls.",
+            "description": "Hides the All, Unread and Groups tabs above your chats. Starts off. Turn it on in HushMessenger settings > Controls.",
             "default": true,
             "category": "Inbox",
             "dependencies": [

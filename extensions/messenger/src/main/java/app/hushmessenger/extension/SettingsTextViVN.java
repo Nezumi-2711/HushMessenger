@@ -375,7 +375,7 @@ final class SettingsTextViVN {
         {"stories.title", "Ẩn tin và ghi chú"},
         {"stories.description", "Ẩn thanh tin (stories) và ghi chú phía trên danh sách trò chuyện."},
         {"subtabs.title", "Ẩn tab hộp thư đến"},
-        {"subtabs.description", "Ẩn tab 'Trang chủ' và 'Kênh' trong hộp thư đến."},
+        {"subtabs.description", "Ẩn các tab 'Tất cả', 'Chưa đọc' và 'Nhóm' phía trên các đoạn chat."},
         {"mark_read_action.title", "Ẩn 'Đánh dấu là đã đọc'"},
         {"mark_read_action.description", "Ẩn 'Đánh dấu là đã đọc' trong menu hiển thị khi nhấn giữ phòng chat trong danh sách trò chuyện, tránh việc vô tình đánh dấu phòng chat là đã đọc. 'Đánh dấu là chưa đọc' sẽ vẫn được giữ lại."},
         {"pinned_chats.title", "Ghim nhiều cuộc trò chuyện hơn"},
