@@ -9,6 +9,7 @@
 ### Checks
 
 - `scripts/walk-app.ps1` now patches the stock APK of the build the device already runs when you don't pass `-Apk`. It reads the installed version code and picks that build from `HUSH_NATIVE_FIXTURES`, so the install no longer dies on `INSTALL_FAILED_VERSION_DOWNGRADE` or lands a different ABI or screen density. When no fixture is that build, it stops and says which builds it has.
+- Publish now writes the GitHub release notes in the layout v0.27.0's notes had to be redone in by hand. They open with the release summary, then carry every CHANGELOG bullet word for word under New in this release, Fixes and changes and Behind the scenes, followed by the reports the release touched, How to update, and What was checked, which comes from the walk that cleared the bundle. Publish stops before tagging when a bullet would go missing or a line uses a dash.
 
 ## 0.27.0 (2026-10-27)
 
