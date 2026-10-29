@@ -4,7 +4,7 @@
   <a href="https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.27.0"><img src="https://img.shields.io/badge/version-0.27.0-0084FF" alt="Version 0.27.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
   <img src="https://img.shields.io/badge/platform-Android%209%2B%20arm64%20%7C%20armv7-3DDC84" alt="Platform Android 9 or newer, arm64 and armv7">
-  <img src="https://img.shields.io/badge/Messenger-585.0.0.53.94-0084FF" alt="Messenger 585.0.0.53.94">
+  <img src="https://img.shields.io/badge/Messenger-584.1.0.61.98-0084FF" alt="Messenger 584.1.0.61.98">
 </p>
 
 <p align="center">

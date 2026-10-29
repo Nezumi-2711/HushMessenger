@@ -232,6 +232,14 @@ def verify(root, bundle=None, evidence=None, release_tag=None, checksums=None):
             all(target in step.group(1) for target in targets),
             "README Get the APK step names a different Messenger version than the bundle targets",
         )
+        # The Messenger badge sits next to the version badge, so it can't name a build the release refuses.
+        require(
+            all(
+                badge in targets
+                for badge in re.findall(r"shields\.io/badge/Messenger-([\d.]+)-", readme)
+            ),
+            "README Messenger badge names a different Messenger version than the bundle targets",
+        )
     # Its settings screenshots show this catalog, and the app's help links reach real headings.
     check_captures(root)
     headings = re.findall(
