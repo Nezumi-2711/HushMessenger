@@ -243,6 +243,25 @@ try {
     Assert-WalkApp ($null -eq (Find-WalkPatched -Destination $patchDir -Inputs $sameInputs)) 'An unreadable record should patch again.'
     Assert-WalkApp ((Find-WalkPatchRecord -Destination $patchDir -BundleSha256 $walkedSha256) -ceq '') 'An unreadable record should prove nothing.'
 
+    # The stock APK a walk patches is the build the device already has.
+    $dumpsys = @('Packages:', '  Package [com.facebook.orca] (5d1c0e2):', '    versionCode=347015065 minSdk=28 targetSdk=35', '    versionName=585.0.0.53.94')
+    Assert-WalkApp ((Read-WalkVersionCode $dumpsys) -ceq '347015065') 'dumpsys package should give the installed versionCode.'
+    Assert-WalkApp ((Read-WalkVersionCode @('Unable to find package: com.facebook.orca')) -ceq '') 'A package that is not installed should read as no versionCode.'
+    $fixtureDir = Join-Path $work 'fixtures'
+    [void][IO.Directory]::CreateDirectory($fixtureDir)
+    foreach ($fixtureName in 'messenger-585.0-347014974.apk', 'messenger-585.0-347015062.apk', 'messenger-585.0-347015065.apk') {
+        [IO.File]::WriteAllText((Join-Path $fixtureDir $fixtureName), 'stock contract apk')
+    }
+    Assert-WalkApp ((Split-Path -Leaf (Select-WalkFixtureApk -Directory $fixtureDir -InstalledCode '347015062')) -ceq 'messenger-585.0-347015062.apk') `
+        'The fixture of the installed build should be patched, not the newest one.'
+    Assert-WalkApp ((Split-Path -Leaf (Select-WalkFixtureApk -Directory $fixtureDir -InstalledCode '')) -ceq 'messenger-585.0-347015065.apk') `
+        'With Messenger not installed, the newest fixture should be patched.'
+    $noMatch = try { Select-WalkFixtureApk -Directory $fixtureDir -InstalledCode '346817024'; '' } catch { $_.Exception.Message }
+    Assert-WalkApp ($noMatch -like '*build 346817024*' -and $noMatch -like '*347014974, 347015062, 347015065*' -and $noMatch -like '*-Apk*') `
+        "A device build no fixture matches should be refused, naming the fixtures and -Apk: $noMatch"
+    $prefixOnly = try { Select-WalkFixtureApk -Directory $fixtureDir -InstalledCode '34701506'; '' } catch { $_.Exception.Message }
+    Assert-WalkApp ($prefixOnly -like '*build 34701506,*') 'A code that is only the start of a fixture code should not match it.'
+
     Write-Host "walk-app contracts passed ($checks checks)"
 } finally {
     $temp = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())

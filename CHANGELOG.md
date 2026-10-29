@@ -6,6 +6,10 @@
 
 - HushMessenger's settings speak Vietnamese when your phone is set to it, in any region. Thanks to @hautv404 for the translation. Refs #113.
 
+### Checks
+
+- `scripts/walk-app.ps1` now patches the stock APK of the build the device already runs when you don't pass `-Apk`. It reads the installed version code and picks that build from `HUSH_NATIVE_FIXTURES`, so the install no longer dies on `INSTALL_FAILED_VERSION_DOWNGRADE` or lands a different ABI or screen density. When no fixture is that build, it stops and says which builds it has.
+
 ## 0.27.0 (2026-10-27)
 
 ### New

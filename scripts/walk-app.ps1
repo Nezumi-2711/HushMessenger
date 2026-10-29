@@ -53,7 +53,8 @@ param(
     [string]$Package = 'com.facebook.orca',
     # The bundle to patch with, named in the receipt. Unset, the one Gradle built for this checkout's version.
     [string]$Bundle,
-    # Stock Messenger to patch. Unset, the newest messenger-*.apk in HUSH_NATIVE_FIXTURES.
+    # Stock Messenger to patch. Unset, the messenger-*-<code>.apk in HUSH_NATIVE_FIXTURES of the build the
+    # device has installed (Select-WalkFixtureApk), or the newest one when Messenger isn't installed.
     [string]$Apk,
     # The user id of a chat on the signed-in account. Without it the chat isn't walked and the walk is PARTIAL.
     [string]$Thread = $env:HUSHMESSENGER_WALK_THREAD,
@@ -237,6 +238,50 @@ function Test-WalkRestorePrompt([AllowEmptyString()][string]$Xml) {
 
 function Get-WalkExitCode([string]$Result) {
     switch -CaseSensitive ($Result) { 'PASS' { return 0 } 'PARTIAL' { return 2 } default { return 1 } }
+}
+
+function Read-WalkVersionCode([string[]]$Lines) {
+    # The first versionCode in dumpsys package output, or '' when the package isn't installed.
+    foreach ($line in $Lines) { if ($line -cmatch '\bversionCode=(\d+)') { return $Matches[1] } }
+    return ''
+}
+
+function Select-WalkFixtureApk {
+    <#
+    .SYNOPSIS
+        The stock APK in -Directory to patch for a device that has build -InstalledCode: the
+        messenger-<version>-<code>.apk of that same build, so the install neither downgrades it
+        (INSTALL_FAILED_VERSION_DOWNGRADE) nor swaps its ABI or density. With nothing installed, the
+        newest fixture by name. Throws when no fixture is that build.
+    #>
+    param([string]$Directory, [AllowEmptyString()][string]$InstalledCode)
+    $fixtures = @(Get-ChildItem -LiteralPath $Directory -File -Filter 'messenger-*.apk' | Sort-Object Name -Descending)
+    if ($fixtures.Count -eq 0) { throw "$Directory has no messenger-*.apk. Pass -Apk." }
+    if (-not $InstalledCode) { return $fixtures[0].FullName }
+    $same = @($fixtures | Where-Object { $_.Name -cmatch ('^messenger-[\d.]+-' + [regex]::Escape($InstalledCode) + '\.apk\z') })
+    if ($same.Count -eq 1) { return $same[0].FullName }
+    $codes = @($fixtures | ForEach-Object { if ($_.Name -cmatch '-(\d+)\.apk\z') { $Matches[1] } } | Sort-Object)
+    throw "The device has Messenger build $InstalledCode, and $Directory has no messenger-*-$InstalledCode.apk (it has $($codes -join ', ')). Pass -Apk with the stock APK to install."
+}
+
+function Get-WalkInstalledVersionCode {
+    <#
+    .SYNOPSIS
+        The versionCode of -Package on the device, '' when it isn't installed. Holds the lease only
+        for the read, after checking the device is the expected one.
+    #>
+    param([string]$AdbExe, [string]$Serial, [string]$ExpectedModel, [string]$Package, [string]$LeaseDirectory)
+    $lease = Enter-WalkLease -Directory $LeaseDirectory -Serial $Serial -ExpectedModel $ExpectedModel
+    try {
+        $reportedSerial = [string]@(& $AdbExe -s $Serial get-serialno 2>$null)[0]
+        $deviceModel = [string]@(& $AdbExe -s $Serial shell getprop ro.product.model 2>$null)[0]
+        if ($reportedSerial.Trim() -cne $Serial -or $deviceModel.Trim() -cne $ExpectedModel) {
+            throw "$Serial answers as $reportedSerial, model $deviceModel, not the expected $ExpectedModel. Nothing was changed on it."
+        }
+        return Read-WalkVersionCode @(& $AdbExe -s $Serial shell dumpsys package $Package 2>$null)
+    } finally {
+        Exit-WalkLease $lease
+    }
 }
 
 function Enter-WalkLease {
@@ -669,10 +714,6 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Bundle = Join-Path $Root "patches/build/libs/patches-$($versionLine.Matches[0].Groups[1].Value.Trim()).mpp"
     }
     $Bundle = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Bundle)
-    if (-not $Apk -and $env:HUSH_NATIVE_FIXTURES -and (Test-Path -LiteralPath $env:HUSH_NATIVE_FIXTURES -PathType Container)) {
-        $Apk = (Get-ChildItem -LiteralPath $env:HUSH_NATIVE_FIXTURES -File -Filter 'messenger-*.apk' |
-            Sort-Object Name -Descending | Select-Object -First 1).FullName
-    }
     if (-not $DesktopJar) { $DesktopJar = $env:HUSHMESSENGER_DESKTOP_JAR }
     if (-not $DesktopJar) { $DesktopJar = [Environment]::GetEnvironmentVariable('HUSHMESSENGER_DESKTOP_JAR', 'User') }
     if (-not $Java) { $Java = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin/java.exe' } else { 'java' } }
@@ -680,6 +721,13 @@ if ($MyInvocation.InvocationName -ne '.') {
         $Adb = (Get-Command adb -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
         if (-not $Adb -and $env:ANDROID_HOME) { $Adb = Join-Path $env:ANDROID_HOME 'platform-tools/adb.exe' }
         if (-not $Adb -or -not (Test-Path -LiteralPath $Adb)) { throw 'No adb found. Pass -Adb or put it on the PATH.' }
+    }
+    if (-not $Apk -and -not $SkipPatch -and $env:HUSH_NATIVE_FIXTURES -and (Test-Path -LiteralPath $env:HUSH_NATIVE_FIXTURES -PathType Container)) {
+        $installedCode = if ($Serial -and $ExpectedModel) {
+            Get-WalkInstalledVersionCode -AdbExe $Adb -Serial $Serial -ExpectedModel $ExpectedModel -Package $Package -LeaseDirectory $LeaseDirectory
+        } else { '' }
+        $Apk = Select-WalkFixtureApk -Directory $env:HUSH_NATIVE_FIXTURES -InstalledCode $installedCode
+        Write-Host "[walk] the device has build $(if ($installedCode) { $installedCode } else { 'none' }), so patching $(Split-Path -Leaf $Apk)"
     }
     $receiptPath = Invoke-WalkApp -Serial $Serial -ExpectedModel $ExpectedModel -Package $Package -BundlePath $Bundle -StockApk $Apk `
         -Thread $Thread -Visit $Visit -SkipPatch:$SkipPatch -SkipSettings:$SkipSettings -SettleSeconds $SettleSeconds `
