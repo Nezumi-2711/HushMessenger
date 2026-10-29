@@ -5,6 +5,7 @@
 ### New
 
 - HushMessenger's settings speak Vietnamese when your phone is set to it, in any region. Thanks to @hautv404 for the translation. Refs #113.
+- **GmsCore support** is a new patch that starts unselected, for phones running microG-RE instead of Google Play services. Messenger gets its push token from microG-RE and stays signed in. Leave it out on a phone with Play services. Refs #119.
 
 ### Changed and fixed
 

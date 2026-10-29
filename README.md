@@ -32,7 +32,7 @@ Every switch starts off, so a freshly patched Messenger behaves like stock until
 
 1. **Get the APK.** The current release, v0.27.0, patches Messenger 584.1.0.61.98. Download it from [APKMirror's 584.1.0.61.98 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/). Every build listed there works, arm64 and armv7. Pick a `nodpi` one if your phone's type has it, since those keep the icons sharp.
 2. **Add the source.** Open the link above on your phone with Morphe Manager (2.2.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **66 patches**. If it shows an older version, tap its refresh button.
-3. **Patch Messenger.** The default selection includes every switch. Four patches start unselected because they change the app itself, with no switch to undo them: **Clone install under another package name**, **Spoof package version**, **Custom new-message sound** and **Custom launcher icon**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
+3. **Patch Messenger.** The default selection includes every switch. Five patches start unselected because they change the app itself, with no switch to undo them: **Clone install under another package name**, **Spoof package version**, **Custom new-message sound**, **Custom launcher icon** and **GmsCore support**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
 4. **Keep one source.** Don't add the remote source and a local copy together, and don't mix in Messenger patches from other sources.
 
 Prefer a local source? Download [`patches-0.27.0.mpp`](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.27.0) and add it through **Sources > + > Local**. It won't update itself. The `.mpp` file is a patch bundle, not a Messenger APK. Morphe Desktop 1.19.1 or newer can load the same source too.
@@ -129,6 +129,7 @@ These screenshots come from the code on this page, so they can be a step ahead o
 - **Spoof package version** gives Messenger a very high version code (2147483647 unless you pick another) so the Play Store stops offering updates. Keep it selected with the same number when you patch a later build, since Android won't install a lower code over a higher one.
 - **Custom new-message sound** plays a sound file you pick when you patch (.ogg, .mp3, .m4a or .wav, 1 MB or less) in place of Messenger's new-message sound.
 - **Custom launcher icon** makes Messenger's home screen icon white on black (the default) or black on white. Pick the style in its option. Patch again without it to get the normal icon back.
+- **GmsCore support** is for phones that run [microG-RE](https://github.com/MorpheApp/MicroG-RE) instead of Google Play services. Messenger then gets its push token from microG-RE and keeps your login. Without microG-RE installed, Messenger gets no Google push at all, so leave it out on a phone with Play services.
 
 ## Help
 

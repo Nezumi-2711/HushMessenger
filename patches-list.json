@@ -447,6 +447,50 @@
             "options": []
         },
         {
+            "name": "GmsCore support",
+            "description": "Gets Messenger's push notifications through microG-RE instead of Google Play services. It also gives microG-RE the signature of Meta's own Messenger for the Google services that check one. Only for phones with microG-RE installed, since Messenger stops asking Google Play services. Pick it in Morphe Manager's Expert mode. Works as soon as you patch it in, with no switch.",
+            "default": false,
+            "category": "Fixes",
+            "dependencies": [
+                {
+                    "type": "ResourcePatch",
+                    "name": null,
+                    "description": "Point Messenger's manifest at microG-RE",
+                    "dependencies": [
+                        {
+                            "type": "BytecodePatch",
+                            "name": null,
+                            "description": "Check GmsCore support's bytecode edits before the manifest changes",
+                            "dependencies": []
+                        }
+                    ]
+                }
+            ],
+            "compatiblePackages": [
+                {
+                    "packageName": "com.facebook.orca",
+                    "name": "Messenger",
+                    "description": null,
+                    "apkFileType": "APK",
+                    "appIconColor": "#0084FF",
+                    "signatures": [
+                        "911d604446084ca7f4760b775bfc160fa8702441240a7258645d7a72c4312d27",
+                        "e3f9e1e0cf99d0e56a055ba65e241b3399f7cea524326b0cdd6ec1327ed0fdc1"
+                    ],
+                    "targets": [
+                        {
+                            "version": "585.0.0.53.94",
+                            "versionCodes": null,
+                            "isExperimental": false,
+                            "minSdk": 28,
+                            "description": "Stock builds 347014974, 347014990, 347014996, 347015062, 347015064, 347015065 and 347015067; checked again during patching"
+                        }
+                    ]
+                }
+            ],
+            "options": []
+        },
+        {
             "name": "Hide AI sticker tools",
             "description": "Hides the Generate and Generate AI sticker buttons, the AI sticker tab and AI sticker suggestions. Custom and music stickers in the Generate menu go with it. Starts off. Turn it on in HushMessenger settings > Controls.",
             "default": true,
