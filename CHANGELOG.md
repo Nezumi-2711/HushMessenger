@@ -12,6 +12,7 @@
 
 - HushMessenger now targets Messenger 585.0.0.53.94 and takes all 7 builds APKMirror lists for it, five for arm64 and two for armv7. 584.1.0.61.98 is no longer supported, so update Messenger before you patch. Each build was checked patch by patch, and Morphe Desktop applied and rebuilt every one of them.
 - `Hide inbox tabs` now says what it hides on 585: the All, Unread and Groups tabs above your chats. The old text named Home and Channels tabs Messenger doesn't show anymore. Checked on 585, where On hides the tabs and Off or Pause brings them back.
+- With `Open your gallery app`, a photo or video you pick in Google Photos that's already saved on your phone now reaches Messenger as the phone's own copy, which Messenger reads with its own photo and video access. Before, the upload had to go through Google Photos' permission. Items that only live in the cloud, and anything Messenger can't open itself, go through as picked. Refs #103.
 
 ### Checks
 
