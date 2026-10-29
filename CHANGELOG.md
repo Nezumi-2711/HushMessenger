@@ -6,6 +6,7 @@
 
 - HushMessenger's settings speak Vietnamese when your phone is set to it, in any region. Thanks to @hautv404 for the translation. Refs #113.
 - **GmsCore support** is a new patch that starts unselected, for phones running microG-RE instead of Google Play services. Messenger gets its push token from microG-RE and stays signed in. Leave it out on a phone with Play services. Refs #119.
+- Material You can use your own colors now. Under Appearance, copy a theme like `{"name": "Sunset", "accent": "#E1306C", "neutral": "#1A1418", "pure_black": true}` and tap **Use copied theme**. The accent replaces Messenger's blues and the neutral tints its grays and backgrounds in dark mode, at Messenger's own brightness so text stays readable. **Copy theme** hands you the colors in use to tweak or share, and **Back to wallpaper colors** drops it. Refs #115.
 
 ### Changed and fixed
 
