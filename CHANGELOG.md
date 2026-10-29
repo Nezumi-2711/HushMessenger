@@ -6,6 +6,10 @@
 
 - HushMessenger's settings speak Vietnamese when your phone is set to it, in any region. Thanks to @hautv404 for the translation. Refs #113.
 
+### Changed and fixed
+
+- HushMessenger now targets Messenger 585.0.0.53.94 and takes all 7 builds APKMirror lists for it, five for arm64 and two for armv7. 584.1.0.61.98 is no longer supported, so update Messenger before you patch. Each build was checked patch by patch, and Morphe Desktop applied and rebuilt every one of them.
+
 ### Checks
 
 - `scripts/walk-app.ps1` now patches the stock APK of the build the device already runs when you don't pass `-Apk`. It reads the installed version code and picks that build from `HUSH_NATIVE_FIXTURES`, so the install no longer dies on `INSTALL_FAILED_VERSION_DOWNGRADE` or lands a different ABI or screen density. When no fixture is that build, it stops and says which builds it has.
