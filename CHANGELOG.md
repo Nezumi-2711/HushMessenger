@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- HushMessenger's settings speak Vietnamese when your phone is set to it, in any region. Thanks to @hautv404 for the translation. Refs #113.
+
 ## 0.27.0 (2026-10-27)
 
 ### New
