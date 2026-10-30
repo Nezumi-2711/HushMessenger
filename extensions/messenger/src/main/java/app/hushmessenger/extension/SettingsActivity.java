@@ -61,6 +61,7 @@ public final class SettingsActivity extends Activity {
     private final UpdateCheck updates = new UpdateCheck(this);
     private final MessageLogSheet messageLog = new MessageLogSheet(this);
     private final AutoReplySheet autoReplies = new AutoReplySheet(this);
+    private final ThemeColors themeColors = new ThemeColors(this);
     private final SharedPreferences.OnSharedPreferenceChangeListener preferenceListener = (preferences, key) -> {
         if (key == null || "paused".equals(key) || Settings.SUB_SWITCHES.containsKey(key) || Settings.installed.contains(key))
             documentGeneration++;
@@ -89,9 +90,6 @@ public final class SettingsActivity extends Activity {
     private Button safeModeAction, clearQuery;
     private Button drawerSearchLink;
     private LinearLayout emptyState;
-    /** The Material You theme line, and the button that drops a pasted theme (#115). */
-    private TextView themeStatus;
-    private Button themeClear;
     /** Shown above both pages while a change waits for Messenger to restart. */
     private LinearLayout restartRow;
     private TextView restartWaiting;
@@ -482,7 +480,7 @@ public final class SettingsActivity extends Activity {
         return text.get(accessHelpId + (logo ? "_menu" : "_menu_without_logo"));
     }
 
-    private void refreshChoices() {
+    void refreshChoices() {
         if (lightTheme != Settings.preferences.getBoolean("light", false)) {
             if (!recreatingTheme) {
                 recreatingTheme = true;
@@ -1544,23 +1542,7 @@ public final class SettingsActivity extends Activity {
             ui.rule(appearance, 10);
             ui.add(appearance, controlRow("material_you_black", text.format("material_you_black"), text.format("material_you_black_help"), false), 12);
             ui.rule(appearance, 10);
-            themeStatus = ui.text("", 13, ui.muted, false);
-            themeStatus.setTag("theme_status");
-            ui.add(appearance, themeStatus, 12);
-            Button paste = ui.button(text.get("theme_paste"));
-            paste.setTag("theme_paste");
-            paste.setOnClickListener(view -> pasteTheme());
-            ui.add(appearance, paste, 8);
-            Button copy = ui.button(text.get("theme_copy"));
-            copy.setTag("theme_copy");
-            copy.setOnClickListener(view -> copyTheme());
-            ui.add(appearance, copy, 8);
-            themeClear = ui.button(text.get("theme_clear"));
-            themeClear.setTag("theme_clear");
-            themeClear.setOnClickListener(view -> clearTheme());
-            ui.add(appearance, themeClear, 8);
-            ui.add(appearance, ui.text(text.get("theme_file_help"), 13, ui.muted, false), 8);
-            showTheme();
+            themeColors.addTo(appearance);
         }
         ui.rule(appearance, 10);
         ui.add(appearance, ui.text(text.get("theme_help"), 13, ui.muted, false), 12);
@@ -1824,64 +1806,6 @@ public final class SettingsActivity extends Activity {
             android.util.Log.e("HushMessenger", "Can't export choices", error);
             feedback(text.get("export_failed"), Toast.LENGTH_LONG);
         }
-    }
-
-    /** Names the saved theme, and shows Back to wallpaper colors only while there is one. */
-    private void showTheme() {
-        ThemeFile theme = ThemeFile.saved();
-        themeStatus.setText(theme == null ? text.get("theme_status_wallpaper")
-            : theme.name.isEmpty() ? text.get("theme_status_unnamed") : text.get("theme_status_saved", theme.name));
-        themeClear.setVisibility(theme == null ? View.GONE : View.VISIBLE);
-    }
-
-    /** Saves the copied theme. Its pure black choice, when it has one, sets that switch; it isn't kept with the colors. */
-    private void pasteTheme() {
-        ThemeFile theme;
-        try {
-            ClipboardManager clipboard = getSystemService(ClipboardManager.class);
-            ClipData clip = clipboard == null || !clipboard.hasPrimaryClip() ? null : clipboard.getPrimaryClip();
-            CharSequence raw = clip == null || clip.getItemCount() == 0 ? null : clip.getItemAt(0).getText();
-            if (raw == null || raw.toString().trim().isEmpty()) {
-                feedback(text.get("theme_paste_empty"), Toast.LENGTH_LONG);
-                return;
-            }
-            theme = ThemeFile.parse(raw.toString());
-        } catch (RuntimeException error) {
-            android.util.Log.w("HushMessenger", "Can't read that theme", error);
-            feedback(text.get("theme_paste_invalid"), Toast.LENGTH_LONG);
-            return;
-        }
-        SharedPreferences.Editor edit = Settings.preferences.edit().putString(ThemeFile.KEY, theme.withPureBlack(null).encode());
-        if (theme.pureBlack != null) edit.putBoolean(MaterialYouTheme.BLACK_KEY, theme.pureBlack);
-        edit.apply();
-        refreshChoices();
-        showTheme();
-        feedback(text.get("theme_pasted"), Toast.LENGTH_SHORT);
-    }
-
-    /** Copies the saved theme, or the colors in use as one, with the pure black switch as it is now. */
-    private void copyTheme() {
-        try {
-            ThemeFile theme = ThemeFile.saved();
-            if (theme == null) {
-                TonePalette palette = MaterialYouTheme.palette();
-                theme = new ThemeFile("", palette.tone(TonePalette.ACCENT, 40), palette.tone(TonePalette.NEUTRAL, 50), null);
-            }
-            String json = theme.withPureBlack(Settings.preferences.getBoolean(MaterialYouTheme.BLACK_KEY, false)).encode();
-            ClipboardManager clipboard = getSystemService(ClipboardManager.class);
-            if (clipboard == null) throw new IllegalStateException("Clipboard unavailable");
-            clipboard.setPrimaryClip(ClipData.newPlainText(text.get("theme_copy"), json));
-            if (Build.VERSION.SDK_INT < 33) feedback(text.get("theme_copied"), Toast.LENGTH_SHORT);
-        } catch (RuntimeException error) {
-            android.util.Log.e("HushMessenger", "Can't copy the theme", error);
-            feedback(text.get("theme_copy_failed"), Toast.LENGTH_LONG);
-        }
-    }
-
-    private void clearTheme() {
-        Settings.preferences.edit().remove(ThemeFile.KEY).apply();
-        showTheme();
-        feedback(text.get("theme_cleared"), Toast.LENGTH_SHORT);
     }
 
     private void importChoices() {
