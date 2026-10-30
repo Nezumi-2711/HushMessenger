@@ -449,6 +449,8 @@ final class SettingsTextViVN {
         {"system_camera.description", "Nút máy ảnh trong phòng chat sẽ mở ứng dụng máy ảnh của điện thoại. Ảnh chụp sẽ mở trong trình chỉnh sửa của Messenger để bạn gửi. Chỉ hỗ trợ ảnh."},
         {"external_gallery.title", "Mở ứng dụng thư viện của điện thoại"},
         {"external_gallery.description", "Nút thư viện trong phòng chat sẽ mở ứng dụng thư viện của chính điện thoại. Khi chọn một ảnh hoặc một video, nó sẽ mở trong trình chỉnh sửa Messenger của phòng chat đó để bạn gửi. Khi chọn nhiều mục, nó sẽ mở bảng 'Gửi đến' của Messenger, hiển thị tất cả các mục đã chọn và liệt kê phòng chat đó ở trên cùng."},
+        {"gallery_to_chat.title", "Đưa mục đã chọn vào phòng chat"},
+        {"gallery_to_chat.description", "Khi bật Mở ứng dụng thư viện của điện thoại, những gì bạn chọn sẽ vào ô tin nhắn của phòng chat giống như thư viện riêng của Messenger, thay vì trình chỉnh sửa hoặc bảng 'Gửi đến'. Không có gì được gửi cho đến khi bạn nhấn Gửi."},
         {"external_browser.title", "Mở liên kết web trong trình duyệt ngoài"},
         {"external_browser.description", "Sử dụng trình duyệt mặc định để mở liên kết web (http và https). Các loại liên kết khác giữ nguyên hành vi ban đầu."},
         {"bubbles.title", "Cho phép bong bóng thông báo trò chuyện"},

@@ -203,6 +203,7 @@ public class CompatReport {
         PATCHES.put("Hide Your story when sharing", List.of("share_story"));
         PATCHES.put("Use the phone's camera app", List.of("system_camera"));
         PATCHES.put("Open your gallery app", List.of("external_gallery"));
+        PATCHES.put("Put gallery picks in the chat", List.of("gallery_to_chat"));
         PATCHES.put("Stop analytics uploads", List.of("analytics_uploads"));
         PATCHES.put("Stop ad attribution uploads", List.of("attribution_uploads"));
         PATCHES.put("Stop inbox and ad link logging", List.of("ad_events"));
@@ -3437,6 +3438,185 @@ public class CompatReport {
         return hooks;
     }
 
+    static final String MONTAGE_MODEL = "Lcom/facebook/messaging/montage/composer/model/";
+    static final String EDITOR_BUILDER = MONTAGE_MODEL + "MontageComposerFragmentParams$Builder;";
+    static final String EDITOR_PARAMS = MONTAGE_MODEL + "MontageComposerFragmentParams;";
+    static final String CHAT_MEDIA = "Lcom/facebook/ui/media/attachments/model/MediaResource;";
+    static final String INSERT_PREVIEW = "Lcom/facebook/xapp/messaging/composer/attachmentpreview/events/InsertAttachmentPreviewEvent;";
+    static final String INSERT_PREVIEW_INIT = INSERT_PREVIEW + "-><init>(" + CHAT_MEDIA + "Ljava/util/List;)V";
+    static final String ITEM_TYPE_CALL = "Landroid/content/Intent;->getType()Ljava/lang/String;";
+    static final String INVOKE_SUSPEND = "invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;";
+    static final Set<Opcode> CHAT_RUN_ENDS = Set.of(Opcode.RETURN_VOID, Opcode.RETURN, Opcode.RETURN_WIDE, Opcode.RETURN_OBJECT, Opcode.THROW);
+
+    static boolean endsChatRun(Instruction i) {
+        return i instanceof OffsetInstruction || CHAT_RUN_ENDS.contains(i.getOpcode());
+    }
+
+    static String typeOf(Instruction i) {
+        return i instanceof ReferenceInstruction r && r.getReference() instanceof TypeReference t ? t.getType() : null;
+    }
+
+    /** The register that holds parameter p[n], counting this as p0 on an instance method. */
+    static int parameterRegister(Method m, int n) {
+        int words = AccessFlags.STATIC.isSet(m.getAccessFlags()) ? 0 : 1;
+        for (var p : m.getParameterTypes()) words += "J".contentEquals(p) || "D".contentEquals(p) ? 2 : 1;
+        return m.getImplementation().getRegisterCount() - words + n;
+    }
+
+    /** Where the gallery coroutine opens the editor with the item it copied, and the registers the hook there uses. */
+    record GalleryChatSite(int at, int intent, int media, int chat, int params, String chatType, String unit) {}
+
+    /**
+     * The coroutine copies the picked item into a MediaResource and builds the editor's params with it right after, then
+     * opens the editor and returns Unit. The run into the copy, with no branch out and none landing inside, reads the
+     * intent's type and casts the chat to one of the given types, and neither register changes after. All four registers
+     * are locals below v16 and no try covers the builder. Mirrors galleryChatSite in GalleryToChat.kt.
+     */
+    static GalleryChatSite galleryChatSite(Method m, Set<String> chats) {
+        if (m.getImplementation() == null) return null;
+        var code = instructions(m);
+        int at = -1;
+        for (int i = 0; i < code.size(); i++)
+            if (code.get(i).getOpcode() == Opcode.NEW_INSTANCE && EDITOR_BUILDER.equals(typeOf(code.get(i)))) {
+                if (at >= 0) return null;
+                at = i;
+            }
+        if (at < 2 || code.get(at - 1).getOpcode() != Opcode.MOVE_RESULT_OBJECT) return null;
+        var copy = code.get(at - 2);
+        if ((copy.getOpcode() != Opcode.INVOKE_STATIC && copy.getOpcode() != Opcode.INVOKE_STATIC_RANGE) ||
+            !(copy instanceof ReferenceInstruction cr && cr.getReference() instanceof MethodReference copied) ||
+            copied.getParameterTypes().size() != 1 || !CHAT_MEDIA.equals(copied.getReturnType())) return null;
+        int media = register(code.get(at - 1)), params = register(code.get(at));
+        int open = at + 1;
+        for (; open < code.size(); open++) {
+            var i = code.get(open);
+            if (i.getOpcode() == Opcode.INVOKE_STATIC && i instanceof ReferenceInstruction r && r.getReference() instanceof MethodReference mr &&
+                "V".equals(mr.getReturnType())) {
+                var types = refParams(mr);
+                if (types.size() == 4 && EDITOR_PARAMS.equals(types.get(1)) && NAVIGATION_TRIGGER.equals(types.get(2)) && "I".equals(types.get(3))) break;
+            }
+            if (endsChatRun(i)) return null;
+        }
+        if (open + 2 >= code.size() || code.get(open + 1).getOpcode() != Opcode.SGET_OBJECT || code.get(open + 2).getOpcode() != Opcode.RETURN_OBJECT ||
+            register(code.get(open + 1)) != register(code.get(open + 2))) return null;
+        if (!(((ReferenceInstruction) code.get(open + 1)).getReference() instanceof FieldReference unit) || !unit.getType().equals(unit.getDefiningClass())) return null;
+        boolean stored = false;
+        for (int i = at + 1; i < open; i++)
+            if (code.get(i).getOpcode() == Opcode.IPUT_OBJECT && code.get(i) instanceof TwoRegisterInstruction put && put.getRegisterA() == media &&
+                put.getRegisterB() == params && ((ReferenceInstruction) code.get(i)).getReference() instanceof FieldReference f &&
+                EDITOR_BUILDER.equals(f.getDefiningClass()) && CHAT_MEDIA.equals(f.getType())) stored = true;
+        if (!stored) return null;
+        int start = at - 2;
+        while (start > 0 && !endsChatRun(code.get(start - 1))) start--;
+        var landings = mediaTargets(m);
+        for (int i = start + 1; i < at; i++) if (landings.contains(i)) return null;
+        int typed = -1, cast = -1;
+        for (int i = start; i < at; i++) {
+            if (code.get(i).getOpcode() == Opcode.INVOKE_VIRTUAL && ITEM_TYPE_CALL.equals(ref(code.get(i)))) {
+                if (typed >= 0) return null;
+                typed = i;
+            }
+            if (code.get(i).getOpcode() == Opcode.CHECK_CAST && chats.contains(typeOf(code.get(i)))) {
+                if (cast >= 0) return null;
+                cast = i;
+            }
+        }
+        if (typed < 0 || cast < 0) return null;
+        int intent = ((FiveRegisterInstruction) code.get(typed)).getRegisterC(), chat = register(code.get(cast));
+        for (int i = typed + 1; i < at; i++) if (writesRegister(code.get(i), intent)) return null;
+        for (int i = cast + 1; i < at; i++) if (writesRegister(code.get(i), chat)) return null;
+        var registers = List.of(intent, media, chat, params);
+        int locals = parameterRegister(m, 0);
+        if (new HashSet<>(registers).size() != 4 || registers.stream().anyMatch(r -> r > 15 || r >= locals)) return null;
+        int address = 0;
+        for (int i = 0; i < at; i++) address += code.get(i).getCodeUnits();
+        for (var block : m.getImplementation().getTryBlocks())
+            if (address >= block.getStartCodeAddress() && address < block.getStartCodeAddress() + block.getCodeUnitCount()) return null;
+        return new GalleryChatSite(at, intent, media, chat, params, typeOf(code.get(cast)), unit.toString());
+    }
+
+    static boolean publicStaticCall(String id, Map<String, ClassDef> byType) {
+        var owner = byType.get(id.substring(0, id.indexOf("->")));
+        if (owner == null) return false;
+        Method found = null;
+        for (var m : owner.getMethods()) if (hookId(m).equals(id)) {
+            if (found != null) return false;
+            found = m;
+        }
+        return found != null && AccessFlags.PUBLIC.isSet(owner.getAccessFlags()) && AccessFlags.PUBLIC.isSet(found.getAccessFlags()) &&
+            AccessFlags.STATIC.isSet(found.getAccessFlags());
+    }
+
+    /** The chat's event dispatchers by the chat type they take, each the public static call right after a new tray insert. Mirrors chatDispatchers. */
+    static Map<String, Set<String>> chatDispatchers(List<ClassDef> classes, Map<String, ClassDef> byType) {
+        var found = new LinkedHashMap<String, Set<String>>();
+        for (var cls : classes) for (var m : cls.getMethods()) {
+            if (m.getImplementation() == null) continue;
+            var code = instructions(m);
+            for (int i = 0; i + 1 < code.size(); i++) {
+                if (code.get(i).getOpcode() != Opcode.INVOKE_DIRECT || !INSERT_PREVIEW_INIT.equals(ref(code.get(i)))) continue;
+                var call = code.get(i + 1);
+                if (call.getOpcode() != Opcode.INVOKE_STATIC || !(((ReferenceInstruction) call).getReference() instanceof MethodReference mr)) continue;
+                var types = refParams(mr);
+                if (!"V".equals(mr.getReturnType()) || types.size() != 2 || !COMPOSER_EVENT.equals(types.get(1)) ||
+                    ((FiveRegisterInstruction) call).getRegisterD() != ((FiveRegisterInstruction) code.get(i)).getRegisterC()) continue;
+                found.computeIfAbsent(types.get(0), k -> new LinkedHashSet<>()).add(mr.toString());
+            }
+        }
+        found.values().removeIf(ids -> !ids.stream().allMatch(id -> publicStaticCall(id, byType)));
+        return found;
+    }
+
+    /**
+     * gallery_to_chat: Open your gallery app's handler for a photo from another app and the one coroutine it starts, while
+     * the handler has four locals and its event below v16, the event's intent field is public and writable, the coroutine
+     * has the editor site, and the chat type it casts to has one public dispatcher. Mirrors findGalleryToChat in
+     * GalleryToChat.kt.
+     */
+    static List<Method> galleryToChatHooks(List<ClassDef> classes) {
+        var byType = new HashMap<String, ClassDef>();
+        for (var cls : classes) byType.put(cls.getType(), cls);
+        Method items = null;
+        for (var cls : classes) for (var m : cls.getMethods())
+            if (m.getImplementation() != null && isGalleryItemsHandler(m, byType)) {
+                if (items != null) return List.of();
+                items = m;
+            }
+        if (items == null) return List.of();
+        int event = galleryItemsRegister(items, ACTIVITY_RESULT_EVENT);
+        if (parameterRegister(items, 0) < 4 || event > 15) return List.of();
+        FieldReference intent = null;
+        for (var i : instructions(items))
+            if (i.getOpcode() == Opcode.IGET_OBJECT && ((TwoRegisterInstruction) i).getRegisterB() == event &&
+                ((ReferenceInstruction) i).getReference() instanceof FieldReference f && ACTIVITY_RESULT_EVENT.equals(f.getDefiningClass()) &&
+                "Landroid/content/Intent;".equals(f.getType())) intent = f;
+        boolean writable = false;
+        for (var f : byType.get(ACTIVITY_RESULT_EVENT).getFields())
+            if (f.getName().equals(intent.getName()) && f.getType().equals(intent.getType()) && !AccessFlags.STATIC.isSet(f.getAccessFlags()))
+                writable = AccessFlags.PUBLIC.isSet(f.getAccessFlags()) && !AccessFlags.FINAL.isSet(f.getAccessFlags());
+        if (!writable) return List.of();
+        var startedTypes = new LinkedHashSet<String>();
+        for (var i : instructions(items)) if (i.getOpcode() == Opcode.NEW_INSTANCE && typeOf(i) != null) startedTypes.add(typeOf(i));
+        var started = new ArrayList<Method>();
+        for (var type : startedTypes) {
+            var cls = byType.get(type);
+            if (cls == null) continue;
+            var suspends = new ArrayList<Method>();
+            for (var m : cls.getMethods()) if (hookId(m).substring(hookId(m).indexOf("->") + 2).equals(INVOKE_SUSPEND)) suspends.add(m);
+            if (suspends.size() == 1) started.add(suspends.get(0));
+        }
+        if (started.size() != 1) return List.of();
+        var editor = started.get(0);
+        var insert = byType.get(INSERT_PREVIEW);
+        if (insert == null || !AccessFlags.PUBLIC.isSet(insert.getAccessFlags())) return List.of();
+        boolean insertable = false;
+        for (var m : insert.getMethods()) if (hookId(m).equals(INSERT_PREVIEW_INIT) && AccessFlags.PUBLIC.isSet(m.getAccessFlags())) insertable = true;
+        if (!insertable) return List.of();
+        var dispatchers = chatDispatchers(classes, byType);
+        dispatchers.values().removeIf(ids -> ids.size() != 1);
+        return galleryChatSite(editor, dispatchers.keySet()) == null ? List.of() : List.of(items, editor);
+    }
+
     static final String FONT_LAYOUT_ANCHOR = "Hit OEM font NPE in Paint.setTypeface, keeping previous typeface";
     static final String FONT_REPOSITORY_ANCHOR = "The requested font, %s, does not have a backing source. " +
         "You need to provide either a systemFontName, assetFontName, or a fileDescriptor.";
@@ -5914,6 +6094,7 @@ public class CompatReport {
         found.get("auto_reply").addAll(messageLogHooks(classes));
         found.get("system_camera").addAll(systemCameraLaunches(classes));
         found.get("external_gallery").addAll(externalGalleryHooks(classes));
+        found.get("gallery_to_chat").addAll(galleryToChatHooks(classes));
         customFontHooks(classes).forEach((key, methods) -> found.get(key).addAll(methods));
         // Every viewer method with an entry point's name is checked, whatever its signature, and one that doesn't match
         // leaves the control unresolved, as findControls in ControlHooks.kt clears it then.

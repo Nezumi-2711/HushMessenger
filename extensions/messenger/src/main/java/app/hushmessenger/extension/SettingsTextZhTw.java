@@ -449,6 +449,8 @@ final class SettingsTextZhTw {
         {"system_camera.description", "聊天室中的相機按鈕會開啟手機的相機應用程式。拍攝的相片會在 Messenger 編輯器中開啟，供你傳送。僅支援相片。"},
         {"external_gallery.title", "開啟手機相簿應用程式"},
         {"external_gallery.description", "聊天室中的相簿按鈕會開啟手機本身的相簿應用程式。選取一張相片或一部影片時，會在該聊天室的 Messenger 編輯器中開啟，供你傳送。選取多個項目時，則會開啟 Messenger 的「傳送至」面板，顯示所有選取項目，並將該聊天室列在最上方。"},
+        {"gallery_to_chat.title", "將相簿選取項目放入聊天室"},
+        {"gallery_to_chat.description", "開啟「開啟手機相簿應用程式」時，你選取的項目會像 Messenger 自己的相簿一樣放進聊天室的訊息框，而不是開啟編輯器或「傳送至」面板。在你點選傳送之前不會傳出任何內容。"},
         {"external_browser.title", "在外部開啟網頁連結"},
         {"external_browser.description", "使用預設瀏覽器開啟網頁連結（http 與 https）。其他類型的連結維持原本的行為。"},
         {"bubbles.title", "允許聊天泡泡通知"},

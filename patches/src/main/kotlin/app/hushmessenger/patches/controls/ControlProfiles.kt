@@ -141,6 +141,10 @@ internal val PROFILE_347015062 = ControlProfile(
         "font_repository" to setOf("LX/7Xy;->A00(LX/7Xv;LX/7Xy;LX/5mu;I)Landroid/graphics/Typeface;"),
         "font_roboto" to setOf("LX/25j;->A00(Landroid/content/Context;Ljava/lang/Integer;)Landroid/graphics/Typeface;"),
         "friend_requests" to setOf("LX/1r8;->A08()Z", "LX/2Oq;->A04()Z"),
+        "gallery_to_chat" to setOf(
+            "LX/6Ik;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5Vw;)V",
+            "LX/NFg;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         "growth" to setOf("LX/1r8;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Tv8;Ljava/util/List;LX/5TQ;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A15(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
@@ -359,6 +363,10 @@ internal val PROFILE_347014996 = ControlProfile(
         "font_repository" to setOf("LX/7Xy;->A00(LX/7Xv;LX/7Xy;LX/5mu;I)Landroid/graphics/Typeface;"),
         "font_roboto" to setOf("LX/25j;->A00(Landroid/content/Context;Ljava/lang/Integer;)Landroid/graphics/Typeface;"),
         "friend_requests" to setOf("LX/1r8;->A08()Z", "LX/2Oq;->A04()Z"),
+        "gallery_to_chat" to setOf(
+            "LX/6Ik;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5Vw;)V",
+            "LX/NFg;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         "growth" to setOf("LX/1r8;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Tv8;Ljava/util/List;LX/5TQ;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A15(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
@@ -577,6 +585,10 @@ internal val PROFILE_347014974 = ControlProfile(
         "font_repository" to setOf("LX/7bP;->A00(LX/7bM;LX/7bP;LX/5ph;I)Landroid/graphics/Typeface;"),
         "font_roboto" to setOf("LX/275;->A00(Landroid/content/Context;Ljava/lang/Integer;)Landroid/graphics/Typeface;"),
         "friend_requests" to setOf("LX/1sP;->A08()Z", "LX/2QK;->A04()Z"),
+        "gallery_to_chat" to setOf(
+            "LX/6Lb;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5Yh;)V",
+            "LX/NOw;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         "growth" to setOf("LX/1sP;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Or6;Ljava/util/List;LX/5WB;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A15(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
@@ -794,6 +806,10 @@ internal val PROFILE_347014990 = ControlProfile(
         "font_repository" to setOf("LX/7W0;->A00(LX/7Vx;LX/7W0;LX/5mI;I)Landroid/graphics/Typeface;"),
         "font_roboto" to setOf("LX/269;->A00(Landroid/content/Context;Ljava/lang/Integer;)Landroid/graphics/Typeface;"),
         "friend_requests" to setOf("LX/1rY;->A08()Z", "LX/2PG;->A04()Z"),
+        "gallery_to_chat" to setOf(
+            "LX/6HJ;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5VK;)V",
+            "LX/Mpl;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         "growth" to setOf("LX/1rY;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Od5;Ljava/util/List;LX/5So;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A13(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),

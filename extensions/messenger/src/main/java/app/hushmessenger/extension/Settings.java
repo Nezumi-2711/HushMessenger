@@ -874,7 +874,7 @@ public final class Settings {
             Context context = appContext;
             android.content.ClipData clip = data == null ? null : data.getClipData();
             if (context == null || clip == null || clip.getItemCount() < 2 || !data.getBooleanExtra(GalleryPicker.ITEMS_MARK, false) ||
-                !enabled(GalleryPicker.KEY)) return false;
+                picksGoToChat(data) || !enabled(GalleryPicker.KEY)) return false;
             // Two callers hand the handler the same result, so the second only takes it and opens no second sheet.
             if (data.getBooleanExtra(GalleryPicker.ITEMS_SENT, false)) return true;
             context.startActivity(GalleryPicker.sendIntent(context, thread, clip));
@@ -883,6 +883,43 @@ public final class Settings {
         } catch (RuntimeException error) {
             hookFailedPrivately(GalleryPicker.KEY, "Couldn't send everything you picked", error);
             return false;
+        }
+    }
+    /** A whole pick from the pick screen that Put gallery picks in the chat takes, rather than the Send to sheet. */
+    private static boolean picksGoToChat(android.content.Intent data) {
+        return data.getBooleanExtra(GalleryPicker.RESULT_PREPARED, false) && !data.getBooleanExtra(GalleryPicker.ONE_ITEM, false) &&
+            wouldUse(GalleryPicker.CHAT_KEY) && wouldUse(GalleryPicker.KEY);
+    }
+    /**
+     * The same handler asks this before anything else. With Put gallery picks in the chat on, a pick from the pick screen
+     * comes back as one result per item for the handler to run on in turn, and an empty list for the second caller handed
+     * the same pick. Null leaves the handler to the pick as it is: Off, Pause, a result from elsewhere, or one item it was
+     * already handed.
+     */
+    public static android.content.Intent[] galleryToChat(android.content.Intent data) {
+        try {
+            if (data == null || data.getData() == null || !picksGoToChat(data)) return null;
+            if (data.getBooleanExtra(GalleryPicker.IN_CHAT, false)) return new android.content.Intent[0];
+            if (!enabled(GalleryPicker.CHAT_KEY)) return null;
+            android.content.Intent[] items = GalleryPicker.chatItems(data);
+            data.putExtra(GalleryPicker.IN_CHAT, true);
+            return items;
+        } catch (RuntimeException error) {
+            hookFailedPrivately(GalleryPicker.CHAT_KEY, "Couldn't put what you picked in the chat", error);
+            return null;
+        }
+    }
+    /**
+     * The chat's copy of one of those items asks this where it would open Messenger's editor. The list goes in the chat's
+     * tray above the message box, as Messenger's own gallery puts a pick there, and null opens the editor as usual.
+     */
+    public static java.util.List<Object> galleryChatItem(android.content.Intent data, Object media) {
+        try {
+            if (data == null || media == null || !data.getBooleanExtra(GalleryPicker.ONE_ITEM, false)) return null;
+            return java.util.Collections.singletonList(media);
+        } catch (RuntimeException error) {
+            hookFailedPrivately(GalleryPicker.CHAT_KEY, "Couldn't put what you picked in the chat", error);
+            return null;
         }
     }
     /**
@@ -917,7 +954,7 @@ public final class Settings {
             return context == null || CameraActivity.captureIntent(context) != null;
         }
         // A Root Mount install keeps the stock manifest, with no pick screen and maybe no gallery app Messenger can see.
-        if (GalleryPicker.KEY.equals(key)) {
+        if (GalleryPicker.KEY.equals(key) || GalleryPicker.CHAT_KEY.equals(key)) {
             Context context = appContext;
             return context == null || GalleryPicker.screenIntent(context) != null;
         }
