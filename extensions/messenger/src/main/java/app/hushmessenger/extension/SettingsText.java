@@ -175,9 +175,12 @@ final class SettingsText {
         ENGLISH.put("bubble_conversations", "Android conversation settings");
         ENGLISH.put("bubble_settings_missing", "Screen not found. Open app info, then Notifications.");
         ENGLISH.put("facebook_keep_profile", "Keep the Profile button");
-        ENGLISH.put("facebook_keep_profile_help", "Leaves the Profile button on a chat's details page, so you can still open the person's Facebook profile. The other Facebook shortcuts stay hidden.");
+        ENGLISH.put("facebook_keep_profile_help", "Leaves the Profile button on a chat's details page and the View profile button at the top of a new chat, so you can still open the person's Facebook profile. The other Facebook shortcuts stay hidden.");
         ENGLISH.put("avatar_shape_rounded", "Round the corners");
         ENGLISH.put("avatar_shape_rounded_help", "Gives the squares rounded corners instead of sharp ones.");
+        ENGLISH.put("quiet_calls_chosen", "Only chosen chats");
+        ENGLISH.put("quiet_calls_chosen_help", "Calls from the chats you turn on below come in quietly. Every other call rings as usual.");
+        ENGLISH.put("quiet_calls_recent_empty", "Chats that call you show up here, newest first.");
         ENGLISH.put("tab_badges_keep_chats", "Keep the Chats badge");
         ENGLISH.put("tab_badges_keep_people", "Keep the People badge");
         ENGLISH.put("tab_badges_keep_notifications", "Keep the Notifications badge");
@@ -369,6 +372,9 @@ final class SettingsText {
         ENGLISH.put("message_log_unknown_thread", "Unknown chat");
         ENGLISH.put("message_log_in_group", "%s in %s");
         ENGLISH.put("message_log_no_text", "(no text)");
+        ENGLISH.put("message_log_unsent", "Unsent");
+        ENGLISH.put("message_log_unsent_only", "Show only unsent");
+        ENGLISH.put("message_log_show_all", "Show all messages");
         ENGLISH.put("message_log_cleared", "Message log cleared");
         ENGLISH.put("message_log_restored", "Message log put back");
         ENGLISH.put("message_log_restore_failed", "Couldn't put the log back");

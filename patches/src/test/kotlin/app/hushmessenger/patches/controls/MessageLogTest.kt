@@ -150,6 +150,22 @@ internal fun messageLogFixture(
     return listOf(secret, message, notification, manager, unsent, decoy, launcher, texts)
 }
 
+private const val RECALLER_TYPE = "LX/98W;"
+private const val RECALL_SHAPE = "(${FB_USER_SESSION}Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"
+private const val RECALLER_BODY = "const-string v0, \"NotificationRecaller\"\nconst/4 v0, 0x0\nreturn v0"
+
+/**
+ * Messenger's notification recaller, with a twin of the same shape that logs nothing and a static one that logs the
+ * same tag, neither of which is the recaller.
+ */
+private fun unsentRecallFixture(registers: Int = 24, body: String = RECALLER_BODY, extra: List<MutableMethod> = emptyList()) = listOf(
+    fixtureClass(RECALLER_TYPE, listOf(fixtureMethod("$RECALLER_TYPE->A00$RECALL_SHAPE", body, registers))),
+    fixtureClass("LX/98X;", listOf(
+        fixtureMethod("LX/98X;->A00$RECALL_SHAPE", "const/4 v0, 0x0\nreturn v0", 24),
+        fixtureMethod("LX/98X;->A01$RECALL_SHAPE", RECALLER_BODY, 24, STATIC_PUBLIC),
+    ) + extra),
+)
+
 private fun MutableMethod.code() = implementation!!.instructions.toList()
 private fun reference(at: Int, code: List<com.android.tools.smali.dexlib2.iface.instruction.Instruction>) =
     (code[at] as ReferenceInstruction).reference.toString()
@@ -381,6 +397,50 @@ class MessageLogTest {
             assertFailsWith<PatchException>(case) { injectControl(MESSAGE_LOG, mapOf(MESSAGE_LOG to listOf(ctor))) }
             assertFailsWith<PatchException>(case) { injectControl(AUTO_REPLY, mapOf(AUTO_REPLY to listOf(ctor))) }
             assertEquals(before, ctor.code(), case)
+        }
+    }
+
+    /**
+     * The message log and Keep unsent messages both claim the recaller. The first one in hands the message id over and,
+     * when the extension says so, returns true before Messenger takes the message out of its notification. The second
+     * finds the call already there and leaves the method alone.
+     */
+    @Test fun bothUnsentControlsShareOneRecallerHook() {
+        val classes = unsentRecallFixture()
+        val found = mirroredControls(classes)
+        assertEquals(activeProfile.hooks.getValue(UNSENT_RECALL).toList(), found.getValue(UNSENT_RECALL).map { it.hookId() })
+        validateControls(found, setOf(UNSENT_RECALL))
+        val recaller = classes.single { it.type == RECALLER_TYPE }.methods.single()
+        val before = recaller.code()
+        injectControl(UNSENT_RECALL, mapOf(UNSENT_RECALL to listOf(recaller)))
+        val code = recaller.code()
+        assertEquals(Opcode.INVOKE_STATIC_RANGE, code[0].opcode)
+        assertEquals("$SETTINGS->unsentRecall(Ljava/lang/String;)Z", reference(0, code))
+        // p2, the message id, of an instance method with 24 registers and four parameter words.
+        assertEquals(21, (code[0] as com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction).startRegister)
+        assertEquals(Opcode.MOVE_RESULT, code[1].opcode)
+        assertEquals(Opcode.IF_EQZ, code[2].opcode)
+        assertEquals(5, code.branchTarget(2))
+        assertEquals(Opcode.RETURN, code[4].opcode)
+        assertEquals(before, code.drop(5))
+        injectControl(UNSENT_RECALL, mapOf(UNSENT_RECALL to listOf(recaller)))
+        assertEquals(code, recaller.code())
+    }
+
+    @Test fun aRecallerThatDoesNotMatchIsRefusedBeforeAnyEdit() {
+        // Two methods logging as the recaller can't be told apart, so neither control gets the hook.
+        val twin = fixtureMethod("LX/98X;->A02$RECALL_SHAPE", RECALLER_BODY, 24)
+        assertEquals(emptyList(), findUnsentRecall(unsentRecallFixture(extra = listOf(twin))))
+        val cases = mapOf(
+            "no log tag" to unsentRecallFixture(body = "const/4 v0, 0x0\nreturn v0"),
+            // An instance method with four parameter words and no register to spare.
+            "no scratch register" to unsentRecallFixture(registers = 5),
+        )
+        for ((case, classes) in cases) {
+            val recaller = classes.single { it.type == RECALLER_TYPE }.methods.single()
+            val before = recaller.code()
+            assertFailsWith<PatchException>(case) { injectControl(UNSENT_RECALL, mapOf(UNSENT_RECALL to listOf(recaller))) }
+            assertEquals(before, recaller.code(), case)
         }
     }
 

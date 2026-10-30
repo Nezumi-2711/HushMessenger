@@ -130,6 +130,7 @@ internal val PROFILE_347015062 = ControlProfile(
             "LX/Jm3;->A03()Z", "LX/Jm5;->A01()Z", "LX/Jm6;->A01()Z", "LX/Jm7;->A04()Z", "LX/Jm9;->A06()Z",
             "LX/JmA;->A06()Z", "LX/JmB;->A06()Z", "LX/JmC;->A06()Z",
         ),
+        "facebook_profile_header" to setOf("LX/AXJ;->A0p(LX/1RI;)LX/1IG;"),
         "font_by_name" to setOf("LX/QHk;->A00(Landroid/content/Context;Ljava/lang/String;I)Landroid/graphics/Typeface;"),
         "font_input" to setOf(
             "LX/5QT;->A04(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/graphics/drawable/Drawable;Landroid/text/TextUtils\$TruncateAt;Landroid/text/method/MovementMethod;Landroid/widget/EditText;LX/515;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;[Ljava/lang/String;IIIIIIIIIIIZZZZ)V",
@@ -140,11 +141,16 @@ internal val PROFILE_347015062 = ControlProfile(
         "font_repository" to setOf("LX/7Xy;->A00(LX/7Xv;LX/7Xy;LX/5mu;I)Landroid/graphics/Typeface;"),
         "font_roboto" to setOf("LX/25j;->A00(Landroid/content/Context;Ljava/lang/Integer;)Landroid/graphics/Typeface;"),
         "friend_requests" to setOf("LX/1r8;->A08()Z", "LX/2Oq;->A04()Z"),
+        "gallery_to_chat" to setOf(
+            "LX/6Ik;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5Vw;)V",
+            "LX/NFg;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         "growth" to setOf("LX/1r8;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Tv8;Ljava/util/List;LX/5TQ;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A15(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
         "hide_read_receipts" to setOf("LX/4mA;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/4mA;Ljava/lang/String;)V"),
         "inbox_promotions" to setOf("LX/25z;->A0J()Z", "LX/25z;->A0K()Z"),
+        "instants_button" to setOf("LX/1mx;->A0D(LX/1mx;)V", "LX/ZnZ;->A0X(LX/ZnZ;)V"),
         "keep_unsent" to setOf("LX/MRd;->A02(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/util/Map;)V"),
         "mark_read_action" to setOf("LX/HYn;->A0V()Z", "LX/Jlk;->A0F()Z"),
         "mark_read_bar" to setOf(
@@ -193,6 +199,7 @@ internal val PROFILE_347015062 = ControlProfile(
         "reels_badge" to setOf("LX/4Lj;->A09(LX/4Lj;)Z"),
         "reply_read" to setOf("LX/AGG;->A01(Lcom/facebook/auth/usersession/FbUserSession;LX/59N;LX/4sm;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/D4w;LX/5Cs;LX/59M;LX/D2X;LX/5tJ;LX/5Vw;LX/5OP;Lcom/facebook/xapp/messaging/composer/send/event/SendMessageEvent;Lcom/facebook/xapp/messaging/map/HeterogeneousMap;LX/4su;Ljava/lang/String;)V"),
         "save_stories" to setOf("LX/V0s;->onClick(Landroid/view/View;)V"),
+        "save_voice" to setOf("LX/W81;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/W81;LX/W85;)Landroid/net/Uri;"),
         "screenshot_viewers" to setOf(
             "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;->A1J(Landroid/os/Bundle;)Landroid/app/Dialog;",
             "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;->onResume()V",
@@ -204,6 +211,10 @@ internal val PROFILE_347015062 = ControlProfile(
         ),
         "stories" to setOf("LX/1p3;->A00()Z"),
         "story_hold" to setOf("LX/Sv7;->DjC()V"),
+        "story_ring" to setOf(
+            "LX/2mD;->onCreateMountContent(Landroid/content/Context;)Ljava/lang/Object;",
+            "LX/31X;->draw(Landroid/graphics/Canvas;)V",
+        ),
         "subtabs" to setOf("LX/2LG;->run()V"),
         "suggested_replies" to setOf("LX/7Rz;->A06(LX/7Rz;)Z", "LX/7T5;->A05(LX/7T5;)Z", "LX/Kjw;->A03()Z"),
         "system_camera" to setOf(
@@ -222,6 +233,7 @@ internal val PROFILE_347015062 = ControlProfile(
         "typing" to setOf("LX/BFC;->run()V"),
         "typing_mailbox" to setOf("LX/8o5;->A0M(Ljava/lang/String;Z)LX/31v;"),
         "unsent_indicator" to setOf("LX/W6h;->Cf5(I)Ljava/lang/String;"),
+        "unsent_recall" to setOf("LX/98W;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
             "LX/1fe;->A02()LX/bOd;", "LX/35w;->B8P()Ljava/lang/String;", "LX/35w;->Bx1()J",
             "LX/B8A;->A03()Ljava/lang/String;", "LX/B8A;->A04(Ljava/util/Map;)V",
@@ -345,6 +357,7 @@ internal val PROFILE_347014996 = ControlProfile(
             "LX/Jm3;->A03()Z", "LX/Jm5;->A01()Z", "LX/Jm6;->A01()Z", "LX/Jm7;->A04()Z", "LX/Jm9;->A06()Z",
             "LX/JmA;->A06()Z", "LX/JmB;->A06()Z", "LX/JmC;->A06()Z",
         ),
+        "facebook_profile_header" to setOf("LX/AXJ;->A0p(LX/1RI;)LX/1IG;"),
         "font_by_name" to setOf("LX/QHk;->A00(Landroid/content/Context;Ljava/lang/String;I)Landroid/graphics/Typeface;"),
         "font_input" to setOf(
             "LX/5QT;->A04(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/graphics/drawable/Drawable;Landroid/text/TextUtils\$TruncateAt;Landroid/text/method/MovementMethod;Landroid/widget/EditText;LX/515;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;[Ljava/lang/String;IIIIIIIIIIIZZZZ)V",
@@ -355,11 +368,16 @@ internal val PROFILE_347014996 = ControlProfile(
         "font_repository" to setOf("LX/7Xy;->A00(LX/7Xv;LX/7Xy;LX/5mu;I)Landroid/graphics/Typeface;"),
         "font_roboto" to setOf("LX/25j;->A00(Landroid/content/Context;Ljava/lang/Integer;)Landroid/graphics/Typeface;"),
         "friend_requests" to setOf("LX/1r8;->A08()Z", "LX/2Oq;->A04()Z"),
+        "gallery_to_chat" to setOf(
+            "LX/6Ik;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5Vw;)V",
+            "LX/NFg;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         "growth" to setOf("LX/1r8;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Tv8;Ljava/util/List;LX/5TQ;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A15(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
         "hide_read_receipts" to setOf("LX/4mA;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/4mA;Ljava/lang/String;)V"),
         "inbox_promotions" to setOf("LX/25z;->A0J()Z", "LX/25z;->A0K()Z"),
+        "instants_button" to setOf("LX/1mx;->A0D(LX/1mx;)V", "LX/ZnZ;->A0X(LX/ZnZ;)V"),
         "keep_unsent" to setOf("LX/MRd;->A02(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/util/Map;)V"),
         "mark_read_action" to setOf("LX/HYn;->A0V()Z", "LX/Jlk;->A0F()Z"),
         "mark_read_bar" to setOf(
@@ -408,6 +426,7 @@ internal val PROFILE_347014996 = ControlProfile(
         "reels_badge" to setOf("LX/4Lj;->A09(LX/4Lj;)Z"),
         "reply_read" to setOf("LX/AGG;->A01(Lcom/facebook/auth/usersession/FbUserSession;LX/59N;LX/4sm;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/D4w;LX/5Cs;LX/59M;LX/D2X;LX/5tJ;LX/5Vw;LX/5OP;Lcom/facebook/xapp/messaging/composer/send/event/SendMessageEvent;Lcom/facebook/xapp/messaging/map/HeterogeneousMap;LX/4su;Ljava/lang/String;)V"),
         "save_stories" to setOf("LX/V0s;->onClick(Landroid/view/View;)V"),
+        "save_voice" to setOf("LX/W81;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/W81;LX/W85;)Landroid/net/Uri;"),
         "screenshot_viewers" to setOf(
             "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;->A1J(Landroid/os/Bundle;)Landroid/app/Dialog;",
             "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;->onResume()V",
@@ -419,6 +438,10 @@ internal val PROFILE_347014996 = ControlProfile(
         ),
         "stories" to setOf("LX/1p3;->A00()Z"),
         "story_hold" to setOf("LX/Sv7;->DjC()V"),
+        "story_ring" to setOf(
+            "LX/2mD;->onCreateMountContent(Landroid/content/Context;)Ljava/lang/Object;",
+            "LX/31X;->draw(Landroid/graphics/Canvas;)V",
+        ),
         "subtabs" to setOf("LX/2LG;->run()V"),
         "suggested_replies" to setOf("LX/7Rz;->A06(LX/7Rz;)Z", "LX/7T5;->A05(LX/7T5;)Z", "LX/Kjw;->A03()Z"),
         "system_camera" to setOf(
@@ -437,6 +460,7 @@ internal val PROFILE_347014996 = ControlProfile(
         "typing" to setOf("LX/BFC;->run()V"),
         "typing_mailbox" to setOf("LX/8o5;->A0M(Ljava/lang/String;Z)LX/31v;"),
         "unsent_indicator" to setOf("LX/W6h;->Cf5(I)Ljava/lang/String;"),
+        "unsent_recall" to setOf("LX/98W;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
             "LX/1fe;->A02()LX/bOd;", "LX/35w;->B8P()Ljava/lang/String;", "LX/35w;->Bx1()J",
             "LX/B8A;->A03()Ljava/lang/String;", "LX/B8A;->A04(Ljava/util/Map;)V",
@@ -560,6 +584,7 @@ internal val PROFILE_347014974 = ControlProfile(
             "LX/Jrf;->A03()Z", "LX/Jrh;->A01()Z", "LX/Jri;->A01()Z", "LX/Jrj;->A04()Z", "LX/Jrl;->A06()Z",
             "LX/Jrm;->A06()Z", "LX/Jrn;->A06()Z", "LX/Jro;->A06()Z",
         ),
+        "facebook_profile_header" to setOf("LX/Abo;->A0r(LX/1SB;)LX/1J8;"),
         "font_by_name" to setOf("LX/NlA;->A00(Landroid/content/Context;Ljava/lang/String;I)Landroid/graphics/Typeface;"),
         "font_input" to setOf(
             "LX/5TE;->A07(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/graphics/drawable/Drawable;Landroid/text/TextUtils\$TruncateAt;Landroid/text/method/MovementMethod;Landroid/widget/EditText;LX/53o;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;[Ljava/lang/String;IIIIIIIIIIIZZZZ)V",
@@ -570,11 +595,16 @@ internal val PROFILE_347014974 = ControlProfile(
         "font_repository" to setOf("LX/7bP;->A00(LX/7bM;LX/7bP;LX/5ph;I)Landroid/graphics/Typeface;"),
         "font_roboto" to setOf("LX/275;->A00(Landroid/content/Context;Ljava/lang/Integer;)Landroid/graphics/Typeface;"),
         "friend_requests" to setOf("LX/1sP;->A08()Z", "LX/2QK;->A04()Z"),
+        "gallery_to_chat" to setOf(
+            "LX/6Lb;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5Yh;)V",
+            "LX/NOw;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         "growth" to setOf("LX/1sP;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Or6;Ljava/util/List;LX/5WB;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A15(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
         "hide_read_receipts" to setOf("LX/4ot;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/4ot;Ljava/lang/String;)V"),
         "inbox_promotions" to setOf("LX/27L;->A0J()Z", "LX/27L;->A0K()Z"),
+        "instants_button" to setOf("LX/1oE;->A0D(LX/1oE;)V", "LX/ZiQ;->A0X(LX/ZiQ;)V"),
         "keep_unsent" to setOf("LX/MWa;->A02(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/util/Map;)V"),
         "mark_read_action" to setOf("LX/HiF;->A0V()Z", "LX/JrM;->A0F()Z"),
         "mark_read_bar" to setOf(
@@ -622,6 +652,7 @@ internal val PROFILE_347014974 = ControlProfile(
         "reels_badge" to setOf("LX/4OB;->A09(LX/4OB;)Z"),
         "reply_read" to setOf("LX/AKh;->A01(Lcom/facebook/auth/usersession/FbUserSession;LX/5C7;LX/4vV;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/DAc;LX/5Fc;LX/5C6;LX/D8N;LX/5w6;LX/5Yh;LX/5RA;Lcom/facebook/xapp/messaging/composer/send/event/SendMessageEvent;Lcom/facebook/xapp/messaging/map/HeterogeneousMap;LX/4vd;Ljava/lang/String;)V"),
         "save_stories" to setOf("LX/SE4;->onClick(Landroid/view/View;)V"),
+        "save_voice" to setOf("LX/NeI;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/NeI;LX/NeM;)Landroid/net/Uri;"),
         "screenshot_viewers" to setOf(
             "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;->A1J(Landroid/os/Bundle;)Landroid/app/Dialog;",
             "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;->onResume()V",
@@ -633,6 +664,10 @@ internal val PROFILE_347014974 = ControlProfile(
         ),
         "stories" to setOf("LX/1qK;->A00()Z"),
         "story_hold" to setOf("LX/QQL;->DjS()V"),
+        "story_ring" to setOf(
+            "LX/2nj;->onCreateMountContent(Landroid/content/Context;)Ljava/lang/Object;",
+            "LX/33B;->draw(Landroid/graphics/Canvas;)V",
+        ),
         "subtabs" to setOf("LX/2Mk;->run()V"),
         "suggested_replies" to setOf("LX/7VN;->A06(LX/7VN;)Z", "LX/7WT;->A05(LX/7WT;)Z", "LX/Kou;->A03()Z"),
         "system_camera" to setOf(
@@ -651,6 +686,7 @@ internal val PROFILE_347014974 = ControlProfile(
         "typing" to setOf("LX/BJi;->run()V"),
         "typing_mailbox" to setOf("LX/8sW;->A0M(Ljava/lang/String;Z)LX/33a;"),
         "unsent_indicator" to setOf("LX/TCX;->CfG(I)Ljava/lang/String;"),
+        "unsent_recall" to setOf("LX/9Cx;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
             "LX/1gq;->A02()LX/XxB;", "LX/37Y;->B8W()Ljava/lang/String;", "LX/37Y;->Bx8()J",
             "LX/BCh;->A03()Ljava/lang/String;", "LX/BCh;->A04(Ljava/util/Map;)V",
@@ -774,6 +810,7 @@ internal val PROFILE_347014990 = ControlProfile(
             "LX/JQV;->A03()Z", "LX/JQX;->A01()Z", "LX/JQY;->A01()Z", "LX/JQZ;->A04()Z", "LX/JQb;->A06()Z",
             "LX/JQc;->A06()Z", "LX/JQd;->A06()Z", "LX/JQe;->A06()Z",
         ),
+        "facebook_profile_header" to setOf("LX/AUp;->A0r(LX/1Ri;)LX/1Ig;"),
         "font_by_name" to setOf("LX/NHP;->A00(Landroid/content/Context;Ljava/lang/String;I)Landroid/graphics/Typeface;"),
         "font_input" to setOf(
             "LX/5Pr;->A07(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/graphics/drawable/Drawable;Landroid/text/TextUtils\$TruncateAt;Landroid/text/method/MovementMethod;Landroid/widget/EditText;LX/50T;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;[Ljava/lang/String;IIIIIIIIIIIZZZZ)V",
@@ -784,11 +821,16 @@ internal val PROFILE_347014990 = ControlProfile(
         "font_repository" to setOf("LX/7W0;->A00(LX/7Vx;LX/7W0;LX/5mI;I)Landroid/graphics/Typeface;"),
         "font_roboto" to setOf("LX/269;->A00(Landroid/content/Context;Ljava/lang/Integer;)Landroid/graphics/Typeface;"),
         "friend_requests" to setOf("LX/1rY;->A08()Z", "LX/2PG;->A04()Z"),
+        "gallery_to_chat" to setOf(
+            "LX/6HJ;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5VK;)V",
+            "LX/Mpl;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+        ),
         "growth" to setOf("LX/1rY;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Od5;Ljava/util/List;LX/5So;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A13(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
         "hide_read_receipts" to setOf("LX/4lY;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/4lY;Ljava/lang/String;)V"),
         "inbox_promotions" to setOf("LX/26P;->A0J()Z", "LX/26P;->A0K()Z"),
+        "instants_button" to setOf("LX/1nN;->A0D(LX/1nN;)V", "LX/HVr;->A0W(LX/HVr;)V"),
         "keep_unsent" to setOf("LX/Rpw;->A02(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/util/Map;)V"),
         "mark_read_action" to setOf("LX/Hbf;->A0V()Z", "LX/JQC;->A0F()Z"),
         "mark_read_bar" to setOf(
@@ -836,6 +878,7 @@ internal val PROFILE_347014990 = ControlProfile(
         "reels_badge" to setOf("LX/4L4;->A09(LX/4L4;)Z"),
         "reply_read" to setOf("LX/ADl;->A01(Lcom/facebook/auth/usersession/FbUserSession;LX/58l;LX/4sA;Lcom/facebook/xapp/messaging/capability/vector/Capabilities;LX/D4I;LX/5CG;LX/58k;LX/D1v;LX/5sg;LX/5VK;LX/5Nn;Lcom/facebook/xapp/messaging/composer/send/event/SendMessageEvent;Lcom/facebook/xapp/messaging/map/HeterogeneousMap;LX/4sI;Ljava/lang/String;)V"),
         "save_stories" to setOf("LX/MED;->onClick(Landroid/view/View;)V"),
+        "save_voice" to setOf("LX/QGg;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/QGg;LX/QGj;)Landroid/net/Uri;"),
         "screenshot_viewers" to setOf(
             "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;->A1H(Landroid/os/Bundle;)Landroid/app/Dialog;",
             "Lcom/facebook/messaging/media/ephemeralmedia/viewer/EphemeralMediaViewerFragment;->onResume()V",
@@ -847,6 +890,10 @@ internal val PROFILE_347014990 = ControlProfile(
         ),
         "stories" to setOf("LX/1pT;->A00()Z"),
         "story_hold" to setOf("LX/K8T;->DjN()V"),
+        "story_ring" to setOf(
+            "LX/2md;->onCreateMountContent(Landroid/content/Context;)Ljava/lang/Object;",
+            "LX/31x;->draw(Landroid/graphics/Canvas;)V",
+        ),
         "subtabs" to setOf("LX/2Lg;->run()V"),
         "suggested_replies" to setOf("LX/7Q1;->A06(LX/7Q1;)Z", "LX/7R7;->A05(LX/7R7;)Z", "LX/WAU;->A03()Z"),
         "system_camera" to setOf(
@@ -865,6 +912,7 @@ internal val PROFILE_347014990 = ControlProfile(
         "typing" to setOf("LX/BCh;->run()V"),
         "typing_mailbox" to setOf("LX/8m9;->A0M(Ljava/lang/String;Z)LX/32L;"),
         "unsent_indicator" to setOf("LX/W52;->CfI(I)Ljava/lang/String;"),
+        "unsent_recall" to setOf("LX/96Z;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
             "LX/1g4;->A02()LX/b1i;", "LX/36O;->B8X()Ljava/lang/String;", "LX/36O;->Bx9()J",
             "LX/B5g;->A03()Ljava/lang/String;", "LX/B5g;->A04(Ljava/util/Map;)V",

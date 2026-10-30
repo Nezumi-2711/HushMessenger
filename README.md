@@ -31,7 +31,7 @@ Every switch starts off, so a freshly patched Messenger behaves like stock until
 ## Install
 
 1. **Get the APK.** The current release, v0.27.0, patches Messenger 584.1.0.61.98. Download it from [APKMirror's 584.1.0.61.98 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/). Every build listed there works, arm64 and armv7. Pick a `nodpi` one if your phone's type has it, since those keep the icons sharp.
-2. **Add the source.** Open the link above on your phone with Morphe Manager (2.2.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **66 patches**. If it shows an older version, tap its refresh button.
+2. **Add the source.** Open the link above on your phone with Morphe Manager (2.2.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **66 patches**. If it shows an older version, tap its refresh button. From the first signed release on, Manager 2.3 and newer also shows **Signed by `4d8d c2b3 fbcd 3ab6`** on the card. That's this project's key, and [Verify a download](#verify-a-download) has more on it.
 3. **Patch Messenger.** The default selection includes every switch. Five patches start unselected because they change the app itself, with no switch to undo them: **Clone install under another package name**, **Spoof package version**, **Custom new-message sound**, **Custom launcher icon** and **GmsCore support**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
 4. **Keep one source.** Don't add the remote source and a local copy together, and don't mix in Messenger patches from other sources.
 
@@ -65,14 +65,15 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Hide friend request cards | Hides friend request cards in the chat list. Nobody gets accepted or declined. |
 | Hide growth prompts | Removes the add-people promotion, the notes tip sheets and the "Share your own story" card after someone's stories. |
 | Hide inbox promotions | Hides promotion banners in the chat list. |
-| Hide stories and notes | Hides the row of stories and notes above your chats. |
-| Hide inbox tabs | Hides the Home and Channels tabs inside the inbox. |
+| Hide stories and notes | Hides the row of stories and notes above your chats, and the story rings around profile pictures. |
+| Hide the Instants button | Hides the + button that slides in at the right edge of your chat list and the one under your chat heads. Both open Instants. |
+| Hide inbox tabs | Hides the All, Unread and Groups tabs above your chats. |
 | Hide Mark as read | Takes Mark as read out of the menu you get when you press and hold a chat, so you can't mark one read by accident. Mark as unread stays. |
 | Pin more chats | Raises Messenger's limit of three pinned chats to 20, so more of them can stay at the top of your chat list. Experimental, since Messenger's servers can still stop you sooner. |
 | Hide People tab | Hides the People tab in the bottom bar. Restart Messenger to see it go. |
 | Hide Notifications tab | Hides the Notifications tab in the bottom bar. Restart Messenger to see it go. |
 | Hide tab badges | Hides the red dots and counts on the bottom tabs and on the Facebook button at the top. The Keep switches under it bring back the ones you want. Takes effect after a restart. |
-| Hide Facebook shortcuts | Removes Facebook toolbar, profile and sharing shortcuts, and the "Also from Meta" and "Subscriptions" sections in the Menu tab. Keep the Profile button, right under it, leaves the chat details Profile button in place. |
+| Hide Facebook shortcuts | Removes Facebook toolbar, profile and sharing shortcuts, and the "Also from Meta" and "Subscriptions" sections in the Menu tab. Keep the Profile button, right under it, leaves the chat details Profile button and the View profile button at the top of a new chat in place. |
 | Hide Meta AI | Hides the Meta AI button, tab and menu entries, the "Ask Meta AI" search button and the AI suggestions when you type @ in a chat. Existing AI chats stay. The tab changes after a restart. |
 | Hide Chat Moments | Removes Chat Moments from the menu. |
 | Hide Reels badge | Hides the Reels notification badge. |
@@ -92,14 +93,14 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Stop live connection logging | Drops the health reports and push logging Messenger sends over its live connection (MQTT). Messenger sends most of its traffic another way, so there's often little for it to drop. Messages and calls keep working. |
 | Stop nearby scans | Stops Messenger from reading the list of Wi-Fi networks around you, and hides the name and hardware address of the one you're connected to, the way Android does when Messenger can't see your location. Also stops the timer it can run while it's open to check your location and scan for Wi-Fi networks and Bluetooth devices. Experimental, since Messenger hasn't started those scans on the test phones yet. |
 | Stop app list and device ID sharing | Stops Messenger from going through your installed apps to find other Meta apps, and from asking them for the device ID Meta uses to link its apps on one phone. Messenger keeps the ID it already has. Experimental. |
-| Keep a message log | Saves a copy of each message that raised a notification, encrypted chats included, so an unsend can't take it back. It stays on your phone, encrypted. **View log** and **Clear log** sit under the switch. |
+| Keep a message log | Saves a copy of each message that raised a notification, encrypted chats included, so an unsend can't take it back. Messages that get unsent are marked Unsent, and **Show only unsent** lists just those. It stays on your phone, encrypted. **View log** and **Clear log** sit under the switch. |
 | Auto reply | Answers messages with a reply you write, for certain words or for any message. One reply per chat every five minutes, and group chats only when you allow it. |
-| Quiet incoming calls | Calls still come in, but Messenger doesn't ring, vibrate or pop the call up over your screen. It waits in the notification shade with Answer and Decline, and a call you miss still shows in the chat. If the Facebook app is on your phone, it can still ring for the same call. Experimental. |
+| Quiet incoming calls | Calls still come in, but Messenger doesn't ring, vibrate or pop the call up over your screen. It waits in the notification shade with Answer and Decline, and a call you miss still shows in the chat. **Only chosen chats** under the switch keeps this to the chats you pick, so every other call rings. If the Facebook app is on your phone, it can still ring for the same call. Experimental. |
 | Hide read receipts | Opening a chat no longer sends Seen. The chat stays unread on your phone until you reply or mark it read. Group chats haven't been checked. |
 | Mark as read button | Works with Hide read receipts. A chat's top bar gets Messenger's own Mark as read icon, and tapping it sends the Seen that opening the chat held back. When the bar is full it replaces the chat details button (tapping the chat's name opens the same page). Experimental. |
 | View stories anonymously | Opens other people's stories without adding you to their viewer list. |
 | Save any story | Adds **Save** to the **More options** menu on other people's stories. |
-| Keep unsent messages | Keeps messages on the older unsend routes and marks them "[unsent]". Encrypted chats aren't covered. |
+| Keep unsent messages | Keeps messages on the older unsend routes and marks them "[unsent]". An encrypted chat can't keep the message itself, so its notification stays up instead. |
 | Allow screenshots | Lets you screenshot protected photos and media, view-once included, with no screenshot notice to the sender. |
 | Use system emoji | Draws emoji with your phone's own set on Android 12 and newer. |
 | Send photos at original quality | With HD on, a JPEG photo up to 20 MB goes out at its full size instead of Messenger's smaller copy. Location and camera details are stripped, as Messenger does. |
@@ -107,15 +108,17 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Fix videos that won't send | A video whose only sound is xHE-AAC gets that sound converted to regular AAC, and a Samsung screen recording loses the tag Samsung's recorder adds when Messenger's media check rejects it, so neither ends in "Unable to send". Works for videos shared in from another app and ones picked in a chat. |
 | Use the phone's camera app | A chat's camera button opens your own camera app. Photos only. |
 | Open your gallery app | A chat's gallery button opens your own gallery app. One pick opens in Messenger's editor, and several open the Send to sheet with that chat at the top. |
+| Put gallery picks in the chat | Goes with Open your gallery app. What you pick lands above the chat's message box, the way Messenger's own gallery puts it there, one item or several. Nothing goes out until you tap Send. Experimental. |
 | Open web links externally | Opens http and https links in your default browser. |
 | Slide chats in and out | Slides a chat in from the side when you open it and back out when you leave. |
 | Hold stories at the end | A story stays on screen when it ends, photo or video, until you tap or swipe to the next one. The last one stays open until you close it. Experimental. |
 | Ignore the swipe up for disappearing messages | Swiping up at the bottom of a chat no longer turns on disappearing messages. |
 | Hide the recent photo card | The card above the message box that offers to send the screenshot, photo or video you just took doesn't show up. You can still send it from the gallery. |
+| Save voice messages you play | Each voice message you play is also saved to Recordings/Messenger (Music/Messenger on Android 10 and 11), where your file manager or another player can open it. Playing it again doesn't save another copy. Android 10 and newer. Experimental. |
 | Hide Your story when sharing | Sharing into Messenger from another app, the Send to list no longer offers Your story, so a tap on Add can't post it. Chats and groups stay. |
 | Allow chat bubbles | **Stock**, **Chat heads** or **Android bubbles** (Android 11 and newer). See [Chat heads and bubbles](#chat-heads-and-bubbles). |
 | Unlock app icons | Every icon in Messenger's App icon setting becomes selectable without a subscription. |
-| Square profile pictures | Profile pictures show as squares instead of circles. Turn on **Round the corners** for rounded squares. Restart Messenger after a change. |
+| Square profile pictures | Profile pictures show as squares instead of circles, and their story rings follow the square. Turn on **Round the corners** for rounded squares. Restart Messenger after a change. |
 | Material You theme | In dark mode on Android 12 and newer, Messenger takes the accent color from your wallpaper. A **Pure black dark mode** switch sits under Appearance. You can paste your own colors there too, as text like `{"name": "Sunset", "accent": "#E1306C", "neutral": "#1A1418"}`, and share them with **Copy theme**. |
 | Use your own font | Replaces Meta's font with your phone's, or with a .ttf or .otf file you pick, with size and position adjustments. Restart Messenger after a change. |
 | Bold and italic text | Adds Bold and Italic to the text selection menu. They change the letters A to Z, accented ones included, and Bold changes digits too. Other alphabets stay as they are. On a Samsung phone, turn them on once under **Manage apps** in that menu. |
@@ -138,7 +141,9 @@ These screenshots come from the code on this page, so they can be a step ahead o
 - **Can't find the settings.** Long-press Messenger's home screen icon and tap **Patch controls**. Not there? You may have hidden the icon shortcuts, so use the **HushMessenger** row in the Menu tab or long-press the Messenger logo at the top of Chats. If no way in shows up at all, refresh the source and patch again.
 - **Switches do nothing.** The settings live inside the patched Messenger, and refreshing a source only downloads patches. Patch and install again. The Meta AI tab and the old emoji drawer only change after **Restart Messenger**. Inbox options wait for the next chat list Messenger builds, and a restart applies them right away.
 - **Gallery won't return a selection.** Try it again, then open **App > Report a problem**. The report includes the gallery result category without file paths. Without a compatible picker or Hush's picker screen, the gallery button uses Messenger's own picker.
+- **Videos are missing from Messenger's picker.** On Android 14 and newer, check Messenger's **Photos and videos** permission in Android's settings. With "Allow limited access", Messenger's picker shows only the items you chose and says "No media found" for the rest. Pick "Allow all", or turn on `Open your gallery app` and choose from your phone's gallery instead. Messenger's album list has no Videos album either way. Videos sit under All photos and in their folders.
 - **The source shows an old version or misses a patch.** Refresh it and check that it shows the version of the [latest release](https://github.com/SysAdminDoc/HushMessenger/releases/latest). A local source needs the new `.mpp` added by hand.
+- **The card says "Key changed".** Manager 2.3 and newer remembers the key that signs this source's bundles and puts that badge up when a new bundle was signed with another key, or not signed at all. Tapping the card shows the key it found. This project's is `4d8d c2b3 fbcd 3ab6`. A different one means the bundle came from somewhere else, such as a fork, a mirror or a build that merged several patch sets, so don't tap Trust. Remove that source and add `github.com/SysAdminDoc/HushMessenger` again. If this project's key ever has to change, the release notes will say so first.
 - **APK rejected.** Use an unmodified supported Messenger build whose version code is in the [supported builds](#supported-messenger-builds). The error names the builds it checked. When the log says "This Messenger build (version code N) isn't supported yet", that's the whole problem, and the patch Manager names above it (often **Allow chat bubbles**) didn't fail on its own.
 - **Android won't install over stock Messenger.** A re-signed APK can't replace Meta's signed copy. Back up first, since going from one to the other means uninstalling. Later updates of your patched copy need the same key.
 - **`signatures do not match` even though you uninstalled Messenger.** Every user on a phone shares one copy of an app, so Messenger is probably still installed somewhere else: Samsung's Secure Folder, a work profile or a second user. Look there before changing anything, and back up that copy's chats if you decide to remove it. **Clone install under another package name** gets around it without touching that copy. The [install check](#verify-a-download) lists the signer it finds.
@@ -206,6 +211,12 @@ ssh-keygen -Y verify -f release_signers -I SysAdminDoc -n hushmessenger-release 
 ```
 
 An untouched file prints `Good "hushmessenger-release" signature for SysAdminDoc`. The private key lives only on my PC and never on GitHub, so a good signature still means something if the GitHub account is ever taken over. If the key ever changes, the changelog will say so and why.
+
+Releases after v0.27.0 also carry a signature inside the `.mpp` itself, and Morphe Manager 2.3 or newer checks it before loading the bundle. Manager remembers the key the first time it sees this source and refuses a later bundle signed with a different key, or not signed at all. It shows the key as `4d8d c2b3 fbcd 3ab6`. The public half is in [`morphe-signing.pub`](morphe-signing.pub), and from a copy of this repository any Python 3.8 or newer can check a download by hand:
+
+```text
+python scripts/bundle_signature.py verify --public morphe-signing.pub path/to/the-bundle.mpp
+```
 
 Before you install a patched APK, `scripts/check_install.py` can compare its signer with what's on the phone and catch a version downgrade without changing anything. It needs Python 3.11 or newer, JDK 21, Android Build Tools and an authorized ADB connection. Exit `0` means the certificate, downgrade and native-library checks passed.
 

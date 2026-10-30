@@ -375,6 +375,7 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     found.getValue(EMOJI_SEARCH).addAll(findEmojiSearch(classes))
     found.getValue(TAB_BADGES).addAll(findTabBadges(classes))
     found.getValue(FACEBOOK_BADGE).addAll(findFacebookBadge(classes))
+    found.getValue(FACEBOOK_PROFILE_HEADER).addAll(findProfileHeader(classes))
     found.getValue(TAB_CONFIG).addAll(findTabConfig(classes))
     found.getValue(AI_MENTIONS).addAll(findAiMentions(classes))
     found.getValue(AI_COMMANDS).addAll(findAiCommands(classes))
@@ -385,6 +386,8 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     found.getValue(XHE_AUDIO).addAll(findXheAudio(classes))
     found.getValue(DISAPPEARING_SWIPE).addAll(findDisappearingSwipe(classes))
     found.getValue(RECENT_MEDIA).addAll(findRecentMedia(classes))
+    found.getValue(INSTANTS_BUTTON).addAll(findInstantsButton(classes))
+    found.getValue(SAVE_VOICE).addAll(findSaveVoice(classes))
     found.getValue(ANALYTICS_UPLOADS).addAll(findAnalyticsUploads(classes) + findBoundUploadTasks(classes) +
         findXAnalyticsUploadTimers(classes) + findInProcessUploadStarts(classes))
     found.getValue(ATTRIBUTION_UPLOADS).addAll(findAttributionUploads(classes))
@@ -397,11 +400,13 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     found.getValue(STORY_HOLD).addAll(findStoryHold(classes))
     found.getValue(SHARE_STORY).addAll(findShareStory(classes))
     found.getValue(AVATAR_SHAPE).addAll(findAvatarShape(classes))
+    found.getValue(STORY_RING).addAll(findStoryRing(classes))
     found.getValue(QUIET_CALL_RING).addAll(findQuietCallRing(classes))
     found.getValue(QUIET_CALL_NOTIFICATION).addAll(findQuietCallNotification(classes))
     found.getValue(TEXT_STYLE).addAll(findTextStyleField(classes))
     found.getValue(MESSAGE_LOG).addAll(findMessageLogHook(classes))
     found.getValue(AUTO_REPLY).addAll(findMessageLogHook(classes))
+    found.getValue(UNSENT_RECALL).addAll(findUnsentRecall(classes))
     autoReplyPictureRecipe = resolveAutoReplyPictureRecipe(classes)
     messageLogContract = resolveMessageLogContract(classes)
     readReceiptThreadFields = resolveReadReceiptThreadFields(classes)
@@ -410,6 +415,7 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     found.getValue(MARK_READ_CLICK).addAll(markReadClick)
     found.getValue(SYSTEM_CAMERA).addAll(findSystemCamera(classes))
     found.getValue(EXTERNAL_GALLERY).addAll(findExternalGallery(classes))
+    found.getValue(GALLERY_TO_CHAT).addAll(findGalleryToChat(classes))
     for ((hook, methods) in findCustomFont(classes)) found.getValue(hook).addAll(methods)
     return found
 }
