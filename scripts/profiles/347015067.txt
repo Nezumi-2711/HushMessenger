@@ -130,6 +130,7 @@ hook hide_read_receipts LX/4mA;->A00(Lcom/facebook/auth/usersession/FbUserSessio
 hook inbox_promotions LX/25z;->A0J()Z
 hook inbox_promotions LX/25z;->A0K()Z
 hook instants_button LX/1mx;->A0D(LX/1mx;)V
+hook instants_button LX/ZnZ;->A0X(LX/ZnZ;)V
 hook keep_unsent LX/MRd;->A02(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/util/Map;)V
 hook mark_read_action LX/HYn;->A0V()Z
 hook mark_read_action LX/Jlk;->A0F()Z

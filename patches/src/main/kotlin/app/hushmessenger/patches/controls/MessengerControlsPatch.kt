@@ -415,7 +415,7 @@ val hideInboxPromotionsPatch = controlPatch("inbox_promotions", "Hide inbox prom
 val hideStoriesPatch = controlPatch("stories", "Hide stories and notes", "Hides the row of stories and notes above your chats.", "Inbox")
 @Suppress("unused")
 val hideInstantsButtonPatch = controlPatch("instants_button", "Hide the Instants button",
-    "Hides the + button that slides in at the right edge of your chat list and opens Instants.", "Inbox")
+    "Hides the + button that slides in at the right edge of your chat list and the one under your chat heads. Both open Instants.", "Inbox")
 @Suppress("unused")
 val hideSubtabsPatch = controlPatch("subtabs", "Hide inbox tabs", "Hides the All, Unread and Groups tabs above your chats.", "Inbox")
 @Suppress("unused")

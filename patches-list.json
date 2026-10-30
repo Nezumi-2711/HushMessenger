@@ -1860,7 +1860,7 @@
         },
         {
             "name": "Hide the Instants button",
-            "description": "Hides the + button that slides in at the right edge of your chat list and opens Instants. Starts off. Turn it on in HushMessenger settings > Controls.",
+            "description": "Hides the + button that slides in at the right edge of your chat list and the one under your chat heads. Both open Instants. Starts off. Turn it on in HushMessenger settings > Controls.",
             "default": true,
             "category": "Inbox",
             "dependencies": [

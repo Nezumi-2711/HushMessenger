@@ -378,7 +378,7 @@ final class SettingsTextZhTw {
         {"stories.title", "隱藏限時動態與便利貼"},
         {"stories.description", "隱藏聊天清單上方的限時動態與便利貼列。"},
         {"instants_button.title", "隱藏 Instants 按鈕"},
-        {"instants_button.description", "隱藏從聊天清單右側邊緣滑入並開啟 Instants 的 + 按鈕。"},
+        {"instants_button.description", "隱藏從聊天清單右側邊緣滑入的 + 按鈕，以及聊天大頭貼下方的按鈕。兩者都會開啟 Instants。"},
         {"subtabs.title", "隱藏收件匣分頁"},
         {"subtabs.description", "隱藏聊天清單上方的「全部」、「未讀」與「群組」分頁。"},
         {"mark_read_action.title", "隱藏「標示為已讀」"},

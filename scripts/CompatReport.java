@@ -4195,10 +4195,14 @@ public class CompatReport {
     static final String CORNER_PEEK_ATTACH = "qs_corner_peek_attach";
     static final String CORNER_PEEK_ATTACHED = "qs_corner_peek_attached";
 
+    static final String CHAT_HEADS_FULL_VIEW = "Lcom/facebook/messaging/chatheads/view/stacks/ChatHeadsFullView;";
+
     /**
      * instants_button: the chat list's static void attach step, handed the fragment it's declared on, that inflates the
      * Instants button (Messenger's "corner peek") and logs qs_corner_peek_attach and qs_corner_peek_attached. The layout
-     * pass, scroll listener and resume coroutine that call it log neither. Mirrors InstantsButton.kt.
+     * pass, scroll listener and resume coroutine that call it log neither. Beside it, the chat-head controller's static
+     * void step, handed the controller, that reads the stack's ChatHeadsFullView, adds the Instants button under the
+     * heads and logs it as "quicksnap". Mirrors InstantsButton.kt.
      */
     static List<Method> instantsButtonAttaches(List<ClassDef> classes) {
         var found = new ArrayList<Method>();
@@ -4206,13 +4210,16 @@ public class CompatReport {
             if (method.getImplementation() == null || !AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
                 !"V".equals(method.getReturnType()) || method.getParameterTypes().size() != 1 ||
                 !cls.getType().equals(method.getParameterTypes().get(0).toString())) continue;
-            boolean attach = false, attached = false;
+            boolean attach = false, attached = false, quicksnap = false, fullView = false;
             for (var i : method.getImplementation().getInstructions()) {
-                if (!(i instanceof ReferenceInstruction ri) || !(ri.getReference() instanceof StringReference sr)) continue;
+                if (!(i instanceof ReferenceInstruction ri)) continue;
+                if (ri.getReference() instanceof FieldReference fr && CHAT_HEADS_FULL_VIEW.equals(fr.getType())) fullView = true;
+                if (!(ri.getReference() instanceof StringReference sr)) continue;
                 if (CORNER_PEEK_ATTACH.equals(sr.getString())) attach = true;
                 if (CORNER_PEEK_ATTACHED.equals(sr.getString())) attached = true;
+                if ("quicksnap".equals(sr.getString())) quicksnap = true;
             }
-            if (attach && attached) found.add(method);
+            if ((attach && attached) || (quicksnap && fullView)) found.add(method);
         }
         return found;
     }
