@@ -207,6 +207,12 @@ ssh-keygen -Y verify -f release_signers -I SysAdminDoc -n hushmessenger-release 
 
 An untouched file prints `Good "hushmessenger-release" signature for SysAdminDoc`. The private key lives only on my PC and never on GitHub, so a good signature still means something if the GitHub account is ever taken over. If the key ever changes, the changelog will say so and why.
 
+Releases after v0.27.0 also carry a signature inside the `.mpp` itself, and Morphe Manager 2.3 or newer checks it before loading the bundle. Manager remembers the key the first time it sees this source and refuses a later bundle signed with a different key, or not signed at all. It shows the key as `4d8d c2b3 fbcd 3ab6`. The public half is in [`morphe-signing.pub`](morphe-signing.pub), and from a copy of this repository any Python 3.8 or newer can check a download by hand:
+
+```text
+python scripts/bundle_signature.py verify --public morphe-signing.pub path/to/the-bundle.mpp
+```
+
 Before you install a patched APK, `scripts/check_install.py` can compare its signer with what's on the phone and catch a version downgrade without changing anything. It needs Python 3.11 or newer, JDK 21, Android Build Tools and an authorized ADB connection. Exit `0` means the certificate, downgrade and native-library checks passed.
 
 ```powershell
