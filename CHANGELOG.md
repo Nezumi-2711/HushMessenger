@@ -15,6 +15,7 @@
 - `Hide inbox tabs` now says what it hides on 585: the All, Unread and Groups tabs above your chats. The old text named Home and Channels tabs Messenger doesn't show anymore. Checked on 585, where On hides the tabs and Off or Pause brings them back.
 - With `Open your gallery app`, a photo or video you pick in Google Photos that's already saved on your phone now reaches Messenger as the phone's own copy, which Messenger reads with its own photo and video access. Before, the upload had to go through Google Photos' permission. Items that only live in the cloud, and anything Messenger can't open itself, go through as picked. Refs #103.
 - Opening a new issue on GitHub now offers a bug report form and a feature request form. The bug form asks for your versions, how you got your patched Messenger (Morphe Manager, Morphe Desktop, morphe-cli or a prebuilt APK), the phone and where in Messenger it happened, so a report can be looked into without a round of questions first. **App > Report a problem** still opens a blank issue with those facts already filled in.
+- The README's Help section explains why videos can go missing from Messenger's own picker on Android 14 and newer: with Messenger's photo access set to "Allow limited access" the picker shows only the items you chose. "Allow all" or `Open your gallery app` brings them back. Refs #114.
 
 ### Checks
 
