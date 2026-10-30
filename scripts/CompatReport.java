@@ -5121,7 +5121,8 @@ public class CompatReport {
      * quiet_call_ring: the app's only method naming "Maybe start ringing", an instance run()V that also names
      * ringtone_disabled and notifications_blocked once each. The flag the log entry pairs with ringtone_disabled has
      * exactly one if-nez before "Maybe start ringing" that lands after it and at or before that log, and nothing jumps
-     * to the instruction after that branch. Mirrors QuietCalls.kt.
+     * to the instruction after that branch. Ahead of that branch sits the call's one chat lookup, an invoke-static/range
+     * (ThreadKey, ?, ImmutableList, String, long, boolean)V nothing jumps to. Mirrors QuietCalls.kt.
      */
     static List<Method> quietCallRing(List<ClassDef> classes) {
         var deciders = new ArrayList<Method>();
@@ -5142,7 +5143,20 @@ public class CompatReport {
             if (target > ring && target <= logged) branches.add(i);
         }
         if (branches.size() != 1 || mediaTargets(decider).contains(branches.get(0) + 1)) return List.of();
+        var lookups = new ArrayList<Integer>();
+        for (int i = 0; i < code.size(); i++) if (isCallChatLookup(code.get(i))) lookups.add(i);
+        if (lookups.size() != 1 || lookups.get(0) > branches.get(0) || mediaTargets(decider).contains(lookups.get(0))) return List.of();
         return List.of(decider);
+    }
+
+    static boolean isCallChatLookup(Instruction i) {
+        if (i.getOpcode() != Opcode.INVOKE_STATIC_RANGE || !(i instanceof ReferenceInstruction ri) ||
+            !(ri.getReference() instanceof MethodReference target) || !"V".equals(target.getReturnType())) return false;
+        var types = new ArrayList<String>();
+        for (var t : target.getParameterTypes()) types.add(t.toString());
+        return types.size() == 6 && "Lcom/facebook/messaging/model/threadkey/ThreadKey;".equals(types.get(0)) &&
+            "Lcom/google/common/collect/ImmutableList;".equals(types.get(2)) && "Ljava/lang/String;".equals(types.get(3)) &&
+            "J".equals(types.get(4)) && "Z".equals(types.get(5));
     }
 
     /**

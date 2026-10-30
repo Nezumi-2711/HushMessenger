@@ -178,6 +178,9 @@ final class SettingsText {
         ENGLISH.put("facebook_keep_profile_help", "Leaves the Profile button on a chat's details page and the View profile button at the top of a new chat, so you can still open the person's Facebook profile. The other Facebook shortcuts stay hidden.");
         ENGLISH.put("avatar_shape_rounded", "Round the corners");
         ENGLISH.put("avatar_shape_rounded_help", "Gives the squares rounded corners instead of sharp ones.");
+        ENGLISH.put("quiet_calls_chosen", "Only chosen chats");
+        ENGLISH.put("quiet_calls_chosen_help", "Calls from the chats you turn on below come in quietly. Every other call rings as usual.");
+        ENGLISH.put("quiet_calls_recent_empty", "Chats that call you show up here, newest first.");
         ENGLISH.put("tab_badges_keep_chats", "Keep the Chats badge");
         ENGLISH.put("tab_badges_keep_people", "Keep the People badge");
         ENGLISH.put("tab_badges_keep_notifications", "Keep the Notifications badge");

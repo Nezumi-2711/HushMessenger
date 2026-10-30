@@ -334,6 +334,7 @@ public final class Settings {
         owners.put(KEEP_FACEBOOK_PROFILE, "facebook");
         owners.put(Settings.AVATAR_ROUNDED, Settings.AVATAR_SHAPE);
         for (String keep : KEEP_BADGES.values()) owners.put(keep, TAB_BADGES);
+        owners.put(QuietCalls.CHOSEN_ONLY, QuietCalls.KEY);
         SUB_SWITCHES = Collections.unmodifiableMap(owners);
     }
 
@@ -526,9 +527,10 @@ public final class Settings {
 
     /**
      * Asked when a call starts ringing, before Messenger decides to ring and vibrate, and again for the call's
-     * notification. True takes Messenger's own ringtone-off path and posts the notification without the pop-up.
+     * notification. True takes Messenger's own ringtone-off path and posts the notification without the pop-up. With
+     * Only chosen chats on, only a call from a chosen chat gets true.
      */
-    public static boolean quietIncomingCalls() { return enabled("quiet_calls"); }
+    public static boolean quietIncomingCalls() { return QuietCalls.chosen() && enabled(QuietCalls.KEY); }
 
     /** What Android tells an app that can't see the phone's location about the Wi-Fi network it's on. */
     static final String HIDDEN_WIFI_NAME = "<unknown ssid>";

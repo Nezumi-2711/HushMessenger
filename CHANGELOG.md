@@ -4,6 +4,7 @@
 
 ### New
 
+- `Quiet incoming calls` has a new **Only chosen chats** switch under it. Turn it on, then pick from the people who called you lately (they're listed newest first), and only their calls come in quietly. Everyone else rings as usual. Refs #117.
 - `Hide the Instants button` is a new switch under Inbox. It hides the + button that slides in at the right edge of your chat list and opens Instants, on every 585 build. Refs #118.
 - HushMessenger's settings speak Vietnamese when your phone is set to it, in any region. Thanks to @hautv404 for the translation. Refs #113.
 - **GmsCore support** is a new patch that starts unselected, for phones running microG-RE instead of Google Play services. Messenger gets its push token from microG-RE and stays signed in. Leave it out on a phone with Play services. Refs #119.
