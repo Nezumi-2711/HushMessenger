@@ -1,7 +1,6 @@
 package app.hushmessenger.extension;
 
 import android.app.Activity;
-import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.ClipboardManager;
