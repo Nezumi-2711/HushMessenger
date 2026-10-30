@@ -59,6 +59,7 @@ public final class SettingsActivity extends Activity {
     private final Map<Switch, CharSequence> switchDescriptions = new java.util.HashMap<>();
     private long documentGeneration;
     private final UpdateCheck updates = new UpdateCheck(this);
+    private final MessageLogSheet messageLog = new MessageLogSheet(this);
     private final SharedPreferences.OnSharedPreferenceChangeListener preferenceListener = (preferences, key) -> {
         if (key == null || "paused".equals(key) || Settings.SUB_SWITCHES.containsKey(key) || Settings.installed.contains(key))
             documentGeneration++;
@@ -97,10 +98,8 @@ public final class SettingsActivity extends Activity {
     private Button undoButton;
     /** What Undo does and when its time runs out. Main thread only, null when nothing can be taken back. */
     private Runnable undoAction, undoExpiry;
-    /** While Undo can still put back the log a Clear took, the log's empty page shows an Undo too. */
-    private boolean messageLogUndo;
     /** Between onStart and onStop. A Clear that finishes while settings are out of sight is final at once. */
-    private boolean started;
+    boolean started;
     static final int UNDO_MILLIS = 10_000;
     static final int SAVE_CHOICES = 7101, READ_CHOICES = 7102, PICK_FONT = 7103, PICK_AUTO_REPLY_PICTURE = 7104;
     /** The names providers give fonts, and plain bytes for one that doesn't know a font. The copy checks what it really is. */
@@ -363,22 +362,14 @@ public final class SettingsActivity extends Activity {
                 autoReplyPictureFor = draft.getInt("picture_for", -1);
                 autoReplyPictureId = draft.getString("picture_for_id");
             }
-            messageLogClearFailed = state.getBoolean("message_log_clear_failed");
+            messageLog.restoreState(state);
             if (draft != null) root.post(() -> showAutoReplies(draft));
-            else if (state.getBoolean("message_log_open")) root.post(this::showMessageLog);
+            else if (state.getBoolean("message_log_open")) root.post(messageLog::showMessageLog);
         }
-        Object retained = getLastNonConfigurationInstance();
-        if (retained instanceof MessageLogClearJob) {
-            messageLogClearJob = (MessageLogClearJob) retained;
-            messageLogClearJob.owner = new java.lang.ref.WeakReference<>(this);
-            if (messageLogClearJob.finished) {
-                messageLogClearFailed = !messageLogClearJob.cleared;
-                root.post(() -> messageLogCleared(messageLogClearJob));
-            }
-        }
+        messageLog.adopt(getLastNonConfigurationInstance(), root);
     }
 
-    @Override public Object onRetainNonConfigurationInstance() { return messageLogClearJob; }
+    @Override public Object onRetainNonConfigurationInstance() { return messageLog.retained(); }
 
     @Override protected void onStart() {
         super.onStart();
@@ -395,7 +386,7 @@ public final class SettingsActivity extends Activity {
     @Override protected void onStop() {
         // Leaving settings makes a Quick setup or a Clear final, one still running included.
         started = false;
-        if (messageLogClearJob != null) messageLogClearJob.undoable = false;
+        messageLog.stop();
         endUndo();
         Settings.preferences.unregisterOnSharedPreferenceChangeListener(preferenceListener);
         super.onStop();
@@ -404,8 +395,7 @@ public final class SettingsActivity extends Activity {
     @Override protected void onDestroy() {
         invalidateAutoReplyImports();
         if (autoReplyDialog != null) autoReplyDialog.dismiss();
-        if (messageLogDialog != null) messageLogDialog.dismiss();
-        if (messageLogClearJob != null && messageLogClearJob.owner.get() == this) messageLogClearJob.owner.clear();
+        messageLog.destroy();
         documentGeneration++;
         if (documentJob != null && documentJob.request == SAVE_CHOICES) {
             // The provider may already have truncated the file. Finish this authorized save,
@@ -631,7 +621,7 @@ public final class SettingsActivity extends Activity {
     }
 
     /** Shows Undo for [what] until it's tapped, its time runs out, something else takes its place or settings close. */
-    private void offerUndo(String what, Runnable action) {
+    void offerUndo(String what, Runnable action) {
         endUndo();
         undoAction = action;
         undoButton.setText(text.get("undo_action", what));
@@ -645,12 +635,9 @@ public final class SettingsActivity extends Activity {
         undoButton.postDelayed(undoExpiry, millis);
     }
 
-    private void undo() {
+    void undo() {
         Runnable action = undoAction;
-        // The log's page shows what the undo brings back once it's written, not an empty page in between.
-        messageLogUndo = false;
-        View sheetUndo = messageLogList == null ? null : messageLogList.findViewWithTag("message_log_undo");
-        if (sheetUndo != null) sheetUndo.setEnabled(false);
+        messageLog.undoTaken();
         endUndo();
         if (action != null) action.run();
     }
@@ -661,10 +648,7 @@ public final class SettingsActivity extends Activity {
         undoExpiry = null;
         undoAction = null;
         if (undoButton != null) undoButton.setVisibility(View.GONE);
-        if (messageLogUndo) {
-            messageLogUndo = false;
-            if (messageLogList != null) loadMessageLog();
-        }
+        messageLog.undoEnded();
     }
 
     /**
@@ -815,7 +799,7 @@ public final class SettingsActivity extends Activity {
                 }
                 else if (OwnFont.KEY.equals(spec[0])) addFontFile(wrapper);
                 else if (AutoReply.KEY.equals(spec[0])) addAutoReplyActions(wrapper);
-                else addMessageLogActions(wrapper);
+                else messageLog.addMessageLogActions(wrapper);
                 wrapper.setPadding(0, 0, 0, ui.dp(12));
                 row = wrapper;
             }
@@ -1818,17 +1802,6 @@ public final class SettingsActivity extends Activity {
         }
     }
 
-    private Dialog messageLogDialog;
-    private LinearLayout messageLogList;
-    private ScrollView messageLogScroll;
-    /** Builds the log's next page of cards, while one is left. */
-    private Runnable messageLogMore;
-    private Button messageLogClear;
-    private long messageLogGeneration;
-    private boolean messageLogClearFailed;
-    /** Opening the log is what put FLAG_SECURE on this screen's window, so closing it takes back only that. */
-    private boolean messageLogSecured;
-    private MessageLogClearJob messageLogClearJob;
     private Dialog autoReplyDialog;
     private LinearLayout autoReplyList;
     private android.widget.CheckBox autoReplyGroups;
@@ -1849,207 +1822,6 @@ public final class SettingsActivity extends Activity {
     private android.net.Uri pendingAutoReplyPicture;
     private int pendingAutoReplyPictureFor = -1;
     private String pendingAutoReplyPictureId;
-
-    /** Two actions under the message-log switch: open the log or wipe it, no confirmation, just a toast. */
-    private void addMessageLogActions(LinearLayout content) {
-        LinearLayout actions = ui.row();
-        Button view = ui.button(text.get("message_log_view"));
-        view.setTag("message_log_view");
-        view.setOnClickListener(clicked -> showMessageLog());
-        actions.addView(view);
-        Button clear = ui.button(text.get("message_log_clear"));
-        clear.setTag("message_log_clear");
-        clear.setOnClickListener(clicked -> clearMessageLog());
-        LinearLayout.LayoutParams clearParams = new LinearLayout.LayoutParams(-2, -2);
-        clearParams.setMarginStart(ui.dp(8));
-        actions.addView(clear, clearParams);
-        ui.add(content, actions, 8);
-    }
-
-    private void showMessageLog() {
-        if (isFinishing() || isDestroyed() || messageLogDialog != null) return;
-        SettingsDialog sheet = new SettingsDialog(this, ui, text, text.get("message_log_title"), text.get("message_log_hint"));
-        Dialog dialog = sheet.dialog;
-        messageLogDialog = dialog;
-        hideFromRecents(dialog);
-        dialog.setOnDismissListener(dismissed -> {
-            showInRecents();
-            if (messageLogDialog == dismissed) {
-                messageLogDialog = null;
-                messageLogList = null;
-                messageLogScroll = null;
-                messageLogMore = null;
-                messageLogClear = null;
-                messageLogGeneration++;
-            }
-        });
-        messageLogList = sheet.body;
-        messageLogScroll = sheet.scroll;
-        // Scrolling near the end builds the next page, and so does a layout that leaves the end in view.
-        sheet.scroll.setOnScrollChangeListener((view, x, y, oldX, oldY) -> moreMessageLogIfNear());
-        sheet.scroll.getViewTreeObserver().addOnGlobalLayoutListener(this::moreMessageLogIfNear);
-        messageLogClear = ui.button(text.get("message_log_clear"));
-        messageLogClear.setTag("message_log_dialog_clear");
-        messageLogClear.setOnClickListener(clicked -> clearMessageLog());
-        sheet.action(messageLogClear);
-        Button close = ui.primaryButton(text.get("message_log_close"));
-        close.setTag("message_log_dialog_close");
-        close.setOnClickListener(clicked -> dialog.dismiss());
-        sheet.action(close);
-        sheet.show();
-        loadMessageLog();
-    }
-
-    /**
-     * The log holds chat text, so the Recents thumbnail leaves it out while it's open. Android 13 and newer can do that on
-     * its own, and screenshots still work. Before that the only way is FLAG_SECURE, on this screen's window and on the
-     * log's own, which blocks screenshots of the log too. Both are set before any message is loaded.
-     */
-    private void hideFromRecents(Dialog dialog) {
-        if (Build.VERSION.SDK_INT >= 33) {
-            setRecentsScreenshotEnabled(false);
-            return;
-        }
-        android.view.Window window = getWindow();
-        messageLogSecured = (window.getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE) == 0;
-        if (messageLogSecured) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        if (dialog.getWindow() != null) dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-    }
-
-    private void showInRecents() {
-        if (Build.VERSION.SDK_INT >= 33) {
-            setRecentsScreenshotEnabled(true);
-            return;
-        }
-        if (!messageLogSecured) return;
-        messageLogSecured = false;
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
-    }
-
-    private void loadMessageLog() {
-        final LinearLayout list = messageLogList;
-        if (list == null) return;
-        final long generation = ++messageLogGeneration;
-        messageLogMore = null;
-        list.removeAllViews();
-        TextView loading = ui.text(text.get("message_log_loading"), 14, ui.muted, false);
-        loading.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        list.addView(loading);
-        if (messageLogClear != null) messageLogClear.setEnabled(false);
-        if (messageLogClearJob != null && !messageLogClearJob.finished) return;
-        new Thread(() -> {
-            final MessageLog.LoadResult result = MessageLog.loadResult();
-            runOnUiThread(() -> {
-                if (messageLogList != list || generation != messageLogGeneration) return;
-                list.removeAllViews();
-                if (messageLogClear != null) messageLogClear.setEnabled(result.failed || result.setAside || messageLogClearFailed || !result.entries.isEmpty());
-                if (result.failed || messageLogClearFailed) {
-                    LinearLayout failure = ui.panel();
-                    failure.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-                    failure.addView(ui.text(text.get(messageLogClearFailed ? "message_log_clear_failed" : "message_log_load_failed"), 18, ui.error, true));
-                    ui.add(failure, ui.text(text.get(messageLogClearFailed ? "message_log_clear_help" : "message_log_load_help"), 14, ui.muted, false), 8);
-                    Button retry = ui.button(text.get(messageLogClearFailed ? "message_log_clear" : "retry"));
-                    retry.setTag("message_log_retry");
-                    retry.setOnClickListener(view -> { if (messageLogClearFailed) clearMessageLog(); else loadMessageLog(); });
-                    ui.add(failure, retry, 16);
-                    ui.add(list, failure, 0);
-                } else {
-                    // The log works; only an older file it couldn't read was moved aside. Say so without calling it a failure.
-                    if (result.setAside) {
-                        LinearLayout notice = ui.panel();
-                        notice.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-                        notice.addView(ui.title(text.get("message_log_set_aside"), 18));
-                        ui.add(notice, ui.text(text.get("message_log_set_aside_help"), 14, ui.muted, false), 8);
-                        Button remove = ui.button(text.get("message_log_set_aside_remove"));
-                        remove.setTag("message_log_set_aside_remove");
-                        remove.setOnClickListener(view -> { view.setEnabled(false); removeSetAsideLog(); });
-                        ui.add(notice, remove, 16);
-                        ui.add(list, notice, 0);
-                    }
-                    if (result.entries.isEmpty()) {
-                        LinearLayout empty = ui.panel();
-                        empty.setPadding(ui.dp(20), ui.dp(20), ui.dp(20), ui.dp(20));
-                        empty.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-                        View accent = new View(this);
-                        accent.setBackground(ui.shape(ui.accent, 0, 2));
-                        empty.addView(accent, new LinearLayout.LayoutParams(ui.dp(36), ui.dp(4)));
-                        TextView emptyLog = ui.title(text.get("message_log_empty"), 18);
-                        emptyLog.setTag("message_log_empty_title");
-                        ui.add(empty, emptyLog, 16);
-                        ui.add(empty, ui.text(text.get(Settings.wouldUse(MessageLog.KEY) ? "message_log_empty_on" : "message_log_empty_off"), 14, ui.muted, false), 8);
-                        // The settings page's Undo sits behind this sheet.
-                        if (messageLogUndo) {
-                            Button undo = ui.button(text.get("undo"));
-                            undo.setTag("message_log_undo");
-                            undo.setOnClickListener(view -> undo());
-                            ui.add(empty, undo, 16);
-                        }
-                        ui.add(list, empty, result.setAside ? 12 : 0);
-                    }
-                }
-                if (!result.entries.isEmpty()) ui.add(list, ui.text(text.get("message_log_retention"), 13, ui.muted, false), list.getChildCount() > 0 ? 12 : 0);
-                showMessageLogPage(list, generation, result.entries, 0);
-            });
-        }, "HushMessageLogView").start();
-    }
-
-    /** Cards built at a time. A full log is 500 of them, and building them all at once froze the screen for two seconds. */
-    static final int MESSAGE_LOG_PAGE = 20;
-
-    private void showMessageLogPage(LinearLayout list, long generation, List<MessageLog.Entry> entries, int from) {
-        messageLogMore = null;
-        if (messageLogList != list || generation != messageLogGeneration) return;
-        int to = Math.min(entries.size(), from + MESSAGE_LOG_PAGE);
-        for (int i = from; i < to; i++) list.addView(messageLogEntry(entries.get(i)));
-        if (to < entries.size()) messageLogMore = () -> showMessageLogPage(list, generation, entries, to);
-    }
-
-    /**
-     * Builds the next page once the log is scrolled within a screen of its end. A list still waiting for its layout is
-     * measured after it, so a page that was just added can't count as the end and pull in the rest. The dismiss listener
-     * runs a message after the sheet goes, so a page asked for just before then checks the sheet is still up.
-     */
-    private void moreMessageLogIfNear() {
-        ScrollView scroll = messageLogScroll;
-        Runnable more = messageLogMore;
-        if (scroll == null || more == null || scroll.getChildCount() == 0) return;
-        View content = scroll.getChildAt(0);
-        int height = scroll.getHeight();
-        if (height == 0 || content.isLayoutRequested()) return;
-        if (content.getBottom() - (scroll.getScrollY() + height) < height) scroll.post(() -> { if (messageLogMore == more && scroll.isAttachedToWindow()) more.run(); });
-    }
-
-    private void removeSetAsideLog() {
-        new Thread(() -> {
-            final boolean removed = MessageLog.removeSetAside();
-            runOnUiThread(() -> {
-                if (isFinishing() || isDestroyed()) return;
-                if (!removed) feedback(text.get("message_log_set_aside_failed"), Toast.LENGTH_LONG);
-                loadMessageLog();
-            });
-        }, "HushMessageLogView").start();
-    }
-
-    private View messageLogEntry(MessageLog.Entry entry) {
-        LinearLayout card = ui.column();
-        card.setBackground(ui.shape(ui.surface, ui.line, 12));
-        card.setPadding(ui.dp(16), ui.dp(16), ui.dp(16), ui.dp(16));
-        // Messenger's chat key means nothing to a reader, so an entry without a name reads as an unknown chat.
-        String who = entry.sender.isEmpty() ? (entry.chat.isEmpty() ? text.get("message_log_unknown_thread") : entry.chat)
-            : entry.chat.isEmpty() ? entry.sender : text.get("message_log_in_group", entry.sender, entry.chat);
-        TextView metadata = ui.text(who + "  ·  " + formatSince(entry.time, "message_log_now", "message_log_ago"), 12, ui.muted, true);
-        metadata.setContentDescription(who + ". " + android.text.format.DateFormat.getDateFormat(this).format(new java.util.Date(entry.time)) + ", " +
-            android.text.format.DateFormat.getTimeFormat(this).format(new java.util.Date(entry.time)));
-        card.addView(metadata);
-        TextView body = ui.text(entry.text == null || entry.text.isEmpty() ? text.get("message_log_no_text") : entry.text, 15, ui.text, false);
-        body.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
-        body.setTextIsSelectable(true);
-        ui.add(card, body, 8);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.topMargin = ui.dp(8);
-        card.setLayoutParams(params);
-        return card;
-    }
 
     /** One button under the auto reply switch that opens the replies. */
     private void addAutoReplyActions(LinearLayout content) {
@@ -2513,75 +2285,7 @@ public final class SettingsActivity extends Activity {
         return draft;
     }
 
-    private void clearMessageLog() {
-        if (messageLogClearJob != null && !messageLogClearJob.finished) return;
-        messageLogClearJob = new MessageLogClearJob(this);
-        loadMessageLog();
-        messageLogClearJob.start();
-    }
-
-    private void messageLogCleared(MessageLogClearJob job) {
-        if (job != messageLogClearJob || isFinishing() || isDestroyed()) return;
-        messageLogClearFailed = !job.cleared;
-        if (!job.notified) {
-            job.notified = true;
-            feedback(text.get(job.cleared ? "message_log_cleared" : "message_log_clear_failed"), Toast.LENGTH_LONG);
-            // Undo gets the only copy of what went, and nothing is offered after a failed or empty clear.
-            List<MessageLog.Entry> removed = job.removed;
-            job.removed = null;
-            if (started && job.undoable && job.cleared && removed != null && !removed.isEmpty()) {
-                offerUndo(text.format("message_log_clear"), () -> restoreMessageLog(removed));
-                messageLogUndo = true;
-            }
-        }
-        if (messageLogList != null) loadMessageLog();
-    }
-
-    /** Undo for Clear log: writes back the copy the clear kept, off the main thread, ahead of anything logged since. */
-    private void restoreMessageLog(List<MessageLog.Entry> removed) {
-        MESSAGE_LOG_WORK.execute(() -> {
-            boolean restored = MessageLog.restore(removed);
-            runOnUiThread(() -> {
-                if (isFinishing() || isDestroyed()) return;
-                feedback(text.get(restored ? "message_log_restored" : "message_log_restore_failed"), Toast.LENGTH_LONG);
-                if (messageLogList != null) loadMessageLog();
-            });
-        });
-    }
-
-    /** Clears and their Undos run one at a time in the order they were tapped, so a Clear right after Undo stays cleared. */
-    private static final java.util.concurrent.ExecutorService MESSAGE_LOG_WORK = java.util.concurrent.Executors.newSingleThreadExecutor(work -> {
-        Thread thread = new Thread(work, "HushMessageLogWork");
-        thread.setDaemon(true);
-        return thread;
-    });
-
-    /** Only the work and its outcome survive rotation. The worker never owns a screen or chat text. */
-    private static final class MessageLogClearJob {
-        java.lang.ref.WeakReference<SettingsActivity> owner;
-        boolean finished, cleared, notified;
-        /** Cleared when settings stop while this runs, so coming back before it ends doesn't bring Undo back. */
-        boolean undoable = true;
-        /** What the clear took, until the page hands it to Undo. */
-        List<MessageLog.Entry> removed;
-
-        MessageLogClearJob(SettingsActivity activity) { owner = new java.lang.ref.WeakReference<>(activity); }
-
-        void start() {
-            MESSAGE_LOG_WORK.execute(() -> {
-                MessageLog.Cleared result = MessageLog.clearForUndo();
-                new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                    cleared = result.cleared;
-                    removed = result.removed;
-                    finished = true;
-                    SettingsActivity activity = owner.get();
-                    if (activity != null) activity.messageLogCleared(this);
-                });
-            });
-        }
-    }
-
-    private String formatSince(long timestamp, String now, String ago) {
+    String formatSince(long timestamp, String now, String ago) {
         long seconds = (System.currentTimeMillis() - timestamp) / 1000;
         if (seconds < 10) return text.get(now);
         if (seconds < 60) return text.get(ago, text.format("seconds_short", seconds));
@@ -3246,8 +2950,7 @@ public final class SettingsActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle state) {
         Bundle draft = autoReplyDraft();
         if (draft != null) state.putBundle("auto_reply_draft", draft);
-        state.putBoolean("message_log_open", messageLogDialog != null && messageLogDialog.isShowing());
-        state.putBoolean("message_log_clear_failed", messageLogClearFailed);
+        messageLog.saveState(state);
         state.putString("page", page);
         state.putString("query", search.getText().toString());
         state.putInt("selection_start", search.getSelectionStart());
@@ -3297,7 +3000,7 @@ public final class SettingsActivity extends Activity {
     }
 
     /** One toast at a time, built on the app context so no destroyed page is kept alive. */
-    private void feedback(String message, int length) {
+    void feedback(String message, int length) {
         if (toast != null) toast.cancel();
         toast = Toast.makeText(getApplicationContext(), message, length);
         toast.show();
