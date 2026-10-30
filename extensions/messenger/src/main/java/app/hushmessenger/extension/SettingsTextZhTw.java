@@ -91,7 +91,7 @@ final class SettingsTextZhTw {
         {"bubble_conversations", "Android 對話設定"},
         {"bubble_settings_missing", "找不到此畫面。請開啟應用程式資訊，再選擇「通知」。"},
         {"facebook_keep_profile", "保留個人檔案按鈕"},
-        {"facebook_keep_profile_help", "保留聊天室詳細資料頁面中的個人檔案按鈕，讓你仍可開啟對方的 Facebook 個人檔案。其他 Facebook 捷徑仍會隱藏。"},
+        {"facebook_keep_profile_help", "保留聊天室詳細資料頁面中的個人檔案按鈕，以及新聊天室頂端的「查看個人檔案」按鈕，讓你仍可開啟對方的 Facebook 個人檔案。其他 Facebook 捷徑仍會隱藏。"},
         {"avatar_shape_rounded", "圓角"},
         {"avatar_shape_rounded_help", "讓方形大頭貼照的邊角變圓，而不是直角。"},
         {"tab_badges_keep_chats", "保留聊天室標記"},

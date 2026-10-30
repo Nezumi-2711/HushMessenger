@@ -130,6 +130,7 @@ internal val PROFILE_347015062 = ControlProfile(
             "LX/Jm3;->A03()Z", "LX/Jm5;->A01()Z", "LX/Jm6;->A01()Z", "LX/Jm7;->A04()Z", "LX/Jm9;->A06()Z",
             "LX/JmA;->A06()Z", "LX/JmB;->A06()Z", "LX/JmC;->A06()Z",
         ),
+        "facebook_profile_header" to setOf("LX/AXJ;->A0p(LX/1RI;)LX/1IG;"),
         "font_by_name" to setOf("LX/QHk;->A00(Landroid/content/Context;Ljava/lang/String;I)Landroid/graphics/Typeface;"),
         "font_input" to setOf(
             "LX/5QT;->A04(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/graphics/drawable/Drawable;Landroid/text/TextUtils\$TruncateAt;Landroid/text/method/MovementMethod;Landroid/widget/EditText;LX/515;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;[Ljava/lang/String;IIIIIIIIIIIZZZZ)V",
@@ -345,6 +346,7 @@ internal val PROFILE_347014996 = ControlProfile(
             "LX/Jm3;->A03()Z", "LX/Jm5;->A01()Z", "LX/Jm6;->A01()Z", "LX/Jm7;->A04()Z", "LX/Jm9;->A06()Z",
             "LX/JmA;->A06()Z", "LX/JmB;->A06()Z", "LX/JmC;->A06()Z",
         ),
+        "facebook_profile_header" to setOf("LX/AXJ;->A0p(LX/1RI;)LX/1IG;"),
         "font_by_name" to setOf("LX/QHk;->A00(Landroid/content/Context;Ljava/lang/String;I)Landroid/graphics/Typeface;"),
         "font_input" to setOf(
             "LX/5QT;->A04(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/graphics/drawable/Drawable;Landroid/text/TextUtils\$TruncateAt;Landroid/text/method/MovementMethod;Landroid/widget/EditText;LX/515;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;[Ljava/lang/String;IIIIIIIIIIIZZZZ)V",
@@ -560,6 +562,7 @@ internal val PROFILE_347014974 = ControlProfile(
             "LX/Jrf;->A03()Z", "LX/Jrh;->A01()Z", "LX/Jri;->A01()Z", "LX/Jrj;->A04()Z", "LX/Jrl;->A06()Z",
             "LX/Jrm;->A06()Z", "LX/Jrn;->A06()Z", "LX/Jro;->A06()Z",
         ),
+        "facebook_profile_header" to setOf("LX/Abo;->A0r(LX/1SB;)LX/1J8;"),
         "font_by_name" to setOf("LX/NlA;->A00(Landroid/content/Context;Ljava/lang/String;I)Landroid/graphics/Typeface;"),
         "font_input" to setOf(
             "LX/5TE;->A07(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/graphics/drawable/Drawable;Landroid/text/TextUtils\$TruncateAt;Landroid/text/method/MovementMethod;Landroid/widget/EditText;LX/53o;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;[Ljava/lang/String;IIIIIIIIIIIZZZZ)V",
@@ -774,6 +777,7 @@ internal val PROFILE_347014990 = ControlProfile(
             "LX/JQV;->A03()Z", "LX/JQX;->A01()Z", "LX/JQY;->A01()Z", "LX/JQZ;->A04()Z", "LX/JQb;->A06()Z",
             "LX/JQc;->A06()Z", "LX/JQd;->A06()Z", "LX/JQe;->A06()Z",
         ),
+        "facebook_profile_header" to setOf("LX/AUp;->A0r(LX/1Ri;)LX/1Ig;"),
         "font_by_name" to setOf("LX/NHP;->A00(Landroid/content/Context;Ljava/lang/String;I)Landroid/graphics/Typeface;"),
         "font_input" to setOf(
             "LX/5Pr;->A07(Landroid/content/res/ColorStateList;Landroid/content/res/ColorStateList;Landroid/graphics/Typeface;Landroid/graphics/drawable/Drawable;Landroid/text/TextUtils\$TruncateAt;Landroid/text/method/MovementMethod;Landroid/widget/EditText;LX/50T;Ljava/lang/CharSequence;Ljava/lang/CharSequence;Ljava/lang/Integer;Ljava/lang/String;Ljava/util/List;[Ljava/lang/String;IIIIIIIIIIIZZZZ)V",

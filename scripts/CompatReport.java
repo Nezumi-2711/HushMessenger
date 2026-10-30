@@ -172,7 +172,7 @@ public class CompatReport {
         PATCHES.put("Hide inbox tabs", List.of("subtabs"));
         PATCHES.put("Hide Mark as read", List.of("mark_read_action"));
         PATCHES.put("Pin more chats", List.of("pinned_chats"));
-        PATCHES.put("Hide Facebook shortcuts", List.of("facebook", "facebook_profile"));
+        PATCHES.put("Hide Facebook shortcuts", List.of("facebook", "facebook_profile", "facebook_profile_header"));
         PATCHES.put("Hide Meta AI", List.of("ai_menu", "ai_fab", "ai_toolbar", "ai_tab", "ai_muse_tab", "ai_search", "ai_search_chip", "ai_mentions", "ai_commands", "ai_search_hint", "ai_search_screen_hint", "ai_mention_rows", "tab_config"));
         PATCHES.put("Hide Chat Moments", List.of("moments"));
         PATCHES.put("Hide Reels badge", List.of("reels_badge"));
@@ -3738,6 +3738,85 @@ public class CompatReport {
         return found;
     }
 
+    static final String HEADER_ROW = "ThreadHeaderMessageActionRowComponent";
+
+    record HeaderActions(int read, List<FieldReference> checked) {}
+
+    /**
+     * facebook_profile_header: the empty chat header row's render, which names its component, reads its own action list
+     * once and then asks that list for each action it may draw. Null when the shape moved. Mirrors ProfileHeader.kt.
+     */
+    static HeaderActions headerActions(Method method) {
+        if (AccessFlags.STATIC.isSet(method.getAccessFlags()) || method.getParameterTypes().size() != 1) return null;
+        var code = instructions(method);
+        boolean named = false;
+        int read = -1, reads = 0;
+        for (int at = 0; at < code.size(); at++) {
+            var i = code.get(at);
+            if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr && HEADER_ROW.equals(sr.getString())) named = true;
+            if (i.getOpcode() == Opcode.IGET_OBJECT && ((ReferenceInstruction) i).getReference() instanceof FieldReference f &&
+                f.getDefiningClass().equals(method.getDefiningClass()) && "Ljava/util/List;".equals(f.getType())) { read = at; reads++; }
+        }
+        if (!named || reads != 1) return null;
+        int list = ((TwoRegisterInstruction) code.get(read)).getRegisterA();
+        var checked = new ArrayList<FieldReference>();
+        for (int at = read + 2; at < code.size(); at++) {
+            var action = code.get(at - 1);
+            if (writesRegister(action, list)) break;
+            if (!(code.get(at) instanceof FiveRegisterInstruction call) || !(action instanceof ReferenceInstruction ai) ||
+                !(ai.getReference() instanceof FieldReference constant)) continue;
+            if (call.getOpcode() != Opcode.INVOKE_INTERFACE || !"Ljava/util/List;->contains(Ljava/lang/Object;)Z".equals(ref(call)) ||
+                call.getRegisterCount() != 2 || call.getRegisterC() != list || action.getOpcode() != Opcode.SGET_OBJECT ||
+                register(action) != call.getRegisterD() || !constant.getType().equals(constant.getDefiningClass())) continue;
+            checked.add(constant);
+        }
+        return checked.isEmpty() ? null : new HeaderActions(read, checked);
+    }
+
+    /** The name an enum's initializer gives constant: the one string loaded since the previous constant was stored. */
+    static String headerEnumName(ClassDef cls, FieldReference constant) {
+        if (!"Ljava/lang/Enum;".equals(cls.getSuperclass())) return null;
+        var inits = new ArrayList<Method>();
+        for (var method : cls.getMethods()) if ("<clinit>".equals(method.getName())) inits.add(method);
+        if (inits.size() != 1 || inits.get(0).getImplementation() == null) return null;
+        var code = instructions(inits.get(0));
+        int store = -1, matches = 0, previous = -1;
+        for (int at = 0; at < code.size(); at++) {
+            if (code.get(at).getOpcode() != Opcode.SPUT_OBJECT) continue;
+            if (constant.toString().equals(ref(code.get(at)))) { store = at; matches++; }
+            else if (matches == 0) previous = at;
+        }
+        if (matches != 1) return null;
+        var names = new ArrayList<String>();
+        for (int at = previous + 1; at < store; at++)
+            if (code.get(at) instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr) names.add(sr.getString());
+        return names.size() == 1 ? names.get(0) : null;
+    }
+
+    /**
+     * The one header row render that asks its list for VIEW_PROFILE, or none when more than one does or a jump lands
+     * right past its list read.
+     */
+    static List<Method> profileHeaders(List<ClassDef> classes) {
+        var renders = new ArrayList<Map.Entry<Method, HeaderActions>>();
+        var wanted = new HashSet<String>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            var actions = headerActions(method);
+            if (actions == null) continue;
+            renders.add(Map.entry(method, actions));
+            for (var constant : actions.checked()) wanted.add(constant.getDefiningClass());
+        }
+        var enums = new HashMap<String, ClassDef>();
+        for (var cls : classes) if (wanted.contains(cls.getType())) enums.put(cls.getType(), cls);
+        var found = new ArrayList<Map.Entry<Method, HeaderActions>>();
+        for (var render : renders) for (var constant : render.getValue().checked()) {
+            var enumClass = enums.get(constant.getDefiningClass());
+            if (enumClass != null && "VIEW_PROFILE".equals(headerEnumName(enumClass, constant))) { found.add(render); break; }
+        }
+        if (found.size() != 1 || mediaTargets(found.get(0).getKey()).contains(found.get(0).getValue().read() + 1)) return List.of();
+        return List.of(found.get(0).getKey());
+    }
+
     static final String TAB_CONFIG_TRACE = "MessengerTabConfigurationCreator.createTabConfiguration";
     static final Set<String> HIDABLE_TABS = Set.of("PEOPLE", "JEWEL", "AI", "MUSE");
 
@@ -5720,6 +5799,7 @@ public class CompatReport {
         found.get("emoji_search").addAll(emojiSearchWatchers(classes));
         found.get("tab_badges").addAll(tabBadgeDispatchers(classes));
         found.get("facebook_badge").addAll(facebookBadgeChecks(classes));
+        found.get("facebook_profile_header").addAll(profileHeaders(classes));
         found.get("tab_config").addAll(tabConfigurations(classes));
         found.get("ai_mentions").addAll(aiMentionDispatchers(classes));
         found.get("ai_commands").addAll(aiCommandLists(classes));

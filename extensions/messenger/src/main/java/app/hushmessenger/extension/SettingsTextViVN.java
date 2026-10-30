@@ -91,7 +91,7 @@ final class SettingsTextViVN {
         {"bubble_conversations", "Cài đặt hội thoại Android"},
         {"bubble_settings_missing", "Không tìm thấy màn hình này. Vui lòng mở thông tin ứng dụng, sau đó chọn 'Thông báo'."},
         {"facebook_keep_profile", "Giữ lại nút trang cá nhân"},
-        {"facebook_keep_profile_help", "Giữ lại nút trang cá nhân trong trang chi tiết phòng chat, cho phép bạn mở trang cá nhân Facebook của người khác. Các phím tắt Facebook khác vẫn sẽ bị ẩn."},
+        {"facebook_keep_profile_help", "Giữ lại nút trang cá nhân trong trang chi tiết phòng chat và nút Xem trang cá nhân ở đầu một cuộc trò chuyện mới, cho phép bạn mở trang cá nhân Facebook của người khác. Các phím tắt Facebook khác vẫn sẽ bị ẩn."},
         {"avatar_shape_rounded", "Góc bo tròn"},
         {"avatar_shape_rounded_help", "Làm cho các góc của ảnh đại diện hình vuông được bo tròn thay vì góc vuông."},
         {"tab_badges_keep_chats", "Giữ huy hiệu cuộc trò chuyện"},
