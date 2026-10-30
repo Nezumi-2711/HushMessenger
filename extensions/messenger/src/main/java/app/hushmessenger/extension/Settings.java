@@ -164,6 +164,8 @@ public final class Settings {
     }
 
     public static boolean hideStories() { return enabled("stories"); }
+    /** Asked each time the chat list would attach the Instants + button; true leaves it out. */
+    public static boolean hideInstantsButton() { return enabled("instants_button"); }
     public static boolean hideFacebook() { return enabled("facebook"); }
 
     /** Under Hide Facebook shortcuts: leaves the Profile button on a chat's details page while the rest stays hidden. */

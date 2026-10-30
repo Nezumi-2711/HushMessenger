@@ -66,6 +66,7 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Hide growth prompts | Removes the add-people promotion, the notes tip sheets and the "Share your own story" card after someone's stories. |
 | Hide inbox promotions | Hides promotion banners in the chat list. |
 | Hide stories and notes | Hides the row of stories and notes above your chats. |
+| Hide the Instants button | Hides the + button that slides in at the right edge of your chat list and opens Instants. |
 | Hide inbox tabs | Hides the All, Unread and Groups tabs above your chats. |
 | Hide Mark as read | Takes Mark as read out of the menu you get when you press and hold a chat, so you can't mark one read by accident. Mark as unread stays. |
 | Pin more chats | Raises Messenger's limit of three pinned chats to 20, so more of them can stay at the top of your chat list. Experimental, since Messenger's servers can still stop you sooner. |

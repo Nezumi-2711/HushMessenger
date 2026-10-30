@@ -198,6 +198,7 @@ public class CompatReport {
         PATCHES.put("Fix videos that won't send", List.of("xhe_audio", "xhe_transcode"));
         PATCHES.put("Ignore the swipe up for disappearing messages", List.of("disappearing_swipe"));
         PATCHES.put("Hide the recent photo card", List.of("recent_media"));
+        PATCHES.put("Hide the Instants button", List.of("instants_button"));
         PATCHES.put("Hide Your story when sharing", List.of("share_story"));
         PATCHES.put("Use the phone's camera app", List.of("system_camera"));
         PATCHES.put("Open your gallery app", List.of("external_gallery"));
@@ -4191,6 +4192,31 @@ public class CompatReport {
         return found;
     }
 
+    static final String CORNER_PEEK_ATTACH = "qs_corner_peek_attach";
+    static final String CORNER_PEEK_ATTACHED = "qs_corner_peek_attached";
+
+    /**
+     * instants_button: the chat list's static void attach step, handed the fragment it's declared on, that inflates the
+     * Instants button (Messenger's "corner peek") and logs qs_corner_peek_attach and qs_corner_peek_attached. The layout
+     * pass, scroll listener and resume coroutine that call it log neither. Mirrors InstantsButton.kt.
+     */
+    static List<Method> instantsButtonAttaches(List<ClassDef> classes) {
+        var found = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (method.getImplementation() == null || !AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+                !"V".equals(method.getReturnType()) || method.getParameterTypes().size() != 1 ||
+                !cls.getType().equals(method.getParameterTypes().get(0).toString())) continue;
+            boolean attach = false, attached = false;
+            for (var i : method.getImplementation().getInstructions()) {
+                if (!(i instanceof ReferenceInstruction ri) || !(ri.getReference() instanceof StringReference sr)) continue;
+                if (CORNER_PEEK_ATTACH.equals(sr.getString())) attach = true;
+                if (CORNER_PEEK_ATTACHED.equals(sr.getString())) attached = true;
+            }
+            if (attach && attached) found.add(method);
+        }
+        return found;
+    }
+
     static final String SEND_MESSAGE_EVENT = "Lcom/facebook/xapp/messaging/composer/send/event/SendMessageEvent;";
 
     /**
@@ -5810,6 +5836,7 @@ public class CompatReport {
         found.get("xhe_audio").addAll(shareCopies(classes));
         found.get("disappearing_swipe").addAll(disappearingSwipeStarts(classes));
         found.get("recent_media").addAll(recentMediaDetectors(classes));
+        found.get("instants_button").addAll(instantsButtonAttaches(classes));
         found.get("hide_read_receipts").addAll(chatSeenBroadcasts(classes));
         found.get("reply_read").addAll(replyReadDispatches(classes));
         found.get("analytics_uploads").addAll(analyticsUploads(classes));
@@ -6392,7 +6419,7 @@ public class CompatReport {
      */
     static final Set<String> NEEDS_A_LOCAL = Set.of("ad_events", "ai_commands", "ai_fab", "ai_mention_rows", "ai_menu", "ai_search",
         "ai_search_chip", "allow_screenshot", "analytics_uploads", "app_icons", "attribution_uploads", "bubbles", "delta_unsent",
-        "disappearing_swipe", "external_gallery", "facebook", "facebook_profile", "font_by_name", "font_repository", "growth_notes", "growth_story_card", "keep_unsent",
+        "disappearing_swipe", "external_gallery", "facebook", "facebook_profile", "font_by_name", "font_repository", "growth_notes", "growth_story_card", "instants_button", "keep_unsent",
         "mqtt_telemetry", "nearby_scans", "original_photo", "people_story", "phone_id_sync", "people_tab", "recent_media", "stories", "system_camera",
         "tab_badges", "typing", "unsent_indicator");
 

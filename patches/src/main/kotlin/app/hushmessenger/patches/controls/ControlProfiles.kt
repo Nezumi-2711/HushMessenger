@@ -146,6 +146,7 @@ internal val PROFILE_347015062 = ControlProfile(
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A15(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
         "hide_read_receipts" to setOf("LX/4mA;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/4mA;Ljava/lang/String;)V"),
         "inbox_promotions" to setOf("LX/25z;->A0J()Z", "LX/25z;->A0K()Z"),
+        "instants_button" to setOf("LX/1mx;->A0D(LX/1mx;)V"),
         "keep_unsent" to setOf("LX/MRd;->A02(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/util/Map;)V"),
         "mark_read_action" to setOf("LX/HYn;->A0V()Z", "LX/Jlk;->A0F()Z"),
         "mark_read_bar" to setOf(
@@ -362,6 +363,7 @@ internal val PROFILE_347014996 = ControlProfile(
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A15(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
         "hide_read_receipts" to setOf("LX/4mA;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/4mA;Ljava/lang/String;)V"),
         "inbox_promotions" to setOf("LX/25z;->A0J()Z", "LX/25z;->A0K()Z"),
+        "instants_button" to setOf("LX/1mx;->A0D(LX/1mx;)V"),
         "keep_unsent" to setOf("LX/MRd;->A02(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/util/Map;)V"),
         "mark_read_action" to setOf("LX/HYn;->A0V()Z", "LX/Jlk;->A0F()Z"),
         "mark_read_bar" to setOf(
@@ -578,6 +580,7 @@ internal val PROFILE_347014974 = ControlProfile(
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A15(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
         "hide_read_receipts" to setOf("LX/4ot;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/4ot;Ljava/lang/String;)V"),
         "inbox_promotions" to setOf("LX/27L;->A0J()Z", "LX/27L;->A0K()Z"),
+        "instants_button" to setOf("LX/1oE;->A0D(LX/1oE;)V"),
         "keep_unsent" to setOf("LX/MWa;->A02(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/util/Map;)V"),
         "mark_read_action" to setOf("LX/HiF;->A0V()Z", "LX/JrM;->A0F()Z"),
         "mark_read_bar" to setOf(
@@ -793,6 +796,7 @@ internal val PROFILE_347014990 = ControlProfile(
         "growth_story_card" to setOf("Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;->A13(Lcom/facebook/messaging/montage/viewer/MontageViewerFragment;)Z"),
         "hide_read_receipts" to setOf("LX/4lY;->A00(Lcom/facebook/auth/usersession/FbUserSession;LX/4lY;Ljava/lang/String;)V"),
         "inbox_promotions" to setOf("LX/26P;->A0J()Z", "LX/26P;->A0K()Z"),
+        "instants_button" to setOf("LX/1nN;->A0D(LX/1nN;)V"),
         "keep_unsent" to setOf("LX/Rpw;->A02(Landroid/content/Intent;Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/util/Map;)V"),
         "mark_read_action" to setOf("LX/Hbf;->A0V()Z", "LX/JQC;->A0F()Z"),
         "mark_read_bar" to setOf(
