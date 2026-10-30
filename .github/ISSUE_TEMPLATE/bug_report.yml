@@ -39,6 +39,12 @@ body:
       label: Which version of it, or where did the APK come from?
       description: Manager and Desktop show their version in their own settings. For a prebuilt APK, link the page you downloaded it from.
       placeholder: Morphe Manager 2.2.0
+  - type: input
+    id: patches_source
+    attributes:
+      label: Which patches source did you add?
+      description: In Morphe Manager, open **Sources** and copy the address on the HushMessenger card. Other sources carry HushMessenger's patches too, built from other code, so this tells them apart. Skip it if you used a prebuilt APK.
+      placeholder: github.com/SysAdminDoc/HushMessenger
   - type: dropdown
     id: install_method
     attributes:
