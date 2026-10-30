@@ -267,6 +267,12 @@ function Test-WalkRestorePrompt([AllowEmptyString()][string]$Xml) {
     return [string]$Xml -match $prompt.Pattern
 }
 
+function Test-WalkKeyboardShown([string[]]$Lines) {
+    # Whether dumpsys input_method shows the keyboard up. A chat with no messages focuses its composer, and
+    # uiautomator can't dump a screen whose cursor blinks over an open keyboard.
+    return ($Lines -join "`n") -cmatch 'mInputShown=true'
+}
+
 function Get-WalkExitCode([string]$Result) {
     switch -CaseSensitive ($Result) { 'PASS' { return 0 } 'PARTIAL' { return 2 } default { return 1 } }
 }
@@ -545,12 +551,16 @@ function Invoke-WalkApp {
             if ($pulled.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $local -PathType Leaf)) { return '' }
             return [IO.File]::ReadAllText($local)
         }
-        function Invoke-WalkTap([string]$Text) {
-            # Never under the keyboard: close it first, then read the screen again.
-            if (((Invoke-WalkAdb @('shell', 'dumpsys', 'input_method')).Stdout -join "`n") -match 'mInputShown=true') {
+        function Close-WalkKeyboard {
+            # Back only while the keyboard is up, where it closes the keyboard and leaves the screen alone.
+            if (Test-WalkKeyboardShown @((Invoke-WalkAdb @('shell', 'dumpsys', 'input_method')).Stdout)) {
                 [void](Invoke-WalkAdb @('shell', 'input', 'keyevent', 'KEYCODE_BACK'))
                 Start-Sleep -Seconds 1
             }
+        }
+        function Invoke-WalkTap([string]$Text) {
+            # Never under the keyboard: close it first, then read the screen again.
+            Close-WalkKeyboard
             $center = Find-WalkNodeCenter -Xml (Read-WalkScreen '') -Text $Text
             if ($null -eq $center) { return $false }
             [void](Invoke-WalkAdb @('shell', 'input', 'tap', [string]$center[0], [string]$center[1]))
@@ -653,6 +663,7 @@ function Invoke-WalkApp {
             $name = $definition.Id -replace '[^\w.-]', '_'
             $xmlFile = Join-Path $evidenceDir "$name.xml"
             $pngFile = Join-Path $evidenceDir "$name.png"
+            Close-WalkKeyboard
             $xml = Read-WalkScreen $xmlFile
             [void](Invoke-WalkAdb @('shell', 'rm', '-f', $shotOnDevice))
             [void](Invoke-WalkAdb @('shell', 'screencap', '-p', $shotOnDevice))

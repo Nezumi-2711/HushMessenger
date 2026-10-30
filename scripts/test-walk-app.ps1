@@ -236,6 +236,11 @@ try {
     Assert-WalkApp ($close[0] -eq 78 -and $close[1] -eq 154) "Close should be found by its description ($($close -join ','))."
     Assert-WalkApp ($null -eq (Find-WalkNodeCenter -Xml $restorePrompt -Text 'Close')) 'Close has no text, so a text lookup should not find it.'
 
+    # The keyboard an empty chat's composer opens, as the API 32 emulator's dumpsys input_method showed it.
+    Assert-WalkApp (Test-WalkKeyboardShown @('  mServedView=com.facebook.orca...', '  mInputShown=true mShowRequested=true')) 'An open keyboard should read as shown.'
+    Assert-WalkApp (-not (Test-WalkKeyboardShown @('  mInputShown=false'))) 'A closed keyboard should not read as shown.'
+    Assert-WalkApp (-not (Test-WalkKeyboardShown @())) 'No dumpsys output should not read as a keyboard.'
+
     # The walk's own judgment of a step, the same one publish makes again.
     $controls = Get-WalkStepDefinition 'settings-controls'
     Assert-WalkApp ($null -eq (Test-WalkStepScreen -Definition $controls -Activity 'com.facebook.orca/app.hushmessenger.extension.SettingsActivity' -Xml (Get-WalkFixtureXml 'settings-controls'))) `
