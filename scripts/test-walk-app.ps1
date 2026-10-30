@@ -241,6 +241,14 @@ try {
     Assert-WalkApp (-not (Test-WalkKeyboardShown @('  mInputShown=false'))) 'A closed keyboard should not read as shown.'
     Assert-WalkApp (-not (Test-WalkKeyboardShown @())) 'No dumpsys output should not read as a keyboard.'
 
+    # The empty chat's keyboard came up after the walk checked for it, so the first dump failed (emulator, 2026-10-29).
+    $settle = @{ Closes = 0; Reads = 0 }
+    $late = Read-WalkSettledScreen -CloseKeyboard { $settle.Closes++ } -ReadScreen { $settle.Reads++; if ($settle.Reads -gt 1) { '<hierarchy/>' } else { '' } }
+    Assert-WalkApp ($late -eq '<hierarchy/>' -and $settle.Closes -eq 2) "A failed dump should close the keyboard and dump again ($($settle.Closes) closes)."
+    $settle = @{ Closes = 0; Reads = 0 }
+    $never = Read-WalkSettledScreen -CloseKeyboard { $settle.Closes++ } -ReadScreen { $settle.Reads++; '' }
+    Assert-WalkApp ($never -eq '' -and $settle.Reads -eq 3) "A screen that never dumps should give up after three tries ($($settle.Reads) reads)."
+
     # The walk's own judgment of a step, the same one publish makes again.
     $controls = Get-WalkStepDefinition 'settings-controls'
     Assert-WalkApp ($null -eq (Test-WalkStepScreen -Definition $controls -Activity 'com.facebook.orca/app.hushmessenger.extension.SettingsActivity' -Xml (Get-WalkFixtureXml 'settings-controls'))) `
