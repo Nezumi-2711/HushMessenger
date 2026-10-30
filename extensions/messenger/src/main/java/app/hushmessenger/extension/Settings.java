@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.PathMeasure;
 import android.graphics.RectF;
 import android.graphics.Region;
 import android.net.Uri;
@@ -23,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Runtime switches default to the original Messenger behavior. */
@@ -727,6 +729,70 @@ public final class Settings {
             float corner = Math.min(avatarCornerPx(), Math.min(oval.width(), oval.height()) / 2f);
             canvas.drawRoundRect(oval, corner, corner, paint);
         }
+    }
+
+    /** The story rings Messenger made. The same drawable class also draws the chat's overscroll indicator, which stays. */
+    private static final Set<Object> ringDrawables = Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
+
+    /** Told about each story ring drawable as Messenger makes it, so the arc below knows which arcs are rings. */
+    public static void storyRingMade(Object ring) {
+        if (ring != null) ringDrawables.add(ring);
+    }
+
+    /**
+     * The story ring around a profile picture, which Messenger draws as an arc of the circle around it (a part of one
+     * while it animates). Hide stories and notes leaves it out (#118). Around a square picture it follows the square
+     * instead, from the same angle and as far round (#116).
+     */
+    public static void storyRingArc(Canvas canvas, RectF oval, float start, float sweep, boolean center, Paint paint, Object owner) {
+        boolean ring = !center && ringDrawables.contains(owner);
+        if (ring && hideStories()) return;
+        int shape;
+        try {
+            shape = ring ? avatarShape() : AVATAR_CIRCLE;
+        } catch (RuntimeException error) {
+            hookFailed(AVATAR_SHAPE, "Can't change the profile picture shape", error);
+            shape = AVATAR_CIRCLE;
+        }
+        if (shape == AVATAR_CIRCLE) {
+            canvas.drawArc(oval, start, sweep, center, paint);
+            return;
+        }
+        float corner = shape == AVATAR_SQUARE ? 0f : Math.min(avatarCornerPx(), Math.min(oval.width(), oval.height()) / 2f);
+        canvas.drawPath(ringPath(oval, start, sweep, corner), paint);
+    }
+
+    /**
+     * The square (or rounded square) outline of an arc's box, clockwise from its top middle the way angles run from 270,
+     * cut to the part an arc from start through sweep degrees would cover. Angles map to the same share of the outline.
+     */
+    static Path ringPath(RectF box, float start, float sweep, float corner) {
+        float left = box.left, top = box.top, right = box.right, bottom = box.bottom, r = corner;
+        Path outline = new Path();
+        outline.moveTo(box.centerX(), top);
+        outline.lineTo(right - r, top);
+        if (r > 0) outline.arcTo(new RectF(right - 2 * r, top, right, top + 2 * r), 270, 90, false);
+        outline.lineTo(right, bottom - r);
+        if (r > 0) outline.arcTo(new RectF(right - 2 * r, bottom - 2 * r, right, bottom), 0, 90, false);
+        outline.lineTo(left + r, bottom);
+        if (r > 0) outline.arcTo(new RectF(left, bottom - 2 * r, left + 2 * r, bottom), 90, 90, false);
+        outline.lineTo(left, top + r);
+        if (r > 0) outline.arcTo(new RectF(left, top, left + 2 * r, top + 2 * r), 180, 90, false);
+        outline.close();
+        if (Math.abs(sweep) >= 360f) return outline;
+        if (sweep < 0) {
+            start += sweep;
+            sweep = -sweep;
+        }
+        PathMeasure measure = new PathMeasure(outline, true);
+        float length = measure.getLength();
+        float from = ((start - 270f) % 360f + 360f) % 360f / 360f * length;
+        float to = from + sweep / 360f * length;
+        Path part = new Path();
+        measure.getSegment(from, Math.min(to, length), part, true);
+        // Past the top middle it carries on from where the outline started.
+        if (to > length) measure.getSegment(0f, to - length, part, false);
+        return part;
     }
     /** Messenger's own original-upload check allows 25 MB, so a bigger video keeps its re-encode. */
     static final long ORIGINAL_VIDEO_MAX_BYTES = 25L * 1024 * 1024;

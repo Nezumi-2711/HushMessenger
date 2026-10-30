@@ -185,6 +185,8 @@ hook share_story LX/MHR;->A8Y()V
 hook share_story Lcom/facebook/messaging/sharing/broadcastflow/mutation/loader/plugins/sections/morewaystoshare/hoisted/BroadcastFlowHoistedMoreWaysToShareSectionsLoader;->A01()V
 hook stories LX/1pT;->A00()Z
 hook story_hold LX/K8T;->DjN()V
+hook story_ring LX/2md;->onCreateMountContent(Landroid/content/Context;)Ljava/lang/Object;
+hook story_ring LX/31x;->draw(Landroid/graphics/Canvas;)V
 hook subtabs LX/2Lg;->run()V
 hook suggested_replies LX/7Q1;->A06(LX/7Q1;)Z
 hook suggested_replies LX/7R7;->A05(LX/7R7;)Z

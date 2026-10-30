@@ -168,7 +168,7 @@ public class CompatReport {
         PATCHES.put("Hide joined community chats", List.of("community_inbox"));
         PATCHES.put("Hide growth prompts", List.of("growth", "growth_notes", "growth_story_card"));
         PATCHES.put("Hide inbox promotions", List.of("inbox_promotions"));
-        PATCHES.put("Hide stories and notes", List.of("stories"));
+        PATCHES.put("Hide stories and notes", List.of("stories", "story_ring"));
         PATCHES.put("Hide inbox tabs", List.of("subtabs"));
         PATCHES.put("Hide Mark as read", List.of("mark_read_action"));
         PATCHES.put("Pin more chats", List.of("pinned_chats"));
@@ -218,7 +218,7 @@ public class CompatReport {
         PATCHES.put("Mark as read button", List.of("mark_read_bar", "mark_read_click"));
         PATCHES.put("Keep unsent messages", List.of("keep_unsent", "unsent_indicator", "delta_unsent"));
         PATCHES.put("Unlock app icons", List.of("app_icons"));
-        PATCHES.put("Square profile pictures", List.of("avatar_shape"));
+        PATCHES.put("Square profile pictures", List.of("avatar_shape", "story_ring"));
         PATCHES.put("Use your own font", List.of("font_layout", "font_repository", "font_roboto", "font_by_name", "font_input"));
         PATCHES.put("View stories anonymously", List.of("anonymous_stories"));
         PATCHES.put("Save any story", List.of("save_stories"));
@@ -5227,9 +5227,83 @@ public class CompatReport {
         return ovals > 0;
     }
 
+    static final List<String> RING_COLORS = List.of("#0099FF", "#A033FF", "#FF5280", "#FF7061");
+    static final String RING_DRAW_ARC = "Landroid/graphics/Canvas;->drawArc(Landroid/graphics/RectF;FFZLandroid/graphics/Paint;)V";
+
+    /** Mirrors AvatarShape.kt's paintsRing: some method of the class reads every color of the story ring's gradient. */
+    static boolean paintsRing(ClassDef cls) {
+        for (var method : cls.getMethods()) {
+            if (method.getImplementation() == null) continue;
+            var strings = new HashSet<String>();
+            for (var i : instructions(method)) if (i instanceof ReferenceInstruction r && r.getReference() instanceof StringReference s) strings.add(s.getString());
+            if (strings.containsAll(RING_COLORS)) return true;
+        }
+        return false;
+    }
+
+    /** Mirrors AvatarShape.kt's ringType: onCreateMountContent(Context) that makes one drawable with no arguments and returns it. */
+    static String ringType(Method method) {
+        if (!"onCreateMountContent".equals(method.getName()) || AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+            !"Ljava/lang/Object;".equals(method.getReturnType()) || method.getParameterTypes().size() != 1 ||
+            !"Landroid/content/Context;".contentEquals(method.getParameterTypes().get(0)) || method.getImplementation() == null) return null;
+        var code = instructions(method);
+        if (code.size() != 3 || code.get(0).getOpcode() != Opcode.NEW_INSTANCE || code.get(2).getOpcode() != Opcode.RETURN_OBJECT) return null;
+        if (!(((ReferenceInstruction) code.get(0)).getReference() instanceof TypeReference made)) return null;
+        int ring = register(code.get(0));
+        if (code.get(1).getOpcode() != Opcode.INVOKE_DIRECT || !(made.getType() + "-><init>()V").equals(ref(code.get(1))) ||
+            !reads(code.get(1)).equals(List.of(ring)) || register(code.get(2)) != ring || ring > 15) return null;
+        return made.getType();
+    }
+
+    /** Mirrors AvatarShape.kt's ringArc: draw(Canvas) with one drawArc range whose next register is this, never written. */
+    static boolean ringArc(Method method) {
+        if (!"draw".equals(method.getName()) || AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"V".equals(method.getReturnType()) ||
+            method.getParameterTypes().size() != 1 || !"Landroid/graphics/Canvas;".contentEquals(method.getParameterTypes().get(0)) ||
+            method.getImplementation() == null) return false;
+        int self = parameterSlot(method, 0);
+        RegisterRangeInstruction arc = null;
+        int arcs = 0;
+        for (var i : instructions(method)) {
+            if (RING_DRAW_ARC.equals(ref(i))) { arcs++; arc = i instanceof RegisterRangeInstruction range ? range : null; }
+            int written = register(i);
+            if (written >= 0 && i.getOpcode().setsRegister() && (written == self || (i.getOpcode().setsWideRegister() && written + 1 == self))) return false;
+        }
+        return arcs == 1 && arc != null && arc.getOpcode() == Opcode.INVOKE_VIRTUAL_RANGE && arc.getRegisterCount() == 6 && arc.getStartRegister() + 6 == self;
+    }
+
+    /**
+     * story_ring, shared by Square profile pictures and Hide stories and notes. Mirrors AvatarShape.kt's findStoryRing:
+     * the one ring mount spec, and the draw of the direct Drawable it makes.
+     */
+    static List<Method> storyRing(List<ClassDef> classes) {
+        Method mount = null;
+        for (var cls : classes) {
+            boolean mounts = false;
+            for (var method : cls.getMethods()) mounts |= ringType(method) != null;
+            if (!mounts || !paintsRing(cls)) continue;
+            for (var method : cls.getMethods()) {
+                if (ringType(method) == null) continue;
+                if (mount != null) return List.of();
+                mount = method;
+            }
+        }
+        if (mount == null) return List.of();
+        String type = ringType(mount);
+        ClassDef ring = null;
+        for (var cls : classes) if (cls.getType().equals(type)) ring = cls;
+        if (ring == null || !"Landroid/graphics/drawable/Drawable;".equals(ring.getSuperclass())) return List.of();
+        Method draw = null;
+        for (var method : ring.getMethods()) {
+            if (!ringArc(method)) continue;
+            if (draw != null) return List.of();
+            draw = method;
+        }
+        return draw == null ? List.of() : List.of(mount, draw);
+    }
+
     /**
      * avatar_shape: Vito's one RoundingOptions constructor in its proven shape, the one legacy rounding helper, then the
-     * user tile's one shape setter, the one setup in its class that hands it a clip path, and the draw of the placeholder
+     * user tile's one shape setter, the one setup in its class that hands it a clip path, the draw of the placeholder
      * type that setup takes. Mirrors AvatarShape.kt.
      */
     static List<Method> avatarShape(List<ClassDef> classes) {
@@ -5286,7 +5360,8 @@ public class CompatReport {
                 placeholder = method;
             }
         }
-        return placeholder == null ? List.of() : List.of(constructor, legacy, setter, setup, placeholder);
+        if (placeholder == null) return List.of();
+        return List.of(constructor, legacy, setter, setup, placeholder);
     }
 
     static final String RTC_NOTIFICATION_SERVICE ="Lcom/facebook/rtc/notification/RtcNotificationForegroundService;";
@@ -6081,6 +6156,7 @@ public class CompatReport {
         found.get("story_hold").addAll(storyHold(classes));
         found.get("share_story").addAll(shareStory(classes));
         found.get("avatar_shape").addAll(avatarShape(classes));
+        found.get("story_ring").addAll(storyRing(classes));
         found.get("quiet_call_ring").addAll(quietCallRing(classes));
         found.get("quiet_call_notification").addAll(quietCallNotification(classes));
         var markRead = markReadButton(classes);

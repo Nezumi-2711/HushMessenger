@@ -211,6 +211,10 @@ internal val PROFILE_347015062 = ControlProfile(
         ),
         "stories" to setOf("LX/1p3;->A00()Z"),
         "story_hold" to setOf("LX/Sv7;->DjC()V"),
+        "story_ring" to setOf(
+            "LX/2mD;->onCreateMountContent(Landroid/content/Context;)Ljava/lang/Object;",
+            "LX/31X;->draw(Landroid/graphics/Canvas;)V",
+        ),
         "subtabs" to setOf("LX/2LG;->run()V"),
         "suggested_replies" to setOf("LX/7Rz;->A06(LX/7Rz;)Z", "LX/7T5;->A05(LX/7T5;)Z", "LX/Kjw;->A03()Z"),
         "system_camera" to setOf(
@@ -433,6 +437,10 @@ internal val PROFILE_347014996 = ControlProfile(
         ),
         "stories" to setOf("LX/1p3;->A00()Z"),
         "story_hold" to setOf("LX/Sv7;->DjC()V"),
+        "story_ring" to setOf(
+            "LX/2mD;->onCreateMountContent(Landroid/content/Context;)Ljava/lang/Object;",
+            "LX/31X;->draw(Landroid/graphics/Canvas;)V",
+        ),
         "subtabs" to setOf("LX/2LG;->run()V"),
         "suggested_replies" to setOf("LX/7Rz;->A06(LX/7Rz;)Z", "LX/7T5;->A05(LX/7T5;)Z", "LX/Kjw;->A03()Z"),
         "system_camera" to setOf(
@@ -654,6 +662,10 @@ internal val PROFILE_347014974 = ControlProfile(
         ),
         "stories" to setOf("LX/1qK;->A00()Z"),
         "story_hold" to setOf("LX/QQL;->DjS()V"),
+        "story_ring" to setOf(
+            "LX/2nj;->onCreateMountContent(Landroid/content/Context;)Ljava/lang/Object;",
+            "LX/33B;->draw(Landroid/graphics/Canvas;)V",
+        ),
         "subtabs" to setOf("LX/2Mk;->run()V"),
         "suggested_replies" to setOf("LX/7VN;->A06(LX/7VN;)Z", "LX/7WT;->A05(LX/7WT;)Z", "LX/Kou;->A03()Z"),
         "system_camera" to setOf(
@@ -875,6 +887,10 @@ internal val PROFILE_347014990 = ControlProfile(
         ),
         "stories" to setOf("LX/1pT;->A00()Z"),
         "story_hold" to setOf("LX/K8T;->DjN()V"),
+        "story_ring" to setOf(
+            "LX/2md;->onCreateMountContent(Landroid/content/Context;)Ljava/lang/Object;",
+            "LX/31x;->draw(Landroid/graphics/Canvas;)V",
+        ),
         "subtabs" to setOf("LX/2Lg;->run()V"),
         "suggested_replies" to setOf("LX/7Q1;->A06(LX/7Q1;)Z", "LX/7R7;->A05(LX/7R7;)Z", "LX/WAU;->A03()Z"),
         "system_camera" to setOf(
