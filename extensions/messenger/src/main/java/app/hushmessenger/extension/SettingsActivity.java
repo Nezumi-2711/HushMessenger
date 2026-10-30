@@ -43,8 +43,9 @@ import java.util.Set;
 
 /** A launcher entry keeps settings discoverable without replacing a Messenger menu action. */
 public final class SettingsActivity extends Activity {
-    private SettingsUi ui;
-    private SettingsText text;
+    // Package-private for the sections that live in classes of their own.
+    SettingsUi ui;
+    SettingsText text;
     private LinearLayout controlsPage, appPage;
     private LinearLayout header, brand, controlsContent, appContent;
     private ScrollView controlsScroll, appScroll;
@@ -57,11 +58,12 @@ public final class SettingsActivity extends Activity {
     private final Map<String, TextView> activityLabels = new java.util.HashMap<>();
     private final Map<Switch, CharSequence> switchDescriptions = new java.util.HashMap<>();
     private long documentGeneration;
+    private final UpdateCheck updates = new UpdateCheck(this);
     private final SharedPreferences.OnSharedPreferenceChangeListener preferenceListener = (preferences, key) -> {
         if (key == null || "paused".equals(key) || Settings.SUB_SWITCHES.containsKey(key) || Settings.installed.contains(key))
             documentGeneration++;
         refreshChoices();
-        if (key == null || "check_updates".equals(key)) syncUpdateChoice(true);
+        if (key == null || "check_updates".equals(key)) updates.syncUpdateChoice(true);
     };
     private String page = "controls";
     private final List<View> controlRows = new ArrayList<>();
@@ -84,10 +86,6 @@ public final class SettingsActivity extends Activity {
     private TextView searchStatus, enabledCount, setupNote;
     private Button safeModeAction, clearQuery;
     private Button drawerSearchLink;
-    private TextView updateStatus;
-    private Button updateCheckNow, updateRelease;
-    private volatile long updateGeneration;
-    private java.net.HttpURLConnection updateConnection;
     private LinearLayout emptyState;
     /** The Material You theme line, and the button that drops a pasted theme (#115). */
     private TextView themeStatus;
@@ -391,7 +389,7 @@ public final class SettingsActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         refreshChoices();
-        syncUpdateChoice(false);
+        updates.syncUpdateChoice(false);
     }
 
     @Override protected void onStop() {
@@ -416,7 +414,7 @@ public final class SettingsActivity extends Activity {
             documentJob = null;
             documentBusy = false;
         } else cancelDocumentJob(null);
-        cancelUpdateCheck();
+        updates.cancelUpdateCheck();
         super.onDestroy();
     }
 
@@ -1600,17 +1598,9 @@ public final class SettingsActivity extends Activity {
         // Update checks sit with the version they compare against.
         ui.rule(about, 10);
         ui.add(about, controlRow("check_updates", text.format("check_updates"), text.format("check_updates_help"), false), 4);
-        updateStatus = ui.text("", 13, ui.muted, false);
-        updateStatus.setTag("update_status");
-        updateStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        updateStatus.setVisibility(View.GONE);
-        ui.add(about, updateStatus, 8);
-        updateCheckNow = ui.button(text.get("check_now"));
-        updateCheckNow.setTag("check_now");
-        updateCheckNow.setOnClickListener(view -> checkForUpdates());
-        ui.add(about, updateCheckNow, 8);
+        updates.addTo(about);
         section(content, "about", about, 8);
-        syncUpdateChoice(true);
+        updates.syncUpdateChoice(true);
         LinearLayout choices = ui.panel();
         Button copy = ui.button(text.get("copy"));
         copy.setTag("copy_setup");
@@ -1814,50 +1804,7 @@ public final class SettingsActivity extends Activity {
 
     private void copySetup() {
         try {
-            PackageInfo host = getPackageManager().getPackageInfo(getPackageName(), 0);
-            boolean paused = Settings.preferences.getBoolean("paused", false);
-            boolean safeMode = CrashGuard.isSafeMode();
-            StringBuilder summary = new StringBuilder("HushMessenger v").append(BuildConfig.VERSION_NAME)
-                .append("\nHost package: ").append(getPackageName())
-                .append("\nSettings provider: ").append(HostScreens.settingsProviderFound(this) ? "found" : "missing")
-                .append("\nHost version: ").append(host.versionName == null ? "unknown" : host.versionName)
-                .append("\nHost version code: ").append(host.getLongVersionCode())
-                .append("\nPatched from: ").append(ProblemReport.patchedFrom(HostScreens.originalBuild(), Settings.preview))
-                .append("\nAndroid API: ").append(Build.VERSION.SDK_INT)
-                .append("\nPaused: ").append(paused)
-                .append("\nSafe mode: ").append(safeMode).append('\n');
-            if (Settings.preview) summary.append("Mode: UI preview. Does not change Messenger.\n");
-            summary.append(text.get("setup_activity_help")).append("\nControls:\n");
-            for (String[] spec : CONTROLS) {
-                String key = spec[0];
-                boolean installed = Settings.installed.contains(key);
-                boolean selected = Settings.preferences.getBoolean(key, false);
-                long lastActive = Settings.lastActive(key);
-                Boolean held = Settings.heldUntilRestart(key);
-                summary.append(key).append(": installed=").append(installed)
-                    .append(", selected=").append(selected)
-                    .append(", active=").append(!Settings.preview && installed && selected && !paused && !safeMode && Settings.available(key))
-                    .append(", last_active=").append(lastActive == 0 ? "none" : ((System.currentTimeMillis() - lastActive) / 1000) + "s ago")
-                    .append(held == null ? "" : ", until_restart=" + held)
-                    .append(", scope=").append(text.control(spec, 2))
-                    .append('\n');
-            }
-            String lateStart = HostScreens.lateStart;
-            summary.append("Late start: ").append(lateStart == null ? "not needed" : lateStart).append('\n');
-            String dataDir = getApplicationInfo().dataDir;
-            summary.append("Analytics stores: ").append(dataDir == null ? "unreadable" : analyticsStores(new java.io.File(dataDir))).append('\n');
-            summary.append("Facebook caller checks: ").append(MessengerSignature.callerSummary()).append('\n');
-            // Only controls that failed get a line: the exception's class, where it hit HushMessenger's code and when.
-            Map<String, String> errors = Settings.lastHookErrors();
-            if (!errors.isEmpty()) summary.append("Hook errors:\n");
-            for (Map.Entry<String, String> error : errors.entrySet()) {
-                String record = error.getValue();
-                int split = record.lastIndexOf('|');
-                summary.append(error.getKey()).append(": ").append(split < 0 ? record : record.substring(0, split)).append(", ")
-                    .append(java.time.Instant.ofEpochMilli(Settings.hookErrorTime(record)).truncatedTo(java.time.temporal.ChronoUnit.SECONDS))
-                    .append('\n');
-            }
-            ClipData clip = ClipData.newPlainText(text.get("clipboard"), summary.toString());
+            ClipData clip = ClipData.newPlainText(text.get("clipboard"), SetupSummary.build(this, text));
             PersistableBundle extras = new PersistableBundle();
             extras.putBoolean(Build.VERSION.SDK_INT >= 33 ? ClipDescription.EXTRA_IS_SENSITIVE : "android.content.extra.IS_SENSITIVE", true);
             clip.getDescription().setExtras(extras);
@@ -1869,200 +1816,6 @@ public final class SettingsActivity extends Activity {
             android.util.Log.e("HushMessenger", "Can't copy setup", error);
             feedback(text.get("copy_failed"), Toast.LENGTH_LONG);
         }
-    }
-
-    /** Where the update check asks, and how long it waits. Tests point these at a local server. */
-    static String releasesUrl = "https://api.github.com/repos/SysAdminDoc/HushMessenger/releases/latest";
-    static int updateTimeoutMillis = 5000;
-    static java.util.function.LongSupplier updateClock = System::currentTimeMillis;
-    private static final Object UPDATE_CACHE_LOCK = new Object();
-
-    /**
-     * Compares release numbers part by part as integers, so 0.10.0 is newer than 0.9.0. A leading "v"
-     * is ignored and a missing or non-numeric part counts as 0. Build metadata is ignored. Numeric
-     * pre-release identifiers sort numerically and before text; a release sorts after its pre-releases.
-     */
-    static int compareVersions(String a, String b) {
-        String[] left = a.trim().replaceFirst("^v", "").split("\\+", 2)[0].split("-", 2);
-        String[] right = b.trim().replaceFirst("^v", "").split("\\+", 2)[0].split("-", 2);
-        String[] x = left[0].split("\\."), y = right[0].split("\\.");
-        for (int i = 0; i < Math.max(x.length, y.length); i++) {
-            int diff = versionPart(x, i).compareTo(versionPart(y, i));
-            if (diff != 0) return diff;
-        }
-        if (left.length != right.length) return left.length > right.length ? -1 : 1;
-        if (left.length == 1) return 0;
-        x = left[1].split("\\."); y = right[1].split("\\.");
-        for (int i = 0; i < Math.min(x.length, y.length); i++) {
-            boolean numericX = x[i].matches("[0-9]+"), numericY = y[i].matches("[0-9]+");
-            int diff = numericX && numericY ? versionPart(x, i).compareTo(versionPart(y, i))
-                : numericX != numericY ? (numericX ? -1 : 1) : x[i].compareTo(y[i]);
-            if (diff != 0) return diff;
-        }
-        return Integer.compare(x.length, y.length);
-    }
-
-    private static java.math.BigInteger versionPart(String[] parts, int index) {
-        return index < parts.length && parts[index].matches("[0-9]+") ? new java.math.BigInteger(parts[index]) : java.math.BigInteger.ZERO;
-    }
-
-    /** The release page to offer, or "" when the response points anywhere but this project's releases. */
-    static String releasePage(String htmlUrl) {
-        // A plain tag page only, so "../" or an encoded path can't walk out of this project.
-        return htmlUrl.matches("https://github\\.com/SysAdminDoc/HushMessenger/releases/tag/[0-9A-Za-z._+-]+")
-            && !htmlUrl.contains("..") ? htmlUrl : "";
-    }
-
-    static String releasePage(String htmlUrl, String tag) {
-        return ReleaseCheck.validTag(tag) && !releasePage(htmlUrl).isEmpty()
-            && htmlUrl.equals("https://github.com/SysAdminDoc/HushMessenger/releases/tag/" + tag) ? htmlUrl : "";
-    }
-
-    private void syncUpdateChoice(boolean check) {
-        if (updateStatus == null) return;
-        boolean enabled = Settings.preferences.getBoolean("check_updates", false);
-        updateCheckNow.setVisibility(enabled ? View.VISIBLE : View.GONE);
-        if (!enabled) {
-            cancelUpdateCheck();
-            updateStatus.setVisibility(View.GONE);
-        } else if (check) checkForUpdates();
-    }
-
-    private synchronized void cancelUpdateCheck() {
-        updateGeneration++;
-        if (updateConnection != null) {
-            updateConnection.disconnect();
-            updateConnection = null;
-        }
-        if (updateRelease != null) {
-            ((ViewGroup) updateRelease.getParent()).removeView(updateRelease);
-            updateRelease = null;
-        }
-    }
-
-    private boolean currentUpdate(long generation) {
-        return generation == updateGeneration && !isDestroyed() && Settings.preferences.getBoolean("check_updates", false);
-    }
-
-    private boolean saveUpdate(long generation, SharedPreferences.Editor editor, String error) {
-        // Only workers take this lock. Serialize accepted writes so an older write cannot
-        // finish after a newer one, without making cancellation wait for disk I/O.
-        synchronized (UPDATE_CACHE_LOCK) {
-            if (!currentUpdate(generation)) return false;
-            if (!editor.commit()) android.util.Log.w("HushMessenger", error);
-            return true;
-        }
-    }
-
-    private void showRelease(long generation, ReleaseCheck release) {
-        runOnUiThread(() -> {
-            if (!currentUpdate(generation)) return;
-            String latest = release.version();
-            int comparison = compareVersions(latest, BuildConfig.VERSION_NAME);
-            updateStatus.setTextColor(comparison > 0 ? ui.accent : ui.muted);
-            if (comparison > 0) {
-                updateStatus.setText(text.get("update_available", latest));
-                Button view = ui.button(text.get("update_action"));
-                view.setTag("update_release");
-                updateRelease = view;
-                view.setOnClickListener(v -> openPage(release.page));
-                ViewGroup parent = (ViewGroup) updateStatus.getParent();
-                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-                params.topMargin = ui.dp(8);
-                parent.addView(view, parent.indexOfChild(updateStatus) + 1, params);
-            } else updateStatus.setText(comparison == 0 ? text.get("up_to_date")
-                : text.get("update_ahead", BuildConfig.VERSION_NAME, latest));
-            updateStatus.setVisibility(View.VISIBLE);
-        });
-    }
-
-    private void showRetry(long generation, long deadline) {
-        runOnUiThread(() -> {
-            if (!currentUpdate(generation)) return;
-            String date = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.MEDIUM,
-                getResources().getConfiguration().getLocales().get(0)).format(new java.util.Date(deadline));
-            updateStatus.setText(text.get("update_retry", date));
-            updateStatus.setVisibility(View.VISIBLE);
-        });
-    }
-
-    private void checkForUpdates() {
-        cancelUpdateCheck();
-        if (!Settings.preferences.getBoolean("check_updates", false) || isDestroyed()) return;
-        long generation = updateGeneration;
-        String endpoint = releasesUrl;
-        updateStatus.setText(text.get("update_loading"));
-        updateStatus.setTextColor(ui.muted);
-        updateStatus.setVisibility(View.VISIBLE);
-        new Thread(() -> {
-            java.net.HttpURLConnection conn = null;
-            try {
-                long now = updateClock.getAsLong();
-                SharedPreferences prefs = Settings.preferences;
-                long retry = ReleaseCheck.retryDeadline(prefs, endpoint, now);
-                if (now < retry) { showRetry(generation, retry); return; }
-                ReleaseCheck cached = ReleaseCheck.cached(prefs, endpoint, now);
-                if (cached != null && cached.recent(now)) { showRelease(generation, cached); return; }
-                conn = (java.net.HttpURLConnection) new java.net.URL(endpoint).openConnection();
-                synchronized (this) {
-                    if (!currentUpdate(generation)) return;
-                    updateConnection = conn;
-                }
-                conn.setInstanceFollowRedirects(false);
-                conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
-                if (cached != null && !cached.etag.isEmpty()) conn.setRequestProperty("If-None-Match", cached.etag);
-                conn.setConnectTimeout(updateTimeoutMillis);
-                conn.setReadTimeout(updateTimeoutMillis);
-                int code = conn.getResponseCode();
-                if (code == 403 || code == 429) {
-                    int failures = ReleaseCheck.failures(prefs);
-                    long deadline = ReleaseCheck.retryAt(conn, updateClock.getAsLong(), failures);
-                    if (!saveUpdate(generation, prefs.edit().putLong(ReleaseCheck.RETRY_KEY, deadline)
-                        .putString(ReleaseCheck.RETRY_ENDPOINT_KEY, endpoint).putInt(ReleaseCheck.FAILURES_KEY, Math.min(6, failures + 1)),
-                        "Couldn't save update retry time")) return;
-                    showRetry(generation, deadline);
-                    return;
-                }
-                ReleaseCheck release;
-                if (code == 304) {
-                    if (cached == null || cached.etag.isEmpty()) throw new java.io.IOException("304 without a conditional release cache");
-                    release = cached.revalidated(conn.getHeaderField("ETag"), updateClock.getAsLong());
-                    if (release == null) {
-                        // A changed ETag can't confirm the cached release. Drop it so the next check asks unconditionally.
-                        if (!saveUpdate(generation, prefs.edit().remove(ReleaseCheck.CACHE_KEY), "Couldn't clear the cached release")) return;
-                        throw new java.io.IOException("Changed ETag on 304");
-                    }
-                } else {
-                    if (code != 200) throw new java.io.IOException("HTTP " + code);
-                    java.io.ByteArrayOutputStream response = new java.io.ByteArrayOutputStream();
-                    try (java.io.InputStream stream = conn.getInputStream()) {
-                        byte[] bytes = new byte[4096];
-                        int read;
-                        while ((read = stream.read(bytes)) != -1) {
-                            if (response.size() + read > 256 * 1024) throw new java.io.IOException("Release response exceeds 256 KiB");
-                            response.write(bytes, 0, read);
-                        }
-                    }
-                    String body = java.nio.charset.StandardCharsets.UTF_8.newDecoder()
-                        .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT).onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
-                        .decode(java.nio.ByteBuffer.wrap(response.toByteArray())).toString();
-                    release = ReleaseCheck.parse(body, endpoint, conn.getHeaderField("ETag"), updateClock.getAsLong());
-                }
-                if (!saveUpdate(generation, prefs.edit().putString(ReleaseCheck.CACHE_KEY, release.encode()).remove(ReleaseCheck.RETRY_KEY)
-                    .remove(ReleaseCheck.RETRY_ENDPOINT_KEY).remove(ReleaseCheck.FAILURES_KEY), "Couldn't save checked release")) return;
-                showRelease(generation, release);
-            } catch (java.io.IOException | IllegalArgumentException | IllegalStateException | SecurityException error) {
-                if (generation == updateGeneration) android.util.Log.e("HushMessenger", "Update check failed", error);
-                runOnUiThread(() -> {
-                    if (!currentUpdate(generation)) return;
-                    updateStatus.setText(text.get("update_error"));
-                    updateStatus.setVisibility(View.VISIBLE);
-                });
-            } finally {
-                if (conn != null) conn.disconnect();
-                synchronized (this) { if (updateConnection == conn) updateConnection = null; }
-            }
-        }, "HushUpdateCheck").start();
     }
 
     private Dialog messageLogDialog;
@@ -3310,92 +3063,6 @@ public final class SettingsActivity extends Activity {
         };
     }
 
-    /**
-     * Folders one or two levels under the data dir whose names mention analytics, with how many files they hold and their
-     * total size. Shell can't read the data dir, so this is how to see whether Messenger's analytics pile up while Stop
-     * analytics uploads is on. Names and sizes only, never what's in the files, and links aren't followed.
-     */
-    static String analyticsStores(java.io.File dataDir) {
-        return analyticsStores(dataDir, 20_000, 2_000);
-    }
-
-    /**
-     * One budget covers the whole report, so a huge cache, many stores or a folder loop can't hold up the tap: at most
-     * {@code entries} directory entries looked at and {@code folders} folders opened. A count cut short ends in "+".
-     */
-    static String analyticsStores(java.io.File dataDir, int entries, int folders) {
-        java.nio.file.Path root = dataDir.toPath();
-        int[] budget = {entries, folders};
-        java.util.List<java.nio.file.Path> top = folders(root, budget, false);
-        if (top == null) return "unreadable";
-        java.util.TreeMap<String, java.nio.file.Path> found = new java.util.TreeMap<>();
-        for (java.nio.file.Path first : top) {
-            if (namesAnalytics(first)) {
-                found.put(first.getFileName().toString(), first);
-                continue;
-            }
-            java.util.List<java.nio.file.Path> inner = folders(first, budget, true);
-            if (inner != null) for (java.nio.file.Path second : inner) found.put(first.getFileName() + "/" + second.getFileName(), second);
-        }
-        java.util.List<String> stores = new java.util.ArrayList<>();
-        for (java.util.Map.Entry<String, java.nio.file.Path> store : found.entrySet())
-            stores.add(storeSize(store.getKey(), store.getValue(), budget));
-        return stores.isEmpty() ? "none" : String.join(", ", stores);
-    }
-
-    private static boolean namesAnalytics(java.nio.file.Path path) {
-        return path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).contains("analytics");
-    }
-
-    /** The folders directly in dir, or only those named for analytics, checking a name before touching the entry. Null if dir can't be read. */
-    private static java.util.List<java.nio.file.Path> folders(java.nio.file.Path dir, int[] budget, boolean analyticsOnly) {
-        java.util.List<java.nio.file.Path> folders = new java.util.ArrayList<>();
-        if (budget[1]-- <= 0) return folders;
-        try (java.nio.file.DirectoryStream<java.nio.file.Path> entries = java.nio.file.Files.newDirectoryStream(dir)) {
-            for (java.nio.file.Path entry : entries) {
-                if (budget[0]-- <= 0) break;
-                if (analyticsOnly && !namesAnalytics(entry)) continue;
-                if (java.nio.file.Files.isDirectory(entry, java.nio.file.LinkOption.NOFOLLOW_LINKS)) folders.add(entry);
-            }
-        } catch (java.io.IOException | java.nio.file.DirectoryIteratorException | SecurityException e) {
-            return null;
-        }
-        return folders;
-    }
-
-    private static String storeSize(String name, java.nio.file.Path dir, int[] budget) {
-        long files = 0, bytes = 0;
-        boolean cut = false;
-        java.util.ArrayDeque<java.nio.file.Path> pending = new java.util.ArrayDeque<>();
-        pending.add(dir);
-        walk:
-        while (!pending.isEmpty()) {
-            if (budget[1]-- <= 0) {
-                cut = true;
-                break;
-            }
-            try (java.nio.file.DirectoryStream<java.nio.file.Path> entries = java.nio.file.Files.newDirectoryStream(pending.poll())) {
-                for (java.nio.file.Path entry : entries) {
-                    if (budget[0]-- <= 0) {
-                        cut = true;
-                        break walk;
-                    }
-                    java.nio.file.attribute.BasicFileAttributes attributes = java.nio.file.Files.readAttributes(entry,
-                        java.nio.file.attribute.BasicFileAttributes.class, java.nio.file.LinkOption.NOFOLLOW_LINKS);
-                    if (attributes.isDirectory()) pending.add(entry);
-                    else if (attributes.isRegularFile()) {
-                        files++;
-                        bytes += attributes.size();
-                    }
-                }
-            } catch (java.io.IOException | java.nio.file.DirectoryIteratorException | SecurityException e) {
-                // A folder that went away or can't be read just isn't counted.
-            }
-        }
-        String more = cut ? "+" : "";
-        return name + " " + files + more + " files " + bytes + more + " bytes";
-    }
-
     private void infoRow(LinearLayout parent, String title, String value) {
         LinearLayout row = ui.row();
         row.setPadding(0, ui.dp(3), 0, ui.dp(3));
@@ -3613,7 +3280,7 @@ public final class SettingsActivity extends Activity {
     }
 
     /** Opens a web page in the phone's browser, or says why it couldn't. */
-    private void openPage(String url) {
+    void openPage(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)); }
         catch (android.content.ActivityNotFoundException error) { feedback(text.get("no_browser"), Toast.LENGTH_LONG); }
         catch (SecurityException denied) {
