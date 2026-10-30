@@ -198,6 +198,7 @@ public class CompatReport {
         PATCHES.put("Fix videos that won't send", List.of("xhe_audio", "xhe_transcode"));
         PATCHES.put("Ignore the swipe up for disappearing messages", List.of("disappearing_swipe"));
         PATCHES.put("Hide the recent photo card", List.of("recent_media"));
+        PATCHES.put("Save voice messages you play", List.of("save_voice"));
         PATCHES.put("Hide the Instants button", List.of("instants_button"));
         PATCHES.put("Hide Your story when sharing", List.of("share_story"));
         PATCHES.put("Use the phone's camera app", List.of("system_camera"));
@@ -4224,6 +4225,31 @@ public class CompatReport {
         return found;
     }
 
+    /**
+     * save_voice: the static step that hands the voice message player its file, (FbUserSession, own class, an object)
+     * returning a Uri, with one return-object and the "Download audio" name it gives the fetch. Kept only when there's
+     * exactly one. Mirrors SaveVoice.kt.
+     */
+    static List<Method> voiceDownloads(List<ClassDef> classes) {
+        var found = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            var params = method.getParameterTypes();
+            if (method.getImplementation() == null || !AccessFlags.STATIC.isSet(method.getAccessFlags()) ||
+                !"Landroid/net/Uri;".equals(method.getReturnType()) || params.size() != 3 ||
+                !"Lcom/facebook/auth/usersession/FbUserSession;".equals(params.get(0).toString()) ||
+                !cls.getType().equals(params.get(1).toString()) || !params.get(2).toString().startsWith("L")) continue;
+            int returns = 0;
+            boolean download = false;
+            for (var i : method.getImplementation().getInstructions()) {
+                if (i.getOpcode() == Opcode.RETURN_OBJECT) returns++;
+                if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr &&
+                    "Download audio".equals(sr.getString())) download = true;
+            }
+            if (returns == 1 && download) found.add(method);
+        }
+        return found.size() == 1 ? found : new ArrayList<>();
+    }
+
     static final String SEND_MESSAGE_EVENT = "Lcom/facebook/xapp/messaging/composer/send/event/SendMessageEvent;";
 
     /**
@@ -5858,6 +5884,7 @@ public class CompatReport {
         found.get("disappearing_swipe").addAll(disappearingSwipeStarts(classes));
         found.get("recent_media").addAll(recentMediaDetectors(classes));
         found.get("instants_button").addAll(instantsButtonAttaches(classes));
+        found.get("save_voice").addAll(voiceDownloads(classes));
         found.get("hide_read_receipts").addAll(chatSeenBroadcasts(classes));
         found.get("reply_read").addAll(replyReadDispatches(classes));
         found.get("analytics_uploads").addAll(analyticsUploads(classes));

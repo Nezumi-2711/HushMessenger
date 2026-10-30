@@ -159,6 +159,7 @@ internal fun MutableMethod.validateHook(hook: String) {
         DISAPPEARING_SWIPE -> validateDisappearingSwipe()
         RECENT_MEDIA -> validateRecentMedia()
         INSTANTS_BUTTON -> validateInstantsButton()
+        SAVE_VOICE -> validateSaveVoice()
         HIDE_READ_RECEIPTS -> validateChatSeen()
         REPLY_READ -> validateReplyRead()
         MARK_READ_BAR -> validateMarkReadBar()
@@ -245,6 +246,7 @@ internal fun injectControl(key: String, methods: Map<String, List<MutableMethod>
             DISAPPEARING_SWIPE -> method.injectDisappearingSwipe()
             RECENT_MEDIA -> method.injectRecentMedia()
             INSTANTS_BUTTON -> method.injectInstantsButton()
+            SAVE_VOICE -> method.injectSaveVoice()
             ANALYTICS_UPLOADS -> method.injectAnalyticsUpload()
             ATTRIBUTION_UPLOADS -> method.injectAttributionUpload()
             AD_EVENTS -> method.injectAdEvent()
@@ -482,6 +484,9 @@ val disappearingSwipePatch = controlPatch("disappearing_swipe", "Ignore the swip
 @Suppress("unused")
 val hideRecentMediaPatch = controlPatch("recent_media", "Hide the recent photo card",
     "Stops the card above the message box that offers to send the screenshot, photo or video you just took. You can still send it from the gallery.", "Photos and videos")
+@Suppress("unused")
+val saveVoicePatch = controlPatch("save_voice", "Save voice messages you play",
+    "Each voice message you play is also saved to Recordings/Messenger (Music/Messenger on Android 10 and 11), so your file manager and other players can open it. Playing it again doesn't save another copy. Needs Android 10 or newer.", "Photos and videos")
 @Suppress("unused")
 val hideShareStoryPatch = controlPatch("share_story", "Hide Your story when sharing",
     "When you share a photo, video or link into Messenger from another app, the Send to list no longer offers Your story, so a tap on Add can't post it by mistake. Your chats and groups are still there.", "Photos and videos")

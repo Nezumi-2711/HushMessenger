@@ -441,6 +441,8 @@ final class SettingsTextViVN {
         {"xhe_audio.description", "Một số video sẽ hiển thị 'Không thể gửi' do định dạng âm thanh mới hơn (xHE-AAC) hoặc các thẻ do chương trình ghi màn hình Samsung thêm vào, Messenger gốc cũng gặp sự cố này. Tính năng này sẽ sửa âm thanh hoặc xóa thẻ trước khi gửi, áp dụng cho dù chia sẻ từ ứng dụng khác vào Messenger hay chọn video trong phòng chat. Hình ảnh video sẽ không thay đổi."},
         {"recent_media.title", "Ẩn thẻ ảnh gần đây"},
         {"recent_media.description", "Khi mở phòng chat ngay sau khi chụp màn hình, chụp ảnh hoặc quay video, thẻ gợi ý gửi nội dung đó sẽ không còn hiển thị phía trên hộp nhập tin nhắn nữa. Bạn vẫn có thể chọn từ thư viện."},
+        {"save_voice.title", "Lưu tin nhắn thoại bạn phát"},
+        {"save_voice.description", "Mỗi tin nhắn thoại bạn phát cũng được lưu vào Recordings/Messenger trên điện thoại (Music/Messenger trên Android 10 và 11), để trình quản lý tệp hoặc trình phát khác có thể mở. Phát lại sẽ không lưu thêm bản sao."},
         {"share_story.title", "Ẩn tin của bạn khi chia sẻ"},
         {"share_story.description", "Khi chia sẻ ảnh, video hoặc liên kết từ các ứng dụng khác sang Messenger, danh sách 'Gửi tới' sẽ không còn hiển thị tin của bạn nữa, tránh việc vô tình nhấn 'Thêm' để đăng. Các phòng chat và nhóm của bạn vẫn sẽ hiển thị."},
         {"system_camera.title", "Sử dụng ứng dụng máy ảnh của điện thoại"},
