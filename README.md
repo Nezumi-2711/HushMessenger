@@ -65,7 +65,7 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Hide friend request cards | Hides friend request cards in the chat list. Nobody gets accepted or declined. |
 | Hide growth prompts | Removes the add-people promotion, the notes tip sheets and the "Share your own story" card after someone's stories. |
 | Hide inbox promotions | Hides promotion banners in the chat list. |
-| Hide stories and notes | Hides the row of stories and notes above your chats, and the story rings around people's pictures. |
+| Hide stories and notes | Hides the row of stories and notes above your chats, and the story rings around profile pictures. |
 | Hide the Instants button | Hides the + button that slides in at the right edge of your chat list and the one under your chat heads. Both open Instants. |
 | Hide inbox tabs | Hides the All, Unread and Groups tabs above your chats. |
 | Hide Mark as read | Takes Mark as read out of the menu you get when you press and hold a chat, so you can't mark one read by accident. Mark as unread stays. |

@@ -376,7 +376,7 @@ final class SettingsTextViVN {
         {"inbox_promotions.title", "Ẩn nội dung quảng cáo trong hộp thư đến"},
         {"inbox_promotions.description", "Ẩn banner quảng cáo trong danh sách trò chuyện."},
         {"stories.title", "Ẩn tin và ghi chú"},
-        {"stories.description", "Ẩn thanh tin (stories) và ghi chú phía trên danh sách trò chuyện."},
+        {"stories.description", "Ẩn thanh tin (stories) và ghi chú phía trên danh sách trò chuyện, cùng vòng tin quanh ảnh đại diện."},
         {"instants_button.title", "Ẩn nút Instants"},
         {"instants_button.description", "Ẩn nút + trượt vào từ mép phải danh sách trò chuyện và nút bên dưới bong bóng chat. Cả hai đều mở Instants."},
         {"subtabs.title", "Ẩn tab hộp thư đến"},

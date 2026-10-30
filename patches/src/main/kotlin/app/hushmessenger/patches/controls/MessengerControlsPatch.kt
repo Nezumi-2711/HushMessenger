@@ -419,7 +419,7 @@ val hideGrowthPatch = controlPatch("growth", "Hide growth prompts", "Hides promp
 @Suppress("unused")
 val hideInboxPromotionsPatch = controlPatch("inbox_promotions", "Hide inbox promotions", "Hides promotion banners in your chat list.", "Inbox")
 @Suppress("unused")
-val hideStoriesPatch = controlPatch("stories", "Hide stories and notes", "Hides the row of stories and notes above your chats, and the story rings around people's pictures.", "Inbox",
+val hideStoriesPatch = controlPatch("stories", "Hide stories and notes", "Hides the row of stories and notes above your chats, and the story rings around profile pictures.", "Inbox",
     "stories", STORY_RING)
 @Suppress("unused")
 val hideInstantsButtonPatch = controlPatch("instants_button", "Hide the Instants button",

@@ -1746,7 +1746,7 @@
         },
         {
             "name": "Hide stories and notes",
-            "description": "Hides the row of stories and notes above your chats, and the story rings around people's pictures. Starts off. Turn it on in HushMessenger settings > Controls.",
+            "description": "Hides the row of stories and notes above your chats, and the story rings around profile pictures. Starts off. Turn it on in HushMessenger settings > Controls.",
             "default": true,
             "category": "Inbox",
             "dependencies": [

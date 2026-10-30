@@ -376,7 +376,7 @@ final class SettingsTextZhTw {
         {"inbox_promotions.title", "隱藏收件匣宣傳內容"},
         {"inbox_promotions.description", "隱藏聊天清單中的宣傳橫幅。"},
         {"stories.title", "隱藏限時動態與便利貼"},
-        {"stories.description", "隱藏聊天清單上方的限時動態與便利貼列。"},
+        {"stories.description", "隱藏聊天清單上方的限時動態與便利貼列，以及大頭貼周圍的限時動態圓圈。"},
         {"instants_button.title", "隱藏 Instants 按鈕"},
         {"instants_button.description", "隱藏從聊天清單右側邊緣滑入的 + 按鈕，以及聊天大頭貼下方的按鈕。兩者都會開啟 Instants。"},
         {"subtabs.title", "隱藏收件匣分頁"},
