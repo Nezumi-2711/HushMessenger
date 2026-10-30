@@ -12,6 +12,7 @@
 - HushMessenger's settings speak Vietnamese when your phone is set to it, in any region. Thanks to @hautv404 for the translation. Refs #113.
 - **GmsCore support** is a new patch that starts unselected, for phones running microG-RE instead of Google Play services. Messenger gets its push token from microG-RE and stays signed in. Leave it out on a phone with Play services. Refs #119.
 - Material You can use your own colors now. Under Appearance, copy a theme like `{"name": "Sunset", "accent": "#E1306C", "neutral": "#1A1418", "pure_black": true}` and tap **Use copied theme**. The accent replaces Messenger's blues and the neutral tints its grays and backgrounds in dark mode, at Messenger's own brightness so text stays readable. **Copy theme** hands you the colors in use to tweak or share, and **Back to wallpaper colors** drops it. Refs #115.
+- `Keep a message log` marks a message Unsent when the sender takes it back, encrypted chats included, and the log page has a **Show only unsent** button for finding them. With `Keep unsent messages` on, an unsent message's notification stays up too, since an encrypted chat can't keep the message on screen. Refs #70.
 - The patch bundle is signed now. Morphe Manager 2.3 and newer checks the signature inside the `.mpp` before it loads HushMessenger, and once it has seen this key it won't take a bundle signed with another one. Manager shows the key as `4d8d c2b3 fbcd 3ab6`, and the README has a command for checking a download by hand. Older Managers don't look at it.
 
 ### Changed and fixed

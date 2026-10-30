@@ -372,6 +372,9 @@ final class SettingsText {
         ENGLISH.put("message_log_unknown_thread", "Unknown chat");
         ENGLISH.put("message_log_in_group", "%s in %s");
         ENGLISH.put("message_log_no_text", "(no text)");
+        ENGLISH.put("message_log_unsent", "Unsent");
+        ENGLISH.put("message_log_unsent_only", "Show only unsent");
+        ENGLISH.put("message_log_show_all", "Show all messages");
         ENGLISH.put("message_log_cleared", "Message log cleared");
         ENGLISH.put("message_log_restored", "Message log put back");
         ENGLISH.put("message_log_restore_failed", "Couldn't put the log back");

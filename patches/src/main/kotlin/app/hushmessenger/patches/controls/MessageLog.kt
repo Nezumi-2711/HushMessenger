@@ -287,3 +287,53 @@ private fun MutableMethod.injectIncomingMessage(gate: String, sink: String) {
         invoke-static {v1, v0}, $sink
     """.trimIndent(), ExternalLabel("stock_behavior", getInstruction(0)))
 }
+
+/** Shared by Keep a message log and Keep unsent messages, the way story_ring is shared. */
+internal const val UNSENT_RECALL = "unsent_recall"
+private const val NOTIFICATION_RECALLER = "NotificationRecaller"
+private val UNSENT_RECALL_PARAMETERS = listOf(BUBBLE_SESSION, "Ljava/lang/String;", "Ljava/lang/String;", "Ljava/lang/String;")
+private const val UNSENT_RECALL_SINK = "$SETTINGS->unsentRecall(Ljava/lang/String;)Z"
+
+/**
+ * Messenger's notification recaller: the one instance (session, message id, push id, offline id)Z method that takes an
+ * unsent message out of its chat's notification. Plain unsends reach it from the notification manager, and encrypted
+ * one-to-one unsends from the Minos unsend handler, so it covers the chats Keep unsent messages can't reach in the
+ * chat itself. Its log tag is the only name it keeps across builds.
+ */
+internal fun findUnsentRecall(classes: Iterable<ClassDef>): List<Method> =
+    listOfNotNull(classes.flatMap { it.methods }.filter { it.isUnsentRecall() }.singleOrNull())
+
+private fun Method.isUnsentRecall(): Boolean {
+    if (AccessFlags.STATIC.isSet(accessFlags) || returnType != "Z" ||
+        parameterTypes.map(CharSequence::toString) != UNSENT_RECALL_PARAMETERS) return false
+    return implementation?.instructions?.any {
+        ((it as? ReferenceInstruction)?.reference as? StringReference)?.string == NOTIFICATION_RECALLER
+    } == true
+}
+
+/** The other control sharing the hook already put it in. */
+private fun MutableMethod.unsentRecallRouted() =
+    ((implementation?.instructions?.firstOrNull() as? ReferenceInstruction)?.reference as? MethodReference)?.toString() == UNSENT_RECALL_SINK
+
+internal fun MutableMethod.validateUnsentRecall() {
+    if (!isUnsentRecall()) throw PatchException("Messenger controls: ${hookId()} isn't the notification recaller")
+    validateScratch()
+}
+
+/**
+ * Before Messenger takes an unsent message out of its notification, the extension gets the message's id: the message
+ * log marks that message Unsent, and with Keep unsent messages on the method returns true at once, as if it had taken
+ * it out, so the notification keeps showing it. The id is p2 of the instance method, read with a range call since it
+ * sits past v15. The second control to claim the hook finds it in and leaves it.
+ */
+internal fun MutableMethod.injectUnsentRecall() {
+    validateUnsentRecall()
+    if (unsentRecallRouted()) return
+    addInstructionsWithLabels(0, """
+        invoke-static/range {p2 .. p2}, $UNSENT_RECALL_SINK
+        move-result v0
+        if-eqz v0, :stock_behavior
+        const/4 v0, 0x1
+        return v0
+    """.trimIndent(), ExternalLabel("stock_behavior", getInstruction(0)))
+}

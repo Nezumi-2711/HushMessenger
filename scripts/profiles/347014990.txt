@@ -205,6 +205,7 @@ hook text_style LX/A2H;->onFocusChanged(ZILandroid/graphics/Rect;)V
 hook typing LX/BCh;->run()V
 hook typing_mailbox LX/8m9;->A0M(Ljava/lang/String;Z)LX/32L;
 hook unsent_indicator LX/W52;->CfI(I)Ljava/lang/String;
+hook unsent_recall LX/96Z;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
 hook wifi_identity LX/1g4;->A02()LX/b1i;
 hook wifi_identity LX/36O;->B8X()Ljava/lang/String;
 hook wifi_identity LX/36O;->Bx9()J

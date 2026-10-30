@@ -1413,6 +1413,23 @@ public final class Settings {
         return original;
     }
 
+    /**
+     * Messenger is about to take [messageId] out of its notification because it was unsent. The message log marks it
+     * Unsent, and with Keep unsent messages on the answer is true, so Messenger leaves the notification showing it. That
+     * notification is the one place an end-to-end encrypted chat's unsent message can stay, since the chat drops it.
+     */
+    public static boolean unsentRecall(String messageId) {
+        try {
+            if (wouldUse(MessageLog.KEY)) MessageLog.markUnsent(messageId);
+            if (messageId == null || messageId.isEmpty() || !wouldUse("keep_unsent")) return false;
+            recordUnsent(messageId);
+            return true;
+        } catch (Throwable failure) {
+            hookFailedPrivately("keep_unsent", "Can't keep an unsent message's notification", failure);
+            return false;
+        }
+    }
+
     /** Android's standard color emoji font, used when the phone can't say which font it draws emoji with. */
     static final String NOTO_EMOJI_FONT = "/system/fonts/NotoColorEmoji.ttf";
     /** Null asks Android which font it draws emoji with. Tests point this at a missing file. */

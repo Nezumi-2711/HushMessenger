@@ -233,6 +233,7 @@ internal val PROFILE_347015062 = ControlProfile(
         "typing" to setOf("LX/BFC;->run()V"),
         "typing_mailbox" to setOf("LX/8o5;->A0M(Ljava/lang/String;Z)LX/31v;"),
         "unsent_indicator" to setOf("LX/W6h;->Cf5(I)Ljava/lang/String;"),
+        "unsent_recall" to setOf("LX/98W;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
             "LX/1fe;->A02()LX/bOd;", "LX/35w;->B8P()Ljava/lang/String;", "LX/35w;->Bx1()J",
             "LX/B8A;->A03()Ljava/lang/String;", "LX/B8A;->A04(Ljava/util/Map;)V",
@@ -459,6 +460,7 @@ internal val PROFILE_347014996 = ControlProfile(
         "typing" to setOf("LX/BFC;->run()V"),
         "typing_mailbox" to setOf("LX/8o5;->A0M(Ljava/lang/String;Z)LX/31v;"),
         "unsent_indicator" to setOf("LX/W6h;->Cf5(I)Ljava/lang/String;"),
+        "unsent_recall" to setOf("LX/98W;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
             "LX/1fe;->A02()LX/bOd;", "LX/35w;->B8P()Ljava/lang/String;", "LX/35w;->Bx1()J",
             "LX/B8A;->A03()Ljava/lang/String;", "LX/B8A;->A04(Ljava/util/Map;)V",
@@ -684,6 +686,7 @@ internal val PROFILE_347014974 = ControlProfile(
         "typing" to setOf("LX/BJi;->run()V"),
         "typing_mailbox" to setOf("LX/8sW;->A0M(Ljava/lang/String;Z)LX/33a;"),
         "unsent_indicator" to setOf("LX/TCX;->CfG(I)Ljava/lang/String;"),
+        "unsent_recall" to setOf("LX/9Cx;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
             "LX/1gq;->A02()LX/XxB;", "LX/37Y;->B8W()Ljava/lang/String;", "LX/37Y;->Bx8()J",
             "LX/BCh;->A03()Ljava/lang/String;", "LX/BCh;->A04(Ljava/util/Map;)V",
@@ -909,6 +912,7 @@ internal val PROFILE_347014990 = ControlProfile(
         "typing" to setOf("LX/BCh;->run()V"),
         "typing_mailbox" to setOf("LX/8m9;->A0M(Ljava/lang/String;Z)LX/32L;"),
         "unsent_indicator" to setOf("LX/W52;->CfI(I)Ljava/lang/String;"),
+        "unsent_recall" to setOf("LX/96Z;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
             "LX/1g4;->A02()LX/b1i;", "LX/36O;->B8X()Ljava/lang/String;", "LX/36O;->Bx9()J",
             "LX/B5g;->A03()Ljava/lang/String;", "LX/B5g;->A04(Ljava/util/Map;)V",

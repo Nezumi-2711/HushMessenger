@@ -210,13 +210,13 @@ public class CompatReport {
         PATCHES.put("Stop live connection logging", List.of("mqtt_telemetry"));
         PATCHES.put("Stop nearby scans", List.of("nearby_scans", "wifi_identity"));
         PATCHES.put("Stop app list and device ID sharing", List.of("phone_id_sync"));
-        PATCHES.put("Keep a message log", List.of("message_log"));
+        PATCHES.put("Keep a message log", List.of("message_log", "unsent_recall"));
         PATCHES.put("Auto reply", List.of("auto_reply"));
         PATCHES.put("Quiet incoming calls", List.of("quiet_call_ring", "quiet_call_notification"));
         PATCHES.put("Allow screenshots", List.of("allow_screenshot", "screenshot_viewers"));
         PATCHES.put("Hide read receipts", List.of("hide_read_receipts", "reply_read"));
         PATCHES.put("Mark as read button", List.of("mark_read_bar", "mark_read_click"));
-        PATCHES.put("Keep unsent messages", List.of("keep_unsent", "unsent_indicator", "delta_unsent"));
+        PATCHES.put("Keep unsent messages", List.of("keep_unsent", "unsent_indicator", "delta_unsent", "unsent_recall"));
         PATCHES.put("Unlock app icons", List.of("app_icons"));
         PATCHES.put("Square profile pictures", List.of("avatar_shape", "story_ring"));
         PATCHES.put("Use your own font", List.of("font_layout", "font_repository", "font_roboto", "font_by_name", "font_input"));
@@ -2769,6 +2769,25 @@ public class CompatReport {
             return ctors.size() == 1 && messageLogRoom(ctors.get(0)) && messageLogContract(classes, ctors.get(0)) ? ctors : List.of();
         }
         return List.of();
+    }
+
+    static final List<String> RECALLER_PARAMETERS = List.of(BUBBLE_SESSION, "Ljava/lang/String;", "Ljava/lang/String;", "Ljava/lang/String;");
+
+    /**
+     * unsent_recall: the one instance (session, message id, push id, offline id)Z method logging as NotificationRecaller,
+     * which takes an unsent message out of its notification. Mirrors MessageLog.kt's findUnsentRecall.
+     */
+    static List<Method> unsentRecall(List<ClassDef> classes) {
+        Method recaller = null;
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"Z".equals(method.getReturnType()) || method.getImplementation() == null) continue;
+            var params = new ArrayList<String>();
+            for (var type : method.getParameterTypes()) params.add(type.toString());
+            if (!params.equals(RECALLER_PARAMETERS) || !stringsOf(method).contains("NotificationRecaller")) continue;
+            if (recaller != null) return List.of();
+            recaller = method;
+        }
+        return recaller == null ? List.of() : List.of(recaller);
     }
 
     static final String SECRET_STRING = "Lcom/facebook/secure/secrettypes/SecretString;";
@@ -6168,6 +6187,7 @@ public class CompatReport {
         found.get("text_style").addAll(textStyleField(classes));
         found.get("message_log").addAll(messageLogHooks(classes));
         found.get("auto_reply").addAll(messageLogHooks(classes));
+        found.get("unsent_recall").addAll(unsentRecall(classes));
         found.get("system_camera").addAll(systemCameraLaunches(classes));
         found.get("external_gallery").addAll(externalGalleryHooks(classes));
         found.get("gallery_to_chat").addAll(galleryToChatHooks(classes));
@@ -6726,7 +6746,7 @@ public class CompatReport {
         "ai_search_chip", "allow_screenshot", "analytics_uploads", "app_icons", "attribution_uploads", "bubbles", "delta_unsent",
         "disappearing_swipe", "external_gallery", "facebook", "facebook_profile", "font_by_name", "font_repository", "growth_notes", "growth_story_card", "instants_button", "keep_unsent",
         "mqtt_telemetry", "nearby_scans", "original_photo", "people_story", "phone_id_sync", "people_tab", "recent_media", "stories", "system_camera",
-        "tab_badges", "typing", "unsent_indicator");
+        "tab_badges", "typing", "unsent_indicator", "unsent_recall");
 
     /** More registers than the parameters take, as ControlHooks.kt's validateScratch asks. */
     static boolean hasLocal(Method method) {

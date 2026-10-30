@@ -63,6 +63,7 @@ class ControlDiscoveryTest {
                     "subtabs", "typing" -> "return-void"
                     "allow_screenshot" -> if (id.contains("(Landroid/view/Window;)")) SECURE_WINDOW_BODY else "return-void"
                     "keep_unsent" -> "const-string v0, \"com.facebook.stella.ipc.messenger.ACTION_REVOKE_MESSAGE\"\nreturn-void"
+                    UNSENT_RECALL -> "const-string v0, \"NotificationRecaller\"\nconst/4 v0, 0x0\nreturn v0"
                     "ai_search" -> "const-string v0, \"com.facebook.messaging.search.aiagent.plugins.implementations.SearchAiagentImplementationsKillSwitch\"\nconst/4 v0, 0x1\nreturn v0"
                     "original_photo" -> when {
                         id == TRANSCODE_CONFIG -> TRANSCODE_CONFIG_BODY

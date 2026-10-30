@@ -2189,7 +2189,7 @@
         },
         {
             "name": "Keep a message log",
-            "description": "Saves each message when its notification arrives, so you can still read it if it's unsent. Works in end-to-end encrypted chats too. Stays on your phone. Starts off. Turn it on in HushMessenger settings > Controls.",
+            "description": "Saves each message when its notification arrives, so you can still read it if it's unsent, and marks the ones that were. Works in end-to-end encrypted chats too. Stays on your phone. Starts off. Turn it on in HushMessenger settings > Controls.",
             "default": true,
             "category": "Privacy",
             "dependencies": [
@@ -2303,7 +2303,7 @@
         },
         {
             "name": "Keep unsent messages",
-            "description": "Keeps messages on screen after someone unsends them, in chats where it works. Encrypted chats aren't supported, and group chats aren't tested. Starts off. Turn it on in HushMessenger settings > Controls.",
+            "description": "Keeps messages on screen after someone unsends them, in chats where it works. In end-to-end encrypted chats the message stays in its notification instead, since the chat itself can't keep it. Group chats aren't tested. Starts off. Turn it on in HushMessenger settings > Controls.",
             "default": true,
             "category": "Privacy",
             "dependencies": [
