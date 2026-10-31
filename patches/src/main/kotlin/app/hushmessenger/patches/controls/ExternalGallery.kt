@@ -96,7 +96,7 @@ private fun Instruction.galleryReads(): Set<Int> {
 }
 
 internal val GALLERY_ENDS = setOf(Opcode.RETURN_VOID, Opcode.RETURN, Opcode.RETURN_WIDE, Opcode.RETURN_OBJECT, Opcode.THROW)
-private val GALLERY_GOTOS = setOf(Opcode.GOTO, Opcode.GOTO_16, Opcode.GOTO_32)
+internal val GALLERY_GOTOS = setOf(Opcode.GOTO, Opcode.GOTO_16, Opcode.GOTO_32)
 
 /** What can run right after instruction [i]: none after a return or throw, null after a switch, which isn't followed. */
 private fun List<Instruction>.galleryNext(i: Int): List<Int>? {

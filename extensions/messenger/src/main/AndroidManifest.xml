@@ -42,6 +42,7 @@
         <meta-data android:name="hush.feature.gallery_to_chat" android:value="true" />
         <meta-data android:name="hush.feature.text_style" android:value="true" />
         <meta-data android:name="hush.feature.quiet_calls" android:value="true" />
+        <meta-data android:name="hush.feature.car_messages" android:value="true" />
         <meta-data android:name="hush.feature.external_browser" android:value="true" />
         <meta-data android:name="hush.feature.bubbles" android:value="true" />
         <meta-data android:name="hush.feature.allow_screenshot" android:value="true" />

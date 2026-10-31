@@ -1,5 +1,6 @@
 package app.hushmessenger.patches.controls
 
+import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.PatchException
@@ -11,6 +12,7 @@ import com.android.tools.smali.dexlib2.iface.ClassDef
 import com.android.tools.smali.dexlib2.iface.Method
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.Instruction
+import com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OffsetInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.TwoRegisterInstruction
@@ -28,16 +30,18 @@ internal const val INSERT_PREVIEW = "Lcom/facebook/xapp/messaging/composer/attac
 internal const val INSERT_PREVIEW_INIT = "$INSERT_PREVIEW-><init>(${AUTO_REPLY_MEDIA}Ljava/util/List;)V"
 internal const val GALLERY_TO_CHAT_CALL = "$SETTINGS->galleryToChat(Landroid/content/Intent;)[Landroid/content/Intent;"
 internal const val GALLERY_CHAT_ITEM_CALL = "$SETTINGS->galleryChatItem(Landroid/content/Intent;Ljava/lang/Object;)Ljava/util/List;"
+internal const val GALLERY_TRAY_CALL = "$SETTINGS->galleryTray(Z)Z"
 private const val ITEM_TYPE_CALL = "Landroid/content/Intent;->getType()Ljava/lang/String;"
 private const val INVOKE_SUSPEND = "invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;"
+private val TRAY_NULLS = setOf(Opcode.CONST_4, Opcode.CONST_16, Opcode.CONST)
 
 /**
  * How a pick reaches the chat's tray, read at discovery: the chat's handler for a photo from another app and the result
- * event's intent field it reads, the coroutine it starts that copies the item and opens the editor, and the chat's event
- * dispatcher with the chat type it takes.
+ * event's intent field it reads, the coroutine it starts that copies the item and opens the editor, the chat's event
+ * dispatcher with the chat type it takes, and the composer's gate on building the tray at all.
  */
 internal data class GalleryChatRoute(val items: String, val itemsIntent: String, val editor: String, val dispatcher: String,
-    val chat: String)
+    val chat: String, val tray: String)
 
 /** Set by [findGalleryToChat] and cleared once the controls are in. */
 internal var galleryChatRoute: GalleryChatRoute? = null
@@ -150,12 +154,81 @@ private fun chatDispatchers(methods: List<Method>, byType: Map<String, ClassDef>
     return found.filterValues { ids -> ids.all(::publicStatic) }
 }
 
+/** The tray's composer plugins: the ones whose event set takes Messenger's tray insert. */
+private fun trayPlugins(all: List<ClassDef>): Set<String> = all.filter { cls ->
+    cls.methods.any { m -> m.parameterTypes.isEmpty() && m.returnType == "Ljava/util/Set;" &&
+        m.implementation?.instructions?.any { it.opcode == Opcode.CONST_CLASS && it.galleryType() == INSERT_PREVIEW } == true }
+}.map { it.type }.toSet()
+
+/** Where the tray gate returns its answer, when one return a branch can't skip to hands back a register an invoke reaches. */
+internal fun Method.traySite(): Int? {
+    if (parameterTypes.isNotEmpty() || returnType != "Z") return null
+    val code = implementation?.instructions?.toList() ?: return null
+    val at = code.indices.singleOrNull { code[it].opcode in GALLERY_ENDS } ?: return null
+    if (code[at].opcode != Opcode.RETURN || (code[at] as OneRegisterInstruction).registerA > 15 || at in jumpTargets()) return null
+    return at
+}
+
 /**
- * The chat's handler for a photo from another app and the coroutine it starts, or none. The handler opens one item in
- * Messenger's editor, so the hook at its start hands it the pick one item at a time, and the hook in the coroutine puts
- * each copied item in the chat's tray instead of opening the editor. That needs the handler exactly as Open your gallery
- * app finds it, with the result event's intent field one it can write, one coroutine it starts, the editor site there,
- * and one public dispatcher for the chat type the coroutine casts to.
+ * The composer factory's gate on Messenger's tray above the message box, which the server turns on for some accounts
+ * only. The factory builds the tray plugin past it, and a false answer takes a path that leaves the plugin null:
+ *
+ *     invoke-virtual {vF}, BaseXappComposerConfigurationFactory;->gate()Z
+ *     move-result vR
+ *     if-eqz vR, :none
+ *     ...
+ *     :none
+ *     const/16 vP, 0x0
+ *     goto :built
+ *     ...
+ *     new-instance vP, <tray plugin>
+ *     ...
+ *     :built
+ *
+ * The hook is the factory's own override of the gate, so everything else that reads it sees the same answer. Only a
+ * factory that overrides its gate counts: 585's chat composer does, and another surface's composer builds the same
+ * plugin behind a base gate it leaves alone.
+ */
+private fun trayGate(all: List<ClassDef>): Method? {
+    val trays = trayPlugins(all)
+    val gates = mutableSetOf<String>()
+    for (factory in all) {
+        if (factory.superclass != COMPOSER_FACTORY) continue
+        for (method in factory.methods) {
+            val code = method.implementation?.instructions?.toList() ?: continue
+            for (built in code.indices) {
+                if (code[built].opcode != Opcode.NEW_INSTANCE || code[built].galleryType() !in trays) continue
+                val plugin = (code[built] as OneRegisterInstruction).registerA
+                for (none in 0 until code.size - 1) {
+                    val zero = code[none]
+                    if (zero.opcode !in TRAY_NULLS || (zero as OneRegisterInstruction).registerA != plugin ||
+                        (zero as NarrowLiteralInstruction).narrowLiteral != 0 || code[none + 1].opcode !in GALLERY_GOTOS ||
+                        code.branchTarget(none + 1) <= built) continue
+                    for (guard in 2 until code.size) {
+                        if (code[guard].opcode != Opcode.IF_EQZ || code.branchTarget(guard) != none) continue
+                        val answer = (code[guard] as OneRegisterInstruction).registerA
+                        val asked = code[guard - 2].galleryMethod()
+                        if (code[guard - 1].opcode != Opcode.MOVE_RESULT || (code[guard - 1] as OneRegisterInstruction).registerA != answer ||
+                            code[guard - 2].opcode !in setOf(Opcode.INVOKE_VIRTUAL, Opcode.INVOKE_VIRTUAL_RANGE) || asked == null ||
+                            asked.definingClass != COMPOSER_FACTORY || asked.parameterTypes.isNotEmpty() || asked.returnType != "Z" ||
+                            factory.methods.none { it.name == asked.name && it.parameterTypes.isEmpty() && it.returnType == "Z" }) continue
+                        gates += "${factory.type}->${asked.name}()Z"
+                    }
+                }
+            }
+        }
+    }
+    val gate = gates.singleOrNull() ?: return null
+    return all.flatMap { it.methods }.singleOrNull { it.hookId() == gate }?.takeIf { it.traySite() != null }
+}
+
+/**
+ * The chat's handler for a photo from another app, the coroutine it starts and the composer's tray gate, or none. The
+ * handler opens one item in Messenger's editor, so the hook at its start hands it the pick one item at a time, and the
+ * hook in the coroutine puts each copied item in the chat's tray instead of opening the editor. The gate's hook makes sure
+ * there is a tray. That needs the handler exactly as Open your gallery app finds it, with the result event's intent field
+ * one it can write, one coroutine it starts, the editor site there, one public dispatcher for the chat type the coroutine
+ * casts to, and one gate.
  */
 internal fun findGalleryToChat(classes: Iterable<ClassDef>): List<Method> {
     galleryChatRoute = null
@@ -177,9 +250,10 @@ internal fun findGalleryToChat(classes: Iterable<ClassDef>): List<Method> {
         insert.methods.none { it.hookId() == INSERT_PREVIEW_INIT && AccessFlags.PUBLIC.isSet(it.accessFlags) }) return emptyList()
     val dispatchers = chatDispatchers(methods, byType).filterValues { it.size == 1 }
     val site = editor.galleryChatSite(dispatchers.keys) ?: return emptyList()
+    val tray = trayGate(all) ?: return emptyList()
     galleryChatRoute = GalleryChatRoute(items.hookId(), itemsIntent.toString(), editor.hookId(),
-        dispatchers.getValue(site.chatType).single(), site.chatType)
-    return listOf(items, editor)
+        dispatchers.getValue(site.chatType).single(), site.chatType, tray.hookId())
+    return listOf(items, editor, tray)
 }
 
 internal fun MutableMethod.validateGalleryToChat(): Int {
@@ -187,6 +261,7 @@ internal fun MutableMethod.validateGalleryToChat(): Int {
     return when (hookId()) {
         route.items -> galleryChatEvent()?.let { 0 } ?: galleryChatChanged("the photo result handler's registers")
         route.editor -> (galleryChatSite(setOf(route.chat)) ?: galleryChatChanged("the editor")).at
+        route.tray -> traySite() ?: galleryChatChanged("the tray gate")
         else -> throw PatchException("Messenger controls: unexpected gallery hook ${hookId()}")
     }
 }
@@ -195,11 +270,20 @@ internal fun MutableMethod.validateGalleryToChat(): Int {
  * With the switch on, a pick from the pick screen comes back as one result per item, and the handler runs once for each,
  * the event's intent swapped for that item and put back after. Each run copies its item as Messenger always does, and
  * the coroutine hands it to the chat's tray where it would open the editor. Off, Pause, safe mode, or a result that isn't
- * the pick screen's get Messenger's own handling, and so does any item the extension doesn't mark.
+ * the pick screen's get Messenger's own handling, and so does any item the extension doesn't mark. The tray gate answers
+ * yes while the switch is on, for an account the server left without the tray.
  */
 internal fun MutableMethod.injectGalleryToChat() {
     val at = validateGalleryToChat()
     val route = galleryChatRoute!!
+    if (hookId() == route.tray) {
+        val answer = "v${getInstruction<OneRegisterInstruction>(at).registerA}"
+        addInstructions(at, """
+            invoke-static {$answer}, $GALLERY_TRAY_CALL
+            move-result $answer
+        """.trimIndent())
+        return
+    }
     if (hookId() == route.items) {
         val event = galleryChatEvent()!!
         val last = implementation!!.registerCount - parameterRegister(0) - 1

@@ -1,10 +1,10 @@
 ![HushMessenger. Keep the conversation. Cut the friction.](assets/readme-hero.png)
 
 <p align="center">
-  <a href="https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.27.0"><img src="https://img.shields.io/badge/version-0.27.0-0084FF" alt="Version 0.27.0"></a>
+  <a href="https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.28.0"><img src="https://img.shields.io/badge/version-0.28.0-0084FF" alt="Version 0.28.0"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
   <img src="https://img.shields.io/badge/platform-Android%209%2B%20arm64%20%7C%20armv7-3DDC84" alt="Platform Android 9 or newer, arm64 and armv7">
-  <img src="https://img.shields.io/badge/Messenger-584.1.0.61.98-0084FF" alt="Messenger 584.1.0.61.98">
+  <img src="https://img.shields.io/badge/Messenger-585.0.0.53.94-0084FF" alt="Messenger 585.0.0.53.94">
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 
 HushMessenger is a set of [Morphe](https://morphe.software) patches for Facebook Messenger. You bring the Messenger APK, Morphe patches it on your phone, and you get a Messenger with a settings screen full of switches that stock Messenger doesn't have. Hide the ads, the suggested people, the stories row and Meta AI. Stop sending read receipts and typing indicators. Watch stories without showing up in the viewer list. Keep a log of messages so an unsend can't take them back. Send photos at their real quality, use your own font, let Material You color the app, and more.
 
-Every switch starts off, so a freshly patched Messenger behaves like stock until you turn something on. The current release has 66 patches. What changed in each version is in the [changelog](CHANGELOG.md).
+Every switch starts off, so a freshly patched Messenger behaves like stock until you turn something on. The current release has 71 patches. What changed in each version is in the [changelog](CHANGELOG.md).
 
 **[Add HushMessenger to Morphe Manager](https://morphe.software/add-source?github=SysAdminDoc%2FHushMessenger)**
 
@@ -30,12 +30,12 @@ Every switch starts off, so a freshly patched Messenger behaves like stock until
 
 ## Install
 
-1. **Get the APK.** The current release, v0.27.0, patches Messenger 584.1.0.61.98. Download it from [APKMirror's 584.1.0.61.98 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-584-1-0-61-98-release/). Every build listed there works, arm64 and armv7. Pick a `nodpi` one if your phone's type has it, since those keep the icons sharp.
-2. **Add the source.** Open the link above on your phone with Morphe Manager (2.2.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **66 patches**. If it shows an older version, tap its refresh button. From the first signed release on, Manager 2.3 and newer also shows **Signed by `4d8d c2b3 fbcd 3ab6`** on the card. That's this project's key, and [Verify a download](#verify-a-download) has more on it.
+1. **Get the APK.** The current release, v0.28.0, patches Messenger 585.0.0.53.94. Download it from [APKMirror's 585.0.0.53.94 page](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-585-0-0-53-94-release/). Every build listed there works, arm64 and armv7. Pick a `nodpi` one if your phone's type has it, since those keep the icons sharp.
+2. **Add the source.** Open the link above on your phone with Morphe Manager (2.3.0 or newer) installed. Or in Manager open **Sources**, tap **+**, choose **Remote** and enter `github.com/SysAdminDoc/HushMessenger`. The card should show **71 patches**. If it shows an older version, tap its refresh button. Manager also shows **Signed by `4d8d c2b3 fbcd 3ab6`** on the card. That's this project's key, and [Verify a download](#verify-a-download) has more on it.
 3. **Patch Messenger.** The default selection includes every switch. Five patches start unselected because they change the app itself, with no switch to undo them: **Clone install under another package name**, **Spoof package version**, **Custom new-message sound**, **Custom launcher icon** and **GmsCore support**. To add one, turn on **Settings → Advanced → Expert mode** in Manager and use **Choose patches**.
 4. **Keep one source.** Don't add the remote source and a local copy together, and don't mix in Messenger patches from other sources.
 
-Prefer a local source? Download [`patches-0.27.0.mpp`](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.27.0) and add it through **Sources > + > Local**. It won't update itself. The `.mpp` file is a patch bundle, not a Messenger APK. Morphe Desktop 1.19.1 or newer can load the same source too.
+Prefer a local source? Download [`patches-0.28.0.mpp`](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.28.0) and add it through **Sources > + > Local**. It won't update itself. The `.mpp` file is a patch bundle, not a Messenger APK. Morphe Desktop 1.20.0 or newer can load the same source too.
 
 ## Settings
 
@@ -96,6 +96,7 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Keep a message log | Saves a copy of each message that raised a notification, encrypted chats included, so an unsend can't take it back. Messages that get unsent are marked Unsent, and **Show only unsent** lists just those. It stays on your phone, encrypted. **View log** and **Clear log** sit under the switch. |
 | Auto reply | Answers messages with a reply you write, for certain words or for any message. One reply per chat every five minutes, and group chats only when you allow it. |
 | Quiet incoming calls | Calls still come in, but Messenger doesn't ring, vibrate or pop the call up over your screen. It waits in the notification shade with Answer and Decline, and a call you miss still shows in the chat. **Only chosen chats** under the switch keeps this to the chats you pick, so every other call rings. If the Facebook app is on your phone, it can still ring for the same call. Experimental. |
+| Android Auto messages | Android Auto reads your Messenger messages out loud and sends the reply you speak, from its own messaging screen. Android Auto only lists apps from the Play Store until you turn on Unknown sources in its developer settings. |
 | Hide read receipts | Opening a chat no longer sends Seen. The chat stays unread on your phone until you reply or mark it read. Group chats haven't been checked. |
 | Mark as read button | Works with Hide read receipts. A chat's top bar gets Messenger's own Mark as read icon, and tapping it sends the Seen that opening the chat held back. When the bar is full it replaces the chat details button (tapping the chat's name opens the same page). Experimental. |
 | View stories anonymously | Opens other people's stories without adding you to their viewer list. |
@@ -153,6 +154,7 @@ These screenshots come from the code on this page, so they can be a step ahead o
 - **A cloned Messenger brings back the settings icon.** A clone made by your phone's dual apps or app cloner keeps its own copy of the settings. Open the clone's settings icon and turn on **App > Hide app drawer icon** there too.
 - **Every chat and call notifies twice.** The second one comes from the Facebook app, which doesn't treat the patched Messenger as the real one. In [Hushfacebook](https://github.com/SysAdminDoc/Hushfacebook) turn on **Leave calls and chats to Messenger**. With regular Facebook, turn off its chat and call notifications in Android's app settings for Facebook.
 - **Restoring chats ends in an error.** The Google Drive restore only works in Meta's own signed Messenger. Use your PIN or a one-time code from another device you're signed in on. No PIN yet? Set one up in another Meta app first, such as Facebook Lite.
+- **Login gets past the password, then loops on a browser check.** That happens on accounts with a passkey. Sign in on the web, remove the passkey under Settings > Accounts Center > Password and security, then log in again. Facebook falls back to approving the login from another device you're signed in on, and you can add the passkey back afterwards.
 - **Install blocked on a Galaxy phone.** Samsung's Auto Blocker only lets apps in from Galaxy Store and Google Play, and it blocks USB installs too. Turn it off in **Settings > Security and privacy > Auto Blocker**, install, then turn it back on. Google's Advanced Protection (**Settings > Google > All services > Privacy & security > Advanced Protection**) blocks the install the same way.
 
 ### Alerts from only some chats
@@ -198,10 +200,10 @@ On Windows, compare your file with `Get-FileHash -Algorithm SHA256 .\messenger.a
 
 ## Verify a download
 
-The [v0.27.0 release](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.27.0) ships `SHA256SUMS.txt` beside the bundle. Compare its `.mpp` hash with your download.
+The [v0.28.0 release](https://github.com/SysAdminDoc/HushMessenger/releases/tag/v0.28.0) ships `SHA256SUMS.txt` beside the bundle. Compare its `.mpp` hash with your download.
 
 ```text
-362f6be6b4f53b4f7819dd89a990c4a7b6b734dff8f7b59f7cabd259a745cf0e  patches-0.27.0.mpp
+10c7bd6da6455c3af3187c390ba2c7fda7397b0afb5608d97a2a6fd956f59a7d  patches-0.28.0.mpp
 ```
 
 `SHA256SUMS.txt.sig` is an SSH signature made with the project's release key. Its fingerprint is `SHA256:Z+UfHy7IUbtgNRO/wHkIr68+u4I+SIKPY9avfx/VAPU` and its public half is in [`scripts/release_signers`](scripts/release_signers). Morphe doesn't check this signature, so checking it is up to you. Download the three files from the same tag and run this in a terminal (OpenSSH 8.1 or newer, which Windows 10 and later include). In PowerShell, wrap it in `cmd /c "..."`.

@@ -66,6 +66,7 @@ hook bubbles LX/2WC;->A00()Z
 hook business_suggestions LX/7Q1;->A05(LX/7Q1;)Z
 hook business_suggestions LX/7R7;->A04(LX/7R7;)Z
 hook business_suggestions LX/WAU;->A02()Z
+hook car_messages LX/0Qr;->Ahg(LX/0M7;)V
 hook chat_animation Landroidx/fragment/app/Fragment;->onCreateAnimation(IZI)Landroid/view/animation/Animation;
 hook chat_fragment LX/1kZ;-><init>()V
 hook chat_inbox LX/1j8;-><init>()V
@@ -124,6 +125,7 @@ hook font_roboto LX/269;->A00(Landroid/content/Context;Ljava/lang/Integer;)Landr
 hook friend_requests LX/1rY;->A08()Z
 hook friend_requests LX/2PG;->A04()Z
 hook gallery_to_chat LX/6HJ;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5VK;)V
+hook gallery_to_chat LX/AC5;->A1J()Z
 hook gallery_to_chat LX/Mpl;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;
 hook growth LX/1rY;->A09()Z
 hook growth_notes Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Od5;Ljava/util/List;LX/5So;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;
@@ -204,6 +206,7 @@ hook tab_people LX/1lJ;->A0E(LX/1lJ;)Z
 hook text_style LX/A2H;->onFocusChanged(ZILandroid/graphics/Rect;)V
 hook typing LX/BCh;->run()V
 hook typing_mailbox LX/8m9;->A0M(Ljava/lang/String;Z)LX/32L;
+hook unsent_clear Lcom/facebook/messaging/notify/client/MessagesNotificationManager;->A0G(Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/notify/type/NewMessageNotification;)V
 hook unsent_indicator LX/W52;->CfI(I)Ljava/lang/String;
 hook unsent_recall LX/96Z;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
 hook wifi_identity LX/1g4;->A02()LX/b1i;

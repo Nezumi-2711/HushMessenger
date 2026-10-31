@@ -161,7 +161,8 @@ final class SettingsText {
         ENGLISH.put("camera_unsupported", "This install has no screen for opening the phone's camera app, so the chat camera stays Messenger's own. Root Mount installs can't add one. Your choice is saved.");
         ENGLISH.put("gallery_unsupported", "No app on this phone can pick a photo for Messenger, so the chat gallery stays Messenger's own. Your choice is saved.");
         ENGLISH.put("text_style_unsupported", "This install has no Bold and Italic entries for the text menu. Root Mount installs can't add them. Your choice is saved.");
-        ENGLISH.put("text_style_read_only", "Bold and Italic only work on text you're typing.");
+        ENGLISH.put("text_style_samsung", "Samsung phones hide them at first. To show them, select a word, tap the three dots, tap Manage apps and turn on Messenger's Bold and Italic.");
+        ENGLISH.put("text_style_read_only","Bold and Italic only work on text you're typing.");
         ENGLISH.put("text_style_bold_none", "Bold works only on A to Z, accented letters and digits.");
         ENGLISH.put("text_style_italic_none", "Italic works only on A to Z and accented letters.");
         ENGLISH.put("bubble_stock", "Stock");

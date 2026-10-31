@@ -210,13 +210,14 @@ public class CompatReport {
         PATCHES.put("Stop live connection logging", List.of("mqtt_telemetry"));
         PATCHES.put("Stop nearby scans", List.of("nearby_scans", "wifi_identity"));
         PATCHES.put("Stop app list and device ID sharing", List.of("phone_id_sync"));
-        PATCHES.put("Keep a message log", List.of("message_log", "unsent_recall"));
+        PATCHES.put("Keep a message log", List.of("message_log", "unsent_recall", "unsent_clear"));
         PATCHES.put("Auto reply", List.of("auto_reply"));
         PATCHES.put("Quiet incoming calls", List.of("quiet_call_ring", "quiet_call_notification"));
+        PATCHES.put("Android Auto messages", List.of("car_messages"));
         PATCHES.put("Allow screenshots", List.of("allow_screenshot", "screenshot_viewers"));
         PATCHES.put("Hide read receipts", List.of("hide_read_receipts", "reply_read"));
         PATCHES.put("Mark as read button", List.of("mark_read_bar", "mark_read_click"));
-        PATCHES.put("Keep unsent messages", List.of("keep_unsent", "unsent_indicator", "delta_unsent", "unsent_recall"));
+        PATCHES.put("Keep unsent messages", List.of("keep_unsent", "unsent_indicator", "delta_unsent", "unsent_recall", "unsent_clear"));
         PATCHES.put("Unlock app icons", List.of("app_icons"));
         PATCHES.put("Square profile pictures", List.of("avatar_shape", "story_ring"));
         PATCHES.put("Use your own font", List.of("font_layout", "font_repository", "font_roboto", "font_by_name", "font_input"));
@@ -2790,6 +2791,75 @@ public class CompatReport {
         return recaller == null ? List.of() : List.of(recaller);
     }
 
+    static final List<String> CLEAR_THREAD_PARAMETERS = List.of(BUBBLE_SESSION, "Lcom/facebook/messaging/model/threadkey/ThreadKey;", "Ljava/lang/String;");
+    static final List<String> DROP_LOG_PARAMETERS = List.of("Lcom/facebook/messaging/notify/client/MessagesNotificationManager;",
+        "Ljava/lang/String;", "Ljava/lang/String;", "Ljava/lang/String;");
+
+    static boolean invokes(Instruction i, String owner, List<String> params, String returns) {
+        return i instanceof ReferenceInstruction r && r.getReference() instanceof MethodReference m &&
+            (owner == null || owner.equals(m.getDefiningClass())) && returns.equals(m.getReturnType()) && refParams(m).equals(params);
+    }
+
+    /**
+     * unsent_clear: the notification manager's one method that clears a chat's notification with "UnsendMessage" when
+     * the unsent message is the only one it shows. Its recaller call's message id register must be the one the drop log
+     * after the clear prints, unwritten between, and no jump may land on the load or the clear. Mirrors MessageLog.kt's
+     * findUnsentClear.
+     */
+    static List<Method> unsentClear(List<ClassDef> classes) {
+        String manager = "Lcom/facebook/messaging/notify/client/MessagesNotificationManager;";
+        Method match = null;
+        for (var cls : classes) {
+            if (!manager.equals(cls.getType())) continue;
+            for (var method : cls.getMethods()) {
+                if (method.getImplementation() == null || !stringsOf(method).contains("new_message_notification_recalled_by_clearing")) continue;
+                var code = instructions(method);
+                int reason = -1, loads = 0;
+                for (int at = 0; at + 1 < code.size(); at++) {
+                    var load = code.get(at);
+                    if ((load.getOpcode() != Opcode.CONST_STRING && load.getOpcode() != Opcode.CONST_STRING_JUMBO) ||
+                        !(((ReferenceInstruction) load).getReference() instanceof StringReference s) || !"UnsendMessage".equals(s.getString())) continue;
+                    var args = callArgs(code.get(at + 1));
+                    if (!invokes(code.get(at + 1), manager, CLEAR_THREAD_PARAMETERS, "V") || args.isEmpty() ||
+                        args.get(args.size() - 1) != ((OneRegisterInstruction) load).getRegisterA()) continue;
+                    reason = at;
+                    loads++;
+                }
+                if (loads != 1) continue;
+                var jumps = mediaTargets(method);
+                if (jumps.contains(reason) || jumps.contains(reason + 1)) continue;
+                Integer id = null;
+                int recalls = 0;
+                for (var i : code) {
+                    if (i.getOpcode() == Opcode.INVOKE_STATIC || i.getOpcode() == Opcode.INVOKE_STATIC_RANGE ||
+                        !invokes(i, null, RECALLER_PARAMETERS, "Z")) continue;
+                    recalls++;
+                    var args = callArgs(i);
+                    id = args.size() > 2 ? args.get(2) : null;
+                }
+                if (recalls != 1 || id == null) continue;
+                int end = -1;
+                for (int at = reason + 2; at < code.size(); at++) if (!code.get(at).getOpcode().canContinue()) { end = at; break; }
+                if (end < 0) continue;
+                int log = -1, logs = 0;
+                for (int at = reason + 2; at < end; at++) {
+                    var i = code.get(at);
+                    if ((i.getOpcode() == Opcode.INVOKE_STATIC || i.getOpcode() == Opcode.INVOKE_STATIC_RANGE) &&
+                        invokes(i, manager, DROP_LOG_PARAMETERS, "V")) { log = at; logs++; }
+                }
+                if (logs != 1) continue;
+                var logArgs = callArgs(code.get(log));
+                if (logArgs.size() < 3 || logArgs.get(2).intValue() != id) continue;
+                boolean rewritten = false;
+                for (int at = reason; at < log; at++) if (writes(code.get(at), id)) rewritten = true;
+                if (rewritten) continue;
+                if (match != null) return List.of();
+                match = method;
+            }
+        }
+        return match == null ? List.of() : List.of(match);
+    }
+
     static final String SECRET_STRING = "Lcom/facebook/secure/secrettypes/SecretString;";
     static final String MESSAGES_NOTIFICATION_MANAGER = "Lcom/facebook/messaging/notify/client/MessagesNotificationManager;";
     static final String UNSEND_RETRACTION = "messenger_android_unsend_notificaiton_retraction";
@@ -3586,11 +3656,78 @@ public class CompatReport {
         return found;
     }
 
+    static final String COMPOSER_FACTORY = "Lcom/facebook/messaging/msys/thread/composer/configuration/xapp/BaseXappComposerConfigurationFactory;";
+    static final Set<Opcode> TRAY_NULLS = Set.of(Opcode.CONST_4, Opcode.CONST_16, Opcode.CONST);
+    static final Set<Opcode> TRAY_GOTOS = Set.of(Opcode.GOTO, Opcode.GOTO_16, Opcode.GOTO_32);
+
+    /** The tray gate's single return, when no branch lands on it and its register is below v16. Mirrors traySite. */
+    static int traySite(Method m) {
+        if (!m.getParameterTypes().isEmpty() || !"Z".equals(m.getReturnType()) || m.getImplementation() == null) return -1;
+        var code = instructions(m);
+        int at = -1;
+        for (int i = 0; i < code.size(); i++)
+            if (CHAT_RUN_ENDS.contains(code.get(i).getOpcode())) {
+                if (at >= 0) return -1;
+                at = i;
+            }
+        if (at < 0 || code.get(at).getOpcode() != Opcode.RETURN || register(code.get(at)) > 15 || mediaTargets(m).contains(at)) return -1;
+        return at;
+    }
+
+    /**
+     * The composer factory's override of the base call it asks before building the tray plugin, the one whose event set
+     * takes the tray insert. A false answer jumps to a zero for the plugin and a goto past where it's built. Only a factory
+     * that overrides its gate counts. Mirrors trayGate in GalleryToChat.kt.
+     */
+    static Method trayGate(List<ClassDef> classes) {
+        var trays = new HashSet<String>();
+        for (var cls : classes) for (var m : cls.getMethods()) {
+            if (!m.getParameterTypes().isEmpty() || !"Ljava/util/Set;".equals(m.getReturnType()) || m.getImplementation() == null) continue;
+            for (var i : instructions(m)) if (i.getOpcode() == Opcode.CONST_CLASS && INSERT_PREVIEW.equals(typeOf(i))) trays.add(cls.getType());
+        }
+        var gates = new LinkedHashSet<String>();
+        for (var factory : classes) {
+            if (!COMPOSER_FACTORY.equals(factory.getSuperclass())) continue;
+            for (var m : factory.getMethods()) {
+                if (m.getImplementation() == null) continue;
+                var code = instructions(m);
+                for (int built = 0; built < code.size(); built++) {
+                    if (code.get(built).getOpcode() != Opcode.NEW_INSTANCE || !trays.contains(typeOf(code.get(built)))) continue;
+                    int plugin = register(code.get(built));
+                    for (int none = 0; none + 1 < code.size(); none++) {
+                        var zero = code.get(none);
+                        if (!TRAY_NULLS.contains(zero.getOpcode()) || register(zero) != plugin || ((NarrowLiteralInstruction) zero).getNarrowLiteral() != 0 ||
+                            !TRAY_GOTOS.contains(code.get(none + 1).getOpcode()) || mediaTarget(code, none + 1) <= built) continue;
+                        for (int guard = 2; guard < code.size(); guard++) {
+                            if (code.get(guard).getOpcode() != Opcode.IF_EQZ || mediaTarget(code, guard) != none) continue;
+                            var call = code.get(guard - 2);
+                            if (code.get(guard - 1).getOpcode() != Opcode.MOVE_RESULT || register(code.get(guard - 1)) != register(code.get(guard)) ||
+                                (call.getOpcode() != Opcode.INVOKE_VIRTUAL && call.getOpcode() != Opcode.INVOKE_VIRTUAL_RANGE) ||
+                                !(((ReferenceInstruction) call).getReference() instanceof MethodReference asked) ||
+                                !COMPOSER_FACTORY.equals(asked.getDefiningClass()) || !asked.getParameterTypes().isEmpty() || !"Z".equals(asked.getReturnType())) continue;
+                            boolean overridden = false;
+                            for (var own : factory.getMethods())
+                                overridden |= own.getName().equals(asked.getName()) && own.getParameterTypes().isEmpty() && "Z".equals(own.getReturnType());
+                            if (overridden) gates.add(factory.getType() + "->" + asked.getName() + "()Z");
+                        }
+                    }
+                }
+            }
+        }
+        if (gates.size() != 1) return null;
+        Method gate = null;
+        for (var cls : classes) for (var m : cls.getMethods()) if (hookId(m).equals(gates.iterator().next())) {
+            if (gate != null) return null;
+            gate = m;
+        }
+        return gate != null && traySite(gate) >= 0 ? gate : null;
+    }
+
     /**
      * gallery_to_chat: Open your gallery app's handler for a photo from another app and the one coroutine it starts, while
      * the handler has four locals and its event below v16, the event's intent field is public and writable, the coroutine
-     * has the editor site, and the chat type it casts to has one public dispatcher. Mirrors findGalleryToChat in
-     * GalleryToChat.kt.
+     * has the editor site, and the chat type it casts to has one public dispatcher, plus the composer's tray gate. Mirrors
+     * findGalleryToChat in GalleryToChat.kt.
      */
     static List<Method> galleryToChatHooks(List<ClassDef> classes) {
         var byType = new HashMap<String, ClassDef>();
@@ -3633,7 +3770,9 @@ public class CompatReport {
         if (!insertable) return List.of();
         var dispatchers = chatDispatchers(classes, byType);
         dispatchers.values().removeIf(ids -> ids.size() != 1);
-        return galleryChatSite(editor, dispatchers.keySet()) == null ? List.of() : List.of(items, editor);
+        if (galleryChatSite(editor, dispatchers.keySet()) == null) return List.of();
+        var tray = trayGate(classes);
+        return tray == null ? List.of() : List.of(items, editor, tray);
     }
 
     static final String FONT_LAYOUT_ANCHOR = "Hit OEM font NPE in Paint.setTypeface, keeping previous typeface";
@@ -5494,6 +5633,42 @@ public class CompatReport {
         return posters;
     }
 
+    static final String CAR_EXTENSIONS = "android.car.EXTENSIONS";
+    static final String CAR_CONVERSATION = "car_conversation";
+    static final String PUT_BUNDLE = "Landroid/os/Bundle;->putBundle(Ljava/lang/String;Landroid/os/Bundle;)V";
+
+    /** The car bundle's register when code[index] stores it under android.car.EXTENSIONS loaded right before, else -1. */
+    static int carBundleStored(List<Instruction> code, int index) {
+        if (!(code.get(index) instanceof FiveRegisterInstruction put) || put.getOpcode() != Opcode.INVOKE_VIRTUAL || put.getRegisterCount() != 3 ||
+            !PUT_BUNDLE.equals(ref(put)) || index == 0) return -1;
+        var key = code.get(index - 1);
+        return CAR_EXTENSIONS.equals(text(key)) && register(key) == put.getRegisterD() ? put.getRegisterE() : -1;
+    }
+
+    /**
+     * car_messages: the app's only method writing both car_conversation and android.car.EXTENSIONS, an instance (X)V
+     * method whose single car bundle store comes right before a return-void nothing jumps to. Mirrors CarMessages.kt.
+     */
+    static List<Method> carMessages(List<ClassDef> classes) {
+        var writers = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            var strings = new HashSet<String>();
+            for (var i : instructions(method)) { var s = text(i); if (s != null) strings.add(s); }
+            if (strings.contains(CAR_CONVERSATION) && strings.contains(CAR_EXTENSIONS)) writers.add(method);
+        }
+        if (writers.size() != 1) return List.of();
+        var method = writers.get(0);
+        if (AccessFlags.STATIC.isSet(method.getAccessFlags()) || !"V".equals(method.getReturnType()) || params(method).size() != 1) return List.of();
+        var code = instructions(method);
+        if (code.stream().filter(i -> CAR_CONVERSATION.equals(text(i))).count() != 1) return List.of();
+        var stores = new ArrayList<Integer>();
+        for (int i = 0; i < code.size(); i++) if (carBundleStored(code, i) >= 0) stores.add(i);
+        if (stores.size() != 1) return List.of();
+        int ret = stores.get(0) + 1;
+        if (ret >= code.size() || code.get(ret).getOpcode() != Opcode.RETURN_VOID || mediaTargets(method).contains(ret)) return List.of();
+        return List.of(method);
+    }
+
     static final String PHONE_ID_PROVIDER = ".provider.phoneid";
     static final String GET_PHONE_ID = "com.facebook.GET_PHONE_ID";
     static final String INSTALLED_PACKAGES = "Landroid/content/pm/PackageManager;->getInstalledPackages(I)Ljava/util/List;";
@@ -6178,6 +6353,7 @@ public class CompatReport {
         found.get("story_ring").addAll(storyRing(classes));
         found.get("quiet_call_ring").addAll(quietCallRing(classes));
         found.get("quiet_call_notification").addAll(quietCallNotification(classes));
+        found.get("car_messages").addAll(carMessages(classes));
         var markRead = markReadButton(classes);
         if (!markRead.isEmpty()) {
             found.get("mark_read_bar").add(markRead.get(0));
@@ -6188,6 +6364,7 @@ public class CompatReport {
         found.get("message_log").addAll(messageLogHooks(classes));
         found.get("auto_reply").addAll(messageLogHooks(classes));
         found.get("unsent_recall").addAll(unsentRecall(classes));
+        found.get("unsent_clear").addAll(unsentClear(classes));
         found.get("system_camera").addAll(systemCameraLaunches(classes));
         found.get("external_gallery").addAll(externalGalleryHooks(classes));
         found.get("gallery_to_chat").addAll(galleryToChatHooks(classes));

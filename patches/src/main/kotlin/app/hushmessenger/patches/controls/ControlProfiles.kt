@@ -97,6 +97,7 @@ internal val PROFILE_347015062 = ControlProfile(
         "bubble_mode" to setOf("LX/2Vm;->A01(Lcom/facebook/auth/usersession/FbUserSession;)Z"),
         "bubbles" to setOf("LX/2Vm;->A00()Z"),
         "business_suggestions" to setOf("LX/7Rz;->A05(LX/7Rz;)Z", "LX/7T5;->A04(LX/7T5;)Z", "LX/Kjw;->A02()Z"),
+        "car_messages" to setOf("LX/0Qq;->AhZ(LX/0M6;)V"),
         "chat_animation" to setOf("Landroidx/fragment/app/Fragment;->onCreateAnimation(IZI)Landroid/view/animation/Animation;"),
         "chat_fragment" to setOf("LX/1k9;-><init>()V"),
         "chat_inbox" to setOf("LX/1ii;-><init>()V"),
@@ -143,7 +144,7 @@ internal val PROFILE_347015062 = ControlProfile(
         "friend_requests" to setOf("LX/1r8;->A08()Z", "LX/2Oq;->A04()Z"),
         "gallery_to_chat" to setOf(
             "LX/6Ik;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5Vw;)V",
-            "LX/NFg;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+            "LX/AEa;->A1J()Z", "LX/NFg;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
         ),
         "growth" to setOf("LX/1r8;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Tv8;Ljava/util/List;LX/5TQ;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
@@ -232,6 +233,7 @@ internal val PROFILE_347015062 = ControlProfile(
         "text_style" to setOf("LX/A4m;->onFocusChanged(ZILandroid/graphics/Rect;)V"),
         "typing" to setOf("LX/BFC;->run()V"),
         "typing_mailbox" to setOf("LX/8o5;->A0M(Ljava/lang/String;Z)LX/31v;"),
+        "unsent_clear" to setOf("Lcom/facebook/messaging/notify/client/MessagesNotificationManager;->A0G(Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/notify/type/NewMessageNotification;)V"),
         "unsent_indicator" to setOf("LX/W6h;->Cf5(I)Ljava/lang/String;"),
         "unsent_recall" to setOf("LX/98W;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
@@ -324,6 +326,7 @@ internal val PROFILE_347014996 = ControlProfile(
         "bubble_mode" to setOf("LX/2Vm;->A01(Lcom/facebook/auth/usersession/FbUserSession;)Z"),
         "bubbles" to setOf("LX/2Vm;->A00()Z"),
         "business_suggestions" to setOf("LX/7Rz;->A05(LX/7Rz;)Z", "LX/7T5;->A04(LX/7T5;)Z", "LX/Kjw;->A02()Z"),
+        "car_messages" to setOf("LX/0Qq;->AhZ(LX/0M6;)V"),
         "chat_animation" to setOf("Landroidx/fragment/app/Fragment;->onCreateAnimation(IZI)Landroid/view/animation/Animation;"),
         "chat_fragment" to setOf("LX/1k9;-><init>()V"),
         "chat_inbox" to setOf("LX/1ii;-><init>()V"),
@@ -370,7 +373,7 @@ internal val PROFILE_347014996 = ControlProfile(
         "friend_requests" to setOf("LX/1r8;->A08()Z", "LX/2Oq;->A04()Z"),
         "gallery_to_chat" to setOf(
             "LX/6Ik;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5Vw;)V",
-            "LX/NFg;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+            "LX/AEa;->A1J()Z", "LX/NFg;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
         ),
         "growth" to setOf("LX/1r8;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Tv8;Ljava/util/List;LX/5TQ;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
@@ -459,6 +462,7 @@ internal val PROFILE_347014996 = ControlProfile(
         "text_style" to setOf("LX/A4m;->onFocusChanged(ZILandroid/graphics/Rect;)V"),
         "typing" to setOf("LX/BFC;->run()V"),
         "typing_mailbox" to setOf("LX/8o5;->A0M(Ljava/lang/String;Z)LX/31v;"),
+        "unsent_clear" to setOf("Lcom/facebook/messaging/notify/client/MessagesNotificationManager;->A0G(Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/notify/type/NewMessageNotification;)V"),
         "unsent_indicator" to setOf("LX/W6h;->Cf5(I)Ljava/lang/String;"),
         "unsent_recall" to setOf("LX/98W;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
@@ -551,6 +555,7 @@ internal val PROFILE_347014974 = ControlProfile(
         "bubble_mode" to setOf("LX/2XG;->A01(Lcom/facebook/auth/usersession/FbUserSession;)Z"),
         "bubbles" to setOf("LX/2XG;->A00()Z"),
         "business_suggestions" to setOf("LX/7VN;->A05(LX/7VN;)Z", "LX/7WT;->A04(LX/7WT;)Z", "LX/Kou;->A02()Z"),
+        "car_messages" to setOf("LX/0Qx;->Ahe(LX/0MA;)V"),
         "chat_animation" to setOf("Landroidx/fragment/app/Fragment;->onCreateAnimation(IZI)Landroid/view/animation/Animation;"),
         "chat_fragment" to setOf("LX/1lQ;-><init>()V"),
         "chat_inbox" to setOf("LX/1jz;-><init>()V"),
@@ -597,7 +602,7 @@ internal val PROFILE_347014974 = ControlProfile(
         "friend_requests" to setOf("LX/1sP;->A08()Z", "LX/2QK;->A04()Z"),
         "gallery_to_chat" to setOf(
             "LX/6Lb;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5Yh;)V",
-            "LX/NOw;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+            "LX/AJ1;->A1J()Z", "LX/NOw;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
         ),
         "growth" to setOf("LX/1sP;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Or6;Ljava/util/List;LX/5WB;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
@@ -685,6 +690,7 @@ internal val PROFILE_347014974 = ControlProfile(
         "text_style" to setOf("LX/A9D;->onFocusChanged(ZILandroid/graphics/Rect;)V"),
         "typing" to setOf("LX/BJi;->run()V"),
         "typing_mailbox" to setOf("LX/8sW;->A0M(Ljava/lang/String;Z)LX/33a;"),
+        "unsent_clear" to setOf("Lcom/facebook/messaging/notify/client/MessagesNotificationManager;->A0G(Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/notify/type/NewMessageNotification;)V"),
         "unsent_indicator" to setOf("LX/TCX;->CfG(I)Ljava/lang/String;"),
         "unsent_recall" to setOf("LX/9Cx;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(
@@ -777,6 +783,7 @@ internal val PROFILE_347014990 = ControlProfile(
         "bubble_mode" to setOf("LX/2WC;->A01(Lcom/facebook/auth/usersession/FbUserSession;)Z"),
         "bubbles" to setOf("LX/2WC;->A00()Z"),
         "business_suggestions" to setOf("LX/7Q1;->A05(LX/7Q1;)Z", "LX/7R7;->A04(LX/7R7;)Z", "LX/WAU;->A02()Z"),
+        "car_messages" to setOf("LX/0Qr;->Ahg(LX/0M7;)V"),
         "chat_animation" to setOf("Landroidx/fragment/app/Fragment;->onCreateAnimation(IZI)Landroid/view/animation/Animation;"),
         "chat_fragment" to setOf("LX/1kZ;-><init>()V"),
         "chat_inbox" to setOf("LX/1j8;-><init>()V"),
@@ -823,7 +830,7 @@ internal val PROFILE_347014990 = ControlProfile(
         "friend_requests" to setOf("LX/1rY;->A08()Z", "LX/2PG;->A04()Z"),
         "gallery_to_chat" to setOf(
             "LX/6HJ;->A00(Landroidx/fragment/app/Fragment;Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/model/threadkey/ThreadKey;Lcom/facebook/xapp/messaging/composer/activity/event/ActivityResultEvent;LX/5VK;)V",
-            "LX/Mpl;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
+            "LX/AC5;->A1J()Z", "LX/Mpl;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;",
         ),
         "growth" to setOf("LX/1rY;->A09()Z"),
         "growth_notes" to setOf("Lcom/facebook/presence/note/ui/nux/controller/NotesNuxController;->A01(Landroidx/fragment/app/Fragment;LX/Od5;Ljava/util/List;LX/5So;Lkotlin/jvm/functions/Function1;)Ljava/lang/Object;"),
@@ -911,6 +918,7 @@ internal val PROFILE_347014990 = ControlProfile(
         "text_style" to setOf("LX/A2H;->onFocusChanged(ZILandroid/graphics/Rect;)V"),
         "typing" to setOf("LX/BCh;->run()V"),
         "typing_mailbox" to setOf("LX/8m9;->A0M(Ljava/lang/String;Z)LX/32L;"),
+        "unsent_clear" to setOf("Lcom/facebook/messaging/notify/client/MessagesNotificationManager;->A0G(Lcom/facebook/auth/usersession/FbUserSession;Lcom/facebook/messaging/notify/type/NewMessageNotification;)V"),
         "unsent_indicator" to setOf("LX/W52;->CfI(I)Ljava/lang/String;"),
         "unsent_recall" to setOf("LX/96Z;->A00(Lcom/facebook/auth/usersession/FbUserSession;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z"),
         "wifi_identity" to setOf(

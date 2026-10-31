@@ -88,14 +88,59 @@ private fun cameraResultClass(dispatcher: String = DISPATCHER, type: String = "L
 private fun dispatcherClass(id: String = DISPATCHER, flags: Int = PUBLIC_STATIC) =
     fixtureClass(id.substringBefore("->"), listOf(fixtureMethod(id, "return-void", registers = 3, flags = flags)))
 
+private const val FACTORY = "LX/AEa;"
+private const val TRAY_PLUGIN = "LX/Afy;"
+
+/** The synthetic label for the composer factory's override of its tray gate, named after 585's. */
+internal const val GALLERY_TRAY_GATE = "$FACTORY->A1J()Z"
+
+/** The tray's composer plugin, whose event set takes the tray insert. */
+private fun trayPluginClass(event: String = INSERT_PREVIEW) = fixtureClass(TRAY_PLUGIN, listOf(fixtureMethod("$TRAY_PLUGIN->BWh()Ljava/util/Set;", """
+    const-class v0, $event
+    invoke-static {v0}, Ljava/util/Collections;->singleton(Ljava/lang/Object;)Ljava/util/Set;
+    move-result-object v0
+    return-object v0
+""".trimIndent(), registers = 2)))
+
+/** The factory cut down to its tray: the gate, a null plugin when it says no, and the plugin built past it. Locals v0 to v2, this in v3. */
+private val FACTORY_BODY = """
+    invoke-virtual {p0}, $COMPOSER_FACTORY->A1J()Z
+    move-result v0
+    if-eqz v0, :none
+    const/4 v1, 0x1
+    goto :check
+    :none
+    const/4 v2, 0x0
+    goto :built
+    :check
+    new-instance v2, $TRAY_PLUGIN
+    invoke-direct {v2}, $TRAY_PLUGIN-><init>()V
+    :built
+    invoke-virtual {p0, v2}, $FACTORY->A00(Ljava/lang/Object;)V
+    return-void
+""".trimIndent()
+
+/** The factory's override of the gate: a server flag. Locals v0 and v1, this in v2. */
+private val GATE_BODY = """
+    const-wide v0, 0x101019e00161b84L
+    invoke-static {v0, v1}, LX/2on;->A00(J)Z
+    move-result v0
+    return v0
+""".trimIndent()
+
+private fun factoryClass(body: String = FACTORY_BODY, gate: String? = GATE_BODY, type: String = FACTORY,
+    superclass: String = COMPOSER_FACTORY) = fixtureClass(type, listOf(fixtureMethod("$type->A8B()V", body.replace(FACTORY, type), registers = 4)) +
+    listOfNotNull(gate?.let { fixtureMethod(GALLERY_TRAY_GATE.replace(FACTORY, type), it, registers = 3) }), superclass = superclass)
+
 /**
  * Open your gallery app's classes with the photo handler starting its coroutine and the event's intent field writable,
- * plus the coroutine, the tray insert and the camera result that names the chat's dispatcher.
+ * plus the coroutine, the tray insert, the camera result that names the chat's dispatcher, and the composer factory
+ * with its tray gate and the tray's plugin.
  */
 internal fun galleryToChatFixture(vararg replace: MutableClass): List<MutableClass> {
     val classes = externalGalleryFixture().filter { it.type != ACTIVITY_RESULT_EVENT && it.type != "LX/B5V;" } +
         listOf(itemsClass(chatItemsBody()), resultEventClass(intentFlags = AccessFlags.PUBLIC.value), coroutineClass(), insertClass(),
-            cameraResultClass(), dispatcherClass())
+            cameraResultClass(), dispatcherClass(), factoryClass(), trayPluginClass())
     return classes.filter { cls -> replace.none { it.type == cls.type } } + replace
 }
 
@@ -114,13 +159,37 @@ class GalleryToChatTest {
 
     private fun found(classes: List<ClassDef>) = mirroredControls(classes).getValue(GALLERY_TO_CHAT)
 
-    @Test fun thePhotoHandlerAndItsCoroutineAreFoundWithTheChatsDispatcher() {
+    @Test fun thePhotoHandlerAndItsCoroutineAreFoundWithTheChatsDispatcherAndTrayGate() {
         val found = found(chatClasses())
-        assertEquals(listOf(GALLERY_ITEMS, GALLERY_CHAT_EDITOR), found.map { it.hookId() })
-        assertEquals(GalleryChatRoute(GALLERY_ITEMS, ITEMS_INTENT_FIELD, GALLERY_CHAT_EDITOR, DISPATCHER, CHAT), galleryChatRoute)
+        assertEquals(listOf(GALLERY_ITEMS, GALLERY_CHAT_EDITOR, GALLERY_TRAY_GATE), found.map { it.hookId() })
+        assertEquals(GalleryChatRoute(GALLERY_ITEMS, ITEMS_INTENT_FIELD, GALLERY_CHAT_EDITOR, DISPATCHER, CHAT, GALLERY_TRAY_GATE), galleryChatRoute)
         validateControls(mapOf(GALLERY_TO_CHAT to found), setOf(GALLERY_TO_CHAT))
-        val site = found.last().galleryChatSite(setOf(CHAT))!!
+        val site = found[1].galleryChatSite(setOf(CHAT))!!
         assertEquals(listOf(9, 1, 0, 2, 4, CHAT, UNIT), listOf(site.at, site.intent, site.media, site.chat, site.params, site.chatType, site.unit))
+        assertEquals(3, found.last().traySite())
+    }
+
+    @Test fun anotherComposerBehindAGateItDoesntOverrideIsLeftAlone() {
+        // 585 builds the same plugin in another surface's composer, behind a base gate that composer doesn't override.
+        val found = found(chatClasses() + factoryClass(type = "LX/AFD;", gate = null))
+        assertEquals(GALLERY_TRAY_GATE, found.last().hookId())
+        assertEquals(GALLERY_TRAY_GATE, galleryChatRoute!!.tray)
+    }
+
+    @Test fun theTrayGateAsksTheSwitchWithTheServersAnswer() {
+        findGalleryToChat(chatClasses())
+        val gate = MutableMethod(factoryClass().methods.single { it.name == "A1J" })
+        val before = gate.code()
+        injectControl(GALLERY_TO_CHAT, mapOf(GALLERY_TO_CHAT to listOf(gate)))
+        val after = gate.code()
+        assertEquals(before.take(3), after.take(3))
+        assertEquals(GALLERY_TRAY_CALL, after[3].reference())
+        assertEquals(0, (after[3] as FiveRegisterInstruction).registerC)
+        assertEquals(1, (after[3] as FiveRegisterInstruction).registerCount)
+        assertEquals(Opcode.MOVE_RESULT, after[4].opcode)
+        assertEquals(0, (after[4] as OneRegisterInstruction).registerA)
+        assertEquals(before.last(), after.last())
+        assertEquals(before.size + 2, after.size)
     }
 
     @Test fun theHandlerRunsOncePerItemWithTheEventsIntentSwappedAndPutBack() {
@@ -236,6 +305,20 @@ class GalleryToChatTest {
             "no unit" to chatClasses(editor(EDITOR_BODY.replace("sget-object v5, $UNIT", "sget-object v5, LX/0Bs;->A00:Ljava/lang/Object;"))),
             "two builders" to chatClasses(editor(EDITOR_BODY.replace("sget-object v6,", "new-instance v6, $EDITOR_BUILDER\nsget-object v6,"))),
             "media in this" to chatClasses(editor(EDITOR_BODY.replace("v0", "v7"))),
+            // The tray gate: the plugin the gate guards takes the tray insert, the gate is the factory's own, and its answer
+            // comes back from one return.
+            "no tray plugin" to chatClasses().filter { it.type != TRAY_PLUGIN },
+            "the plugin takes another event" to chatClasses(trayPluginClass("LX/5Rm;")),
+            "not a composer factory" to chatClasses(factoryClass(superclass = "Ljava/lang/Object;")),
+            "the tray isn't gated" to chatClasses(factoryClass(FACTORY_BODY.replace("if-eqz v0, :none", "if-eqz v0, :check"))),
+            "gated by another call" to chatClasses(factoryClass(FACTORY_BODY.replace("$COMPOSER_FACTORY->A1J()Z", "$FACTORY->A1J()Z"))),
+            "gate with an argument" to chatClasses(factoryClass(FACTORY_BODY.replace("invoke-virtual {p0}, $COMPOSER_FACTORY->A1J()Z",
+                "invoke-virtual {p0, v1}, $COMPOSER_FACTORY->A1J(I)Z"))),
+            "no plugin is null past the tray" to chatClasses(factoryClass(FACTORY_BODY.replace("goto :built", "goto :check"))),
+            "no override" to chatClasses(factoryClass(gate = null)),
+            "two returns" to chatClasses(factoryClass(gate = GATE_BODY.replace("move-result v0", "move-result v0\nif-eqz v0, :no\nreturn v0\n:no"))),
+            "a jump to the return" to chatClasses(factoryClass(gate = GATE_BODY.replace("move-result v0", "move-result v0\nif-eqz v0, :answer\n:answer"))),
+            "two gated factories" to chatClasses() + factoryClass(type = "LX/AEb;"),
         )
         for ((case, classes) in cases) {
             assertTrue(found(classes).isEmpty(), case)
@@ -284,7 +367,7 @@ class GalleryToChatTest {
                 val after = method.code()
                 assertTrue(after.size > before.size, "$code ${method.hookId()}")
                 assertEquals(1, after.count { it is ReferenceInstruction &&
-                    it.reference.toString() in setOf(GALLERY_TO_CHAT_CALL, GALLERY_CHAT_ITEM_CALL) }, "$code ${method.hookId()}")
+                    it.reference.toString() in setOf(GALLERY_TO_CHAT_CALL, GALLERY_CHAT_ITEM_CALL, GALLERY_TRAY_CALL) }, "$code ${method.hookId()}")
             }
         }
     }

@@ -46,6 +46,7 @@ public class ExternalGalleryTest {
         Settings.preferences.edit().clear().commit();
         Settings.activeAt.clear();
         Settings.hookErrors.clear();
+        Settings.chatTray = false;
         CrashGuard.resetForTests();
     }
 
@@ -691,6 +692,12 @@ public class ExternalGalleryTest {
         assertEquals(0, Settings.lastActive(GalleryPicker.CHAT_KEY));
 
         Settings.preferences.edit().putBoolean(GalleryPicker.CHAT_KEY, true).commit();
+        // A chat built before the switch went on has no tray, so its pick keeps the Send to sheet.
+        assertNull(Settings.galleryToChat(mixed));
+        assertTrue(Settings.galleryItems(thread, mixed));
+        assertEquals(Intent.ACTION_SEND_MULTIPLE, started.getNextStartedActivity().getAction());
+        mixed = GalleryPicker.handBack(app, withClip(new Intent(), photo, video));
+        assertTrue("The chat opened again builds the tray", Settings.galleryTray(false));
         assertFalse("The Send to sheet steps aside", Settings.galleryItems(thread, mixed));
         assertNull(started.getNextStartedActivity());
         Intent[] items = Settings.galleryToChat(mixed);
@@ -727,6 +734,25 @@ public class ExternalGalleryTest {
         Intent paused = GalleryPicker.handBack(app, withClip(new Intent(), photo, video));
         assertNull("Pause leaves the pick to Messenger", Settings.galleryToChat(paused));
         assertFalse(paused.hasExtra(GalleryPicker.IN_CHAT));
+        assertTrue(Settings.hookErrors.isEmpty());
+    }
+
+    /** #101: the chat's tray, which the server leaves off for some accounts, is on while both switches are. */
+    @Test public void bothSwitchesOnGiveTheChatMessengersTray() {
+        assertFalse("Off keeps the server's answer", Settings.galleryTray(false));
+        assertTrue(Settings.galleryTray(true));
+        assertTrue(Settings.chatTray);
+        Settings.preferences.edit().putBoolean(GalleryPicker.CHAT_KEY, true).commit();
+        assertFalse("The chat switch needs the gallery switch", Settings.galleryTray(false));
+        assertFalse(Settings.chatTray);
+        assertEquals(0, Settings.lastActive(GalleryPicker.CHAT_KEY));
+        Settings.preferences.edit().putBoolean(GalleryPicker.KEY, true).commit();
+        assertTrue(Settings.galleryTray(false));
+        assertTrue(Settings.chatTray);
+        assertTrue(Settings.lastActive(GalleryPicker.CHAT_KEY) > 0);
+        Settings.preferences.edit().putBoolean("paused", true).commit();
+        assertFalse("Pause keeps the server's answer", Settings.galleryTray(false));
+        assertTrue(Settings.galleryTray(true));
         assertTrue(Settings.hookErrors.isEmpty());
     }
 

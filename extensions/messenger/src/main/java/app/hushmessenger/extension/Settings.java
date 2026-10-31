@@ -954,7 +954,25 @@ public final class Settings {
     /** A whole pick from the pick screen that Put gallery picks in the chat takes, rather than the Send to sheet. */
     private static boolean picksGoToChat(android.content.Intent data) {
         return data.getBooleanExtra(GalleryPicker.RESULT_PREPARED, false) && !data.getBooleanExtra(GalleryPicker.ONE_ITEM, false) &&
-            wouldUse(GalleryPicker.CHAT_KEY) && wouldUse(GalleryPicker.KEY);
+            chatTray && wouldUse(GalleryPicker.CHAT_KEY) && wouldUse(GalleryPicker.KEY);
+    }
+    /** The chat composer's last answer from {@link #galleryTray}: whether the chat has Messenger's tray to put picks in. */
+    static volatile boolean chatTray;
+    /**
+     * A chat's composer asks this whether to build Messenger's tray above the message box, which the server turns on for
+     * some accounts and not others (#101). With no tray a pick put in the chat lands nowhere, so with Put gallery picks in
+     * the chat and Open your gallery app on, the answer is yes. A chat whose composer was built before the switch went on
+     * has no tray, so its picks keep the Send to sheet or the editor until it's opened again.
+     */
+    public static boolean galleryTray(boolean stock) {
+        boolean tray = stock;
+        try {
+            tray = stock || wouldUse(GalleryPicker.KEY) && enabled(GalleryPicker.CHAT_KEY);
+        } catch (RuntimeException error) {
+            hookFailedPrivately(GalleryPicker.CHAT_KEY, "Couldn't add the tray for what you pick", error);
+        }
+        chatTray = tray;
+        return tray;
     }
     /**
      * The same handler asks this before anything else. With Put gallery picks in the chat on, a pick from the pick screen
