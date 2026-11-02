@@ -193,6 +193,8 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     var changedViewer = false
     val drawerReaders = mutableListOf<Method>()
     val drawerAnchors = mutableListOf<Method>()
+    val searchIconReaders = mutableListOf<Method>()
+    val searchIconAnchors = mutableListOf<Method>()
     for (cls in classes) {
         val original = cls.fields.firstOrNull { it.name == "__redex_internal_original_name" }
             ?.initialValue.let { (it as? StringEncodedValue)?.value }
@@ -215,6 +217,8 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
             val gate = method.returnType == "Z" && method.parameterTypes.isEmpty()
             if (instructions.any { it.isEmojiDrawerFlag() }) drawerReaders.add(method)
             if (EMOJI_DRAWER_ANCHOR in strings) drawerAnchors.add(method)
+            if (instructions.any { it.isSearchIconFlag() }) searchIconReaders.add(method)
+            if (SEARCH_ICON_ANCHOR in strings) searchIconAnchors.add(method)
             if (method.returnType == "Z" && (method.parameterTypes.isEmpty() ||
                 (AccessFlags.STATIC.isSet(method.accessFlags) && method.parameterTypes == listOf(cls.type)))) {
                 val anchors = strings + method.tableStrings(stringTables)
@@ -333,9 +337,10 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
             // The chat and the inbox under it inherit that answer. androidx needs each fragment's no-argument
             // constructor, so it names the class the animation hook tells apart.
             if (method.name == "<init>" && method.parameterTypes.isEmpty()) {
-                if (original == "MsysThreadViewFragment") add("chat_fragment")
+                if (original == CHAT_FRAGMENT_NAME) add("chat_fragment")
                 if (original == "M4TabNavigationFragment") add("chat_inbox")
             }
+            if (original == CHAT_FRAGMENT_NAME && method.isChatJumpView()) add(CHAT_JUMP)
             // Chats on Messenger's older route open in this fragment, which loads its own animation.
             if (original == "ThreadViewFragment" && method.name == "onCreateAnimation" &&
                 method.hookId() == "${cls.type}->onCreateAnimation(IZI)$ANIMATION") add("chat_legacy")
@@ -372,6 +377,7 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     }
     if (changedViewer) found.getValue("screenshot_viewers").clear() else screenshotViewerRefusal = null
     found.getValue(EMOJI_DRAWER).addAll(connectEmojiDrawer(drawerReaders, drawerAnchors))
+    found.getValue(INBOX_SEARCH_BAR).addAll(connectSearchBar(searchIconReaders, searchIconAnchors))
     found.getValue(EMOJI_SEARCH).addAll(findEmojiSearch(classes))
     found.getValue(TAB_BADGES).addAll(findTabBadges(classes))
     found.getValue(FACEBOOK_BADGE).addAll(findFacebookBadge(classes))
@@ -407,6 +413,7 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     found.getValue(CAR_MESSAGES).addAll(findCarMessages(classes))
     found.getValue(LOCAL_CHAT_SEARCH).addAll(findLocalChatSearch(classes))
     found.getValue(CALL_RECORDING).addAll(findCallRecording(classes))
+    found.getValue(HOME_HEADER).addAll(findHomeHeader(classes))
     found.getValue(TEXT_STYLE).addAll(findTextStyleField(classes))
     found.getValue(MESSAGE_LOG).addAll(findMessageLogHook(classes))
     found.getValue(AUTO_REPLY).addAll(findMessageLogHook(classes))

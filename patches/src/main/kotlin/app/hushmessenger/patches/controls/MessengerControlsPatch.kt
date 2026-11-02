@@ -147,6 +147,7 @@ internal fun MutableMethod.validateHook(hook: String) {
         "delta_unsent" -> validateDeltaUnsent()
         "emoji_typeface" -> validateEmojiTypeface()
         EMOJI_DRAWER -> validateEmojiDrawer()
+        INBOX_SEARCH_BAR -> validateSearchBar()
         EMOJI_SEARCH -> validateEmojiSearch()
         TAB_BADGES -> validateTabBadges()
         TAB_CONFIG -> validateTabConfig()
@@ -189,7 +190,9 @@ internal fun MutableMethod.validateHook(hook: String) {
         QUIET_CALL_NOTIFICATION -> validateQuietCallNotification()
         CAR_MESSAGES -> validateCarMessages()
         LOCAL_CHAT_SEARCH -> validateLocalChatSearch()
+        CHAT_JUMP -> validateChatJump()
         CALL_RECORDING -> validateCallRecording()
+        HOME_HEADER -> validateHomeHeader()
         TEXT_STYLE -> validateTextStyleField()
         MESSAGE_LOG, AUTO_REPLY -> validateMessageLog()
         UNSENT_RECALL -> validateUnsentRecall()
@@ -248,6 +251,7 @@ internal fun injectControl(key: String, methods: Map<String, List<MutableMethod>
             "delta_unsent" -> method.injectDeltaUnsent()
             "emoji_typeface" -> method.injectEmojiTypeface()
             EMOJI_DRAWER -> method.injectEmojiDrawer()
+            INBOX_SEARCH_BAR -> method.injectSearchBar()
             EMOJI_SEARCH -> method.injectEmojiSearch()
             TAB_BADGES -> method.injectTabBadges()
             TAB_CONFIG -> method.injectTabConfig()
@@ -286,7 +290,9 @@ internal fun injectControl(key: String, methods: Map<String, List<MutableMethod>
             QUIET_CALL_NOTIFICATION -> method.injectQuietCallNotification()
             CAR_MESSAGES -> method.injectCarMessages()
             LOCAL_CHAT_SEARCH -> method.injectLocalChatSearch()
+            CHAT_JUMP -> method.injectChatJump()
             CALL_RECORDING -> method.injectCallRecording()
+            HOME_HEADER -> method.injectHomeHeader()
             TEXT_STYLE -> method.injectTextStyleField()
             MESSAGE_LOG -> method.injectMessageLog()
             UNSENT_RECALL -> method.injectUnsentRecall()
@@ -408,6 +414,18 @@ private fun controlPatch(key: String, title: String, summary: String, group: Str
                 }
                 injectControl(key, methods)
                 for ((old, new) in built) { host.methods.remove(old); host.directMethods.remove(old); host.methods.add(new); host.directMethods.add(new) }
+            } else if (key == INBOX_SEARCH_BAR) {
+                val host = mutableClassDefBy(SETTINGS)
+                val stub = host.methods.singleOrNull { it.hookId() == SEARCH_ICON_STUB }
+                    ?: throw PatchException("Messenger controls: the inbox search bar's extension stub is missing")
+                // Built before the first edit, so a changed stub or check stops the patch with Messenger untouched.
+                val built = searchIconReader(stub, searchIconCheck(discoveredControls.getValue(INBOX_SEARCH_BAR)) { classDefByOrNull(it) })
+                injectControl(key, methods)
+                // MutableMethod.implementation has no setter. Keep both method indexes in sync when replacing it.
+                host.methods.remove(stub)
+                host.directMethods.remove(stub)
+                host.methods.add(built)
+                host.directMethods.add(built)
             } else if (key == AUTO_REPLY) {
                 val recipe = autoReplyPictureRecipe
                 val host = mutableClassDefBy(SETTINGS)
@@ -468,6 +486,9 @@ val hideInstantsButtonPatch = controlPatch("instants_button", "Hide the Instants
     "Hides the + button that slides in at the right edge of your chat list and the one under your chat heads. Both open Instants.", "Inbox")
 @Suppress("unused")
 val hideSubtabsPatch = controlPatch("subtabs", "Hide inbox tabs", "Hides the All, Unread and Groups tabs above your chats.", "Inbox")
+@Suppress("unused")
+val keepSearchBarPatch = controlPatch("inbox_search_bar", "Keep the search bar",
+    "Brings back the search bar at the top of your chat list when Messenger has swapped it for a search icon. Restart Messenger after changing it. If Messenger never gave you the icon, nothing changes.", "Inbox")
 @Suppress("unused")
 val hideMarkReadPatch = controlPatch("mark_read_action", "Hide Mark as read", "Hides Mark as read in the menu you get when you press and hold a chat in your chat list, so you can't mark a chat read by accident. Mark as unread stays.", "Inbox")
 @Suppress("unused")
@@ -550,7 +571,7 @@ val autoReplyPatch = controlPatch("auto_reply", "Auto reply",
     "Answers messages with replies you write in HushMessenger settings, when they have words you pick or any message at all. Replies go out through Messenger's own notification reply, encrypted chats too, at most once every five minutes per chat.", "Conversations")
 @Suppress("unused")
 val quietIncomingCallsPatch = controlPatch("quiet_calls", "Quiet incoming calls",
-    "Calls still come in, but Messenger doesn't ring, vibrate or pop the call up over your screen. The call waits in the notification shade with Answer and Decline. A call you miss still shows in the chat. Only chosen chats keeps this to the chats you pick, and every other call rings. If the Facebook app is on your phone, it can still ring for the same call.", "Conversations",
+    "Calls still come in, but Messenger doesn't ring, vibrate or pop the call up over your screen. The call waits in the notification shade with Answer and Decline. A call you miss still shows in the chat. Only chosen chats keeps this to the chats you pick, and every other call rings. If the Facebook app is on your phone, it can still ring for the same call.", "Calls",
     QUIET_CALL_RING, QUIET_CALL_NOTIFICATION)
 @Suppress("unused")
 val carMessagesPatch = controlPatch("car_messages", "Android Auto messages",
@@ -560,11 +581,18 @@ val localChatSearchPatch = controlPatch("local_chat_search", "Search saved messa
     "Adds a button to a chat's search results that searches the messages saved on this phone, for old chats Messenger's own search finds nothing in. It works in chats that aren't end-to-end encrypted, and it can only find what the phone has loaded.", "Conversations",
     manifest = { addLocalSearch() })
 @Suppress("unused")
+val chatJumpPatch = controlPatch("chat_jump", "Jump to the first message or a date",
+    "Long press a chat's name at the top of the chat to jump to its first message or to a day you pick. Messenger loads a chat a page at a time, so it scrolls back with a count on screen until it gets there, and Cancel stops it. It can only go as far back as Messenger can load.", "Conversations",
+    CHAT_JUMP)
+@Suppress("unused")
 val callRecordingPatch = controlPatch("call_recording", "Record calls",
-    "Adds a Record button over Messenger during a call. The call goes into one sound file in Recordings/Messenger Calls on your phone (Music/Messenger Calls on Android 10 and 11). Messenger doesn't tell the other people, and recording laws differ from place to place, so get everyone's OK first.", "Conversations")
+    "Adds a Record button over Messenger during a call. The call goes into one sound file in Recordings/Messenger Calls on your phone (Music/Messenger Calls on Android 10 and 11). While it's on, calls use Android's regular audio path instead of Messenger's own, and Messenger needs a restart after you change it. Messenger doesn't tell the other people, and recording laws differ from place to place, so get everyone's OK first.", "Calls")
 @Suppress("unused")
 val hideCallButtonsPatch = controlPatch("hide_call_buttons", "Hide call buttons",
-    "Takes the audio and video call buttons out of a chat's top bar, so you can't tap one by accident. Calls still ring, and you can still join one that's going.", "Conversations", HIDE_CALL_BAR)
+    "Takes the audio and video call buttons out of a chat's top bar, so you can't tap one by accident. Calls still ring, and you can still join one that's going.", "Calls", HIDE_CALL_BAR)
+@Suppress("unused")
+val callConfirmPatch = controlPatch("call_confirm", "Ask before a call",
+    "Tapping the audio or video call button in a chat's top bar asks first, so a stray tap doesn't ring anyone. Call starts it, Cancel doesn't. Calls coming in aren't affected.", "Calls", HIDE_CALL_BAR)
 @Suppress("unused")
 val systemCameraPatch = controlPatch("system_camera", "Use the phone's camera app",
     "The camera button in a chat opens your phone's own camera app. The photo then opens in Messenger's editor, ready to send. Photos only.", "Photos and videos",
@@ -609,6 +637,10 @@ val unlockAppIconsPatch = controlPatch("app_icons", "Unlock app icons", "Lets yo
 val avatarShapePatch = controlPatch("avatar_shape", "Square profile pictures",
     "Shows profile pictures as squares instead of circles, or as rounded squares with Round the corners on. Restart Messenger after changing it.", "Theme",
     AVATAR_SHAPE, STORY_RING)
+@Suppress("unused")
+val homeHeaderPatch = controlPatch("home_header", "Your own home header",
+    "Puts words or a picture of your own at the top of the chat list in place of Messenger's wordmark. Type the words or pick the picture in HushMessenger settings. With neither, the wordmark stays.",
+    "Theme", HOME_HEADER)
 @Suppress("unused")
 val customFontPatch = controlPatch("custom_font", "Use your own font",
     "Shows Messenger's text in your phone's font instead of Meta's, or in a .ttf or .otf file you pick in HushMessenger settings. Emoji don't change. Restart Messenger after changing it.",

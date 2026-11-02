@@ -90,8 +90,12 @@ public class CompatReport {
     static final long EMOJI_DRAWER_FLAG = 36320528377659062L;
     // The drawer renderer throws this when the redesign can't draw, which ties the flag to the emoji drawer
     static final String EMOJI_DRAWER_ANCHOR = "Cannot render redesigned drawer with search icon ";
+    // The server test that swaps the chat list's search bar for a top bar icon, as 585 numbers it. Meta renumbers it with each release.
+    static final long SEARCH_ICON_FLAG = 0x810b24000045b3L;
+    // Only the method that builds the top bar's search icon names this class, which ties the flag to the search bar
+    static final String SEARCH_ICON_ANCHOR = "com.facebook.messaging.search.plugins.toolbarbutton.searchbutton.InboxSearchToolbarButtonImplementation";
     // Controls whose hook count follows how Redex inlined one flag read, so it differs between releases
-    static final Set<String> RELEASE_HOOK_COUNTS = Set.of("emoji_drawer", "pinned_chats");
+    static final Set<String> RELEASE_HOOK_COUNTS = Set.of("emoji_drawer", "inbox_search_bar", "pinned_chats");
 
     // Material You theme finds its targets by shape when it patches (MaterialYouPatch.kt), so no profile records them
     static final String DARK_SCHEME = "Lcom/facebook/mig/scheme/schemes/DarkColorScheme;";
@@ -170,6 +174,7 @@ public class CompatReport {
         PATCHES.put("Hide inbox promotions", List.of("inbox_promotions"));
         PATCHES.put("Hide stories and notes", List.of("stories", "story_ring"));
         PATCHES.put("Hide inbox tabs", List.of("subtabs"));
+        PATCHES.put("Keep the search bar", List.of("inbox_search_bar"));
         PATCHES.put("Hide Mark as read", List.of("mark_read_action"));
         PATCHES.put("Pin more chats", List.of("pinned_chats", "pin_rows", "pin_ask", "pin_drop", "pin_full", "pin_list"));
         PATCHES.put("Hide Facebook shortcuts", List.of("facebook", "facebook_profile", "facebook_profile_header"));
@@ -216,14 +221,17 @@ public class CompatReport {
         PATCHES.put("Quiet incoming calls", List.of("quiet_call_ring", "quiet_call_notification"));
         PATCHES.put("Android Auto messages", List.of("car_messages"));
         PATCHES.put("Search saved messages", List.of("local_chat_search"));
+        PATCHES.put("Jump to the first message or a date", List.of("chat_jump"));
         PATCHES.put("Record calls", List.of("call_recording"));
         PATCHES.put("Hide call buttons", List.of("hide_call_bar"));
+        PATCHES.put("Ask before a call", List.of("hide_call_bar"));
         PATCHES.put("Allow screenshots", List.of("allow_screenshot", "screenshot_viewers"));
         PATCHES.put("Hide read receipts", List.of("hide_read_receipts", "reply_read"));
         PATCHES.put("Mark as read button", List.of("mark_read_bar", "mark_read_click"));
         PATCHES.put("Keep unsent messages", List.of("keep_unsent", "unsent_indicator", "delta_unsent", "unsent_recall", "unsent_clear"));
         PATCHES.put("Unlock app icons", List.of("app_icons"));
         PATCHES.put("Square profile pictures", List.of("avatar_shape", "story_ring"));
+        PATCHES.put("Your own home header", List.of("home_header"));
         PATCHES.put("Use your own font", List.of("font_layout", "font_repository", "font_roboto", "font_by_name", "font_input"));
         PATCHES.put("View stories anonymously", List.of("anonymous_stories"));
         PATCHES.put("Save any story", List.of("save_stories"));
@@ -2654,6 +2662,29 @@ public class CompatReport {
         boolean linked = readers.stream().anyMatch(reader -> hookId(reader).equals(anchor)) || instructions(anchors.get(0)).stream().anyMatch(i ->
             i.getOpcode() == Opcode.INVOKE_STATIC && getters.contains(((ReferenceInstruction) i).getReference().toString()));
         return linked ? readers : List.of();
+    }
+
+    /**
+     * Every method that loads the search icon flag, but only when the one method that builds the top bar's search icon
+     * loads it too. Mirrors SearchBar.kt's connectSearchBar.
+     */
+    static List<Method> searchIconReaders(List<ClassDef> classes) {
+        var readers = new ArrayList<Method>();
+        var anchors = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) {
+            if (method.getImplementation() == null) continue;
+            boolean reads = false, anchor = false;
+            for (var i : method.getImplementation().getInstructions()) {
+                if (i.getOpcode() == Opcode.CONST_WIDE && ((WideLiteralInstruction) i).getWideLiteral() == SEARCH_ICON_FLAG) reads = true;
+                if (i instanceof ReferenceInstruction ri && ri.getReference() instanceof StringReference sr &&
+                    SEARCH_ICON_ANCHOR.equals(sr.getString())) anchor = true;
+            }
+            if (reads) readers.add(method);
+            if (anchor) anchors.add(method);
+        }
+        if (anchors.size() != 1) return List.of();
+        var anchor = hookId(anchors.get(0));
+        return readers.stream().anyMatch(reader -> hookId(reader).equals(anchor)) ? readers : List.of();
     }
 
     // The analytics logger's upload components and the entry points Android starts them through. Mirrors AnalyticsUploads.kt.
@@ -6459,32 +6490,125 @@ public class CompatReport {
         return search.size() == 1 && view.size() == 1 ? List.of(search.get(0), view.get(0)) : List.of();
     }
 
-    static final String AUDIO_PROXY = "Lcom/facebook/rsys/audio/gen/AudioProxy;";
-    static final String AUDIO_API = "Lcom/facebook/rsys/audio/gen/AudioApi;";
+    static final String OVERLAY_CONFIG_HOLDER = "Lcom/facebook/rsys/overlayconfigmanager/OverlayConfigManagerHolder;";
+    static final String WEBRTC_AUDIO_TRACK = "Lorg/webrtc/voiceengine/WebRtcAudioTrack;";
+    static final String WEBRTC_AUDIO_RECORD = "Lorg/webrtc/voiceengine/WebRtcAudioRecord;";
 
-    /** call_recording: setApi and setIsCallActive of the proxy calls run on, whose setIsCallActive is empty. Mirrors CallRecording.kt. */
-    static List<Method> callRecording(List<ClassDef> classes) {
-        var parents = new HashMap<String, String>();
-        for (var cls : classes) parents.put(cls.getType(), cls.getSuperclass());
-        var proxies = new ArrayList<List<Method>>();
-        for (var cls : classes) {
-            boolean proxy = false;
-            String parent = parents.get(cls.getType());
-            for (int hops = 0; parent != null && hops < 8 && !proxy; hops++) {
-                proxy = AUDIO_PROXY.equals(parent);
-                parent = parents.get(parent);
+    static boolean isThreadRun(Method method) {
+        return "run".equals(method.getName()) && "V".equals(method.getReturnType()) && params(method).isEmpty() && method.getImplementation() != null;
+    }
+
+    static String calledName(Instruction instruction) {
+        return instruction instanceof ReferenceInstruction ri ? ri.getReference().toString() : null;
+    }
+
+    /** Where the playout thread hands a frame to the speaker, or -1. Mirrors playoutWriteAt in CallRecording.kt. */
+    static int playoutWriteAt(Method method) {
+        if (!isThreadRun(method)) return -1;
+        var code = instructions(method);
+        boolean reads = false;
+        int at = -1, writes = 0;
+        for (int i = 0; i < code.size(); i++) {
+            String call = calledName(code.get(i));
+            if (call == null) continue;
+            if (call.startsWith(WEBRTC_AUDIO_TRACK + "->") && call.contains("nativeGetPlayoutData")) reads = true;
+            if (code.get(i).getOpcode() == Opcode.INVOKE_VIRTUAL && "Landroid/media/AudioTrack;->write(Ljava/nio/ByteBuffer;II)I".equals(call)) {
+                at = i;
+                writes++;
             }
-            if (!proxy) continue;
-            var api = new ArrayList<Method>();
-            var active = new ArrayList<Method>();
-            for (var method : cls.getMethods()) {
-                if (!"V".equals(method.getReturnType()) || method.getImplementation() == null) continue;
-                if ("setApi".equals(method.getName()) && params(method).equals(List.of(AUDIO_API))) api.add(method);
-                if ("setIsCallActive".equals(method.getName()) && params(method).equals(List.of("Z")) && instructions(method).size() == 1) active.add(method);
-            }
-            if (api.size() == 1 && active.size() == 1) proxies.add(List.of(api.get(0), active.get(0)));
         }
-        return proxies.size() == 1 ? proxies.get(0) : List.of();
+        return reads && writes == 1 && !mediaTargets(method).contains(at) ? at : -1;
+    }
+
+    /** Where the record thread reads native's handle to hand a frame over, or -1. Mirrors recordHandoverAt in CallRecording.kt. */
+    static int recordHandoverAt(Method method) {
+        if (!isThreadRun(method)) return -1;
+        var code = instructions(method);
+        boolean reads = false;
+        int hand = -1, hands = 0;
+        for (int i = 0; i < code.size(); i++) {
+            String call = calledName(code.get(i));
+            if (call == null) continue;
+            if ("Landroid/media/AudioRecord;->read(Ljava/nio/ByteBuffer;I)I".equals(call)) reads = true;
+            if (call.startsWith(WEBRTC_AUDIO_RECORD + "->") && call.contains("nativeDataIsRecorded")) {
+                hand = i;
+                hands++;
+            }
+        }
+        if (!reads || hands != 1 || hand == 0) return -1;
+        var before = code.get(hand - 1);
+        if (before.getOpcode() != Opcode.IGET_WIDE || !(WEBRTC_AUDIO_RECORD + "->nativeAudioRecord:J").equals(calledName(before))) return -1;
+        int handle = ((TwoRegisterInstruction) before).getRegisterA();
+        if (!(code.get(hand) instanceof FiveRegisterInstruction args) || args.getRegisterCount() != 4 || args.getRegisterE() != handle ||
+            args.getRegisterF() != handle + 1 || handle + 1 > 15) return -1;
+        return mediaTargets(method).contains(hand - 1) ? -1 : hand - 1;
+    }
+
+    /** call_recording: where Java hands native its config layers, playout's two switches and the two audio threads. Mirrors CallRecording.kt. */
+    static List<Method> callRecording(List<ClassDef> classes) {
+        var holders = new ArrayList<Method>();
+        var starts = new ArrayList<Method>();
+        var stops = new ArrayList<Method>();
+        var playouts = new ArrayList<Method>();
+        var records = new ArrayList<Method>();
+        for (var cls : classes) {
+            for (var method : cls.getMethods()) {
+                if (method.getImplementation() == null) continue;
+                boolean plain = params(method).isEmpty() && "Z".equals(method.getReturnType());
+                if (OVERLAY_CONFIG_HOLDER.equals(method.getDefiningClass()) && "<init>".equals(method.getName()) && params(method).equals(List.of("Ljava/util/ArrayList;"))) holders.add(method);
+                if (plain && WEBRTC_AUDIO_TRACK.equals(method.getDefiningClass()) && "startPlayout".equals(method.getName())) starts.add(method);
+                if (plain && WEBRTC_AUDIO_TRACK.equals(method.getDefiningClass()) && "stopPlayout".equals(method.getName())) stops.add(method);
+                if (playoutWriteAt(method) >= 0) playouts.add(method);
+                if (recordHandoverAt(method) >= 0) records.add(method);
+            }
+        }
+        if (holders.size() != 1 || starts.size() != 1 || stops.size() != 1 || playouts.size() != 1 || records.size() != 1) return List.of();
+        return List.of(holders.get(0), starts.get(0), stops.get(0), playouts.get(0), records.get(0));
+    }
+
+    static final String HEADER_DRAWABLE = "Landroid/graphics/drawable/Drawable;";
+    static final String HEADER_SCALE = "Landroid/widget/ImageView$ScaleType;";
+
+    /** The memoed Drawable cast in the chat list wordmark's render, or -1: invoke-static (scope, Function0, Object[]) Object, move-result, check-cast. */
+    static int homeHeaderCast(Method method) {
+        if (AccessFlags.STATIC.isSet(method.getAccessFlags()) || params(method).size() != 1) return -1;
+        var code = instructions(method);
+        var refs = new HashSet<String>();
+        boolean colors = false, image = false;
+        for (var i : code) {
+            String ref = ref(i);
+            if (ref == null) continue;
+            refs.add(ref);
+            if (i.getOpcode() == Opcode.INVOKE_INTERFACE && ref.startsWith("Lcom/facebook/mig/scheme/interfaces/MigColorScheme;->")) colors = true;
+            if (i.getOpcode() == Opcode.INVOKE_STATIC && ((ReferenceInstruction) i).getReference() instanceof MethodReference call) {
+                var types = new ArrayList<String>();
+                for (var t : call.getParameterTypes()) types.add(t.toString());
+                if (types.size() == 4 && HEADER_DRAWABLE.equals(types.get(0)) && HEADER_SCALE.equals(types.get(1)) && "Z".equals(types.get(3))) image = true;
+            }
+        }
+        if (!refs.contains(HEADER_SCALE + "->FIT_START:" + HEADER_SCALE) || !refs.contains(HEADER_SCALE + "->FIT_END:" + HEADER_SCALE) || !colors || !image) return -1;
+        int found = -1;
+        for (int at = 2; at < code.size(); at++) {
+            var cast = code.get(at);
+            if (cast.getOpcode() != Opcode.CHECK_CAST || !HEADER_DRAWABLE.equals(ref(cast))) continue;
+            var moved = code.get(at - 1);
+            var memo = code.get(at - 2);
+            if (moved.getOpcode() != Opcode.MOVE_RESULT_OBJECT || register(moved) != register(cast) || memo.getOpcode() != Opcode.INVOKE_STATIC
+                || !(((ReferenceInstruction) memo).getReference() instanceof MethodReference call) || !"Ljava/lang/Object;".equals(call.getReturnType())) continue;
+            var types = new ArrayList<String>();
+            for (var t : call.getParameterTypes()) types.add(t.toString());
+            if (types.size() != 3 || !"Lkotlin/jvm/functions/Function0;".equals(types.get(1)) || !"[Ljava/lang/Object;".equals(types.get(2))) continue;
+            if (found >= 0) return -1;
+            found = at;
+        }
+        return found < 0 || mediaTargets(method).contains(found + 1) ? -1 : found;
+    }
+
+    /** home_header: the chat list wordmark's render, the only method with its shape. Mirrors HomeHeader.kt. */
+    static List<Method> homeHeader(List<ClassDef> classes) {
+        var renders = new ArrayList<Method>();
+        for (var cls : classes) for (var method : cls.getMethods()) if (homeHeaderCast(method) >= 0) renders.add(method);
+        return renders.size() == 1 ? List.of(renders.get(0)) : List.of();
     }
 
     static final String PHONE_ID_PROVIDER = ".provider.phoneid";
@@ -7144,6 +7268,7 @@ public class CompatReport {
         var community = communityInbox(classes);
         if (community != null) found.get("community_inbox").add(community.render());
         found.get("emoji_drawer").addAll(emojiDrawerReaders(classes));
+        found.get("inbox_search_bar").addAll(searchIconReaders(classes));
         found.get("emoji_search").addAll(emojiSearchWatchers(classes));
         found.get("tab_badges").addAll(tabBadgeDispatchers(classes));
         found.get("facebook_badge").addAll(facebookBadgeChecks(classes));
@@ -7183,6 +7308,7 @@ public class CompatReport {
         found.get("car_messages").addAll(carMessages(classes));
         found.get("local_chat_search").addAll(localChatSearch(classes));
         found.get("call_recording").addAll(callRecording(classes));
+        found.get("home_header").addAll(homeHeader(classes));
         var markRead = markReadButton(classes);
         if (!markRead.isEmpty()) {
             found.get("mark_read_bar").add(markRead.get(0));
@@ -7594,6 +7720,13 @@ public class CompatReport {
                     if ("M4TabNavigationFragment".equals(original)) found.get("chat_inbox").add(method);
                 }
 
+                // chat_jump: the chat fragment's own onViewCreated, where the chat first has a view. Mirrors ChatJump.kt.
+                if ("MsysThreadViewFragment".equals(original) && !isStatic && "onViewCreated".equals(method.getName()) &&
+                    "V".equals(method.getReturnType()) && paramTypes.equals(List.of("Landroid/view/View;", "Landroid/os/Bundle;")) &&
+                    method.getImplementation() != null) {
+                    found.get("chat_jump").add(method);
+                }
+
                 // chat_legacy: the chat fragment on Messenger's older route, which loads its own animation
                 if ("ThreadViewFragment".equals(original) &&
                     (cls.getType() + "->onCreateAnimation(IZI)" + ANIMATION).equals(hookId(method))) {
@@ -7755,7 +7888,7 @@ public class CompatReport {
      * check of its own. The control tests' zero-local check (MirroredFinders.kt) fails when this set and the patches part.
      */
     static final Set<String> NEEDS_A_LOCAL = Set.of("ad_events", "ai_commands", "ai_fab", "ai_mention_rows", "ai_menu", "ai_search",
-        "ai_search_chip", "allow_screenshot", "analytics_uploads", "app_icons", "attribution_uploads", "bubbles", "delta_unsent",
+        "ai_search_chip", "allow_screenshot", "analytics_uploads", "app_icons", "attribution_uploads", "bubbles", "call_recording", "delta_unsent",
         "disappearing_swipe", "external_gallery", "facebook", "facebook_profile", "font_by_name", "font_repository", "growth_notes", "growth_story_card", "instants_button", "keep_unsent",
         "mqtt_telemetry", "nearby_scans", "original_photo", "people_story", "phone_id_sync", "people_tab", "recent_media", "stories", "system_camera",
         "tab_badges", "typing", "unsent_indicator", "unsent_recall");
