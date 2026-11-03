@@ -411,6 +411,29 @@ public class ChatJumpTest {
         assertEquals("This is the start of the chat", ShadowToast.getTextOfLatestToast());
     }
 
+    /** Whether the menu's title is drawn in a dark color, as it is on a light sheet. */
+    private static boolean darkTitle(AlertDialog menu) {
+        int id = menu.getContext().getResources().getIdentifier("alertTitle", "id", "android");
+        int color = ((android.widget.TextView) menu.findViewById(id)).getCurrentTextColor();
+        return android.graphics.Color.red(color) + android.graphics.Color.green(color) + android.graphics.Color.blue(color) < 384;
+    }
+
+    @Test public void theMenuIsLightOrDarkWithTheChat() {
+        on(true);
+        openChat();
+        ChatJump.chooser = shown;
+        MaterialYouTheme.darkModeAnswer(false);
+        hold(name);
+        AlertDialog light = ShadowAlertDialog.getLatestAlertDialog();
+        assertTrue("a light chat gets a light menu", darkTitle(light));
+        light.dismiss();
+        MaterialYouTheme.darkModeAnswer(true);
+        hold(name);
+        AlertDialog dark = ShadowAlertDialog.getLatestAlertDialog();
+        assertNotSame(light, dark);
+        assertFalse("a dark chat gets a dark menu", darkTitle(dark));
+    }
+
     @Test public void cancelStopsTheJumpWhereItIs() {
         on(true);
         openChat();
@@ -441,6 +464,28 @@ public class ChatJumpTest {
         idle(2 * ChatJump.TICK_MS);
         assertTrue(jump.done());
         assertNull(ChatJump.running);
+    }
+
+    @Test public void aBarThatCantShowLeavesNothingRunningAndTheNextJumpWorks() {
+        on(true);
+        openChat();
+        list.older = 1000;
+        hold(name);
+        // The bar reads the Light theme switch, so with no preferences its show() throws.
+        android.content.SharedPreferences prefs = Settings.preferences;
+        Settings.preferences = null;
+        try {
+            asked.get(0).jump(0);
+            fail("the bar showed without preferences");
+        } catch (NullPointerException expected) {
+        } finally {
+            Settings.preferences = prefs;
+        }
+        assertNull(ChatJump.running);
+        assertEquals(1, ((ViewGroup) activity.findViewById(android.R.id.content)).getChildCount());
+        asked.get(0).jump(0);
+        assertNotNull(ChatJump.running);
+        assertNotNull(ChatJump.running.bar.bar);
     }
 
     @Test public void theDaysFirstMessageLandsBelowCardsLaidOverTheChat() {

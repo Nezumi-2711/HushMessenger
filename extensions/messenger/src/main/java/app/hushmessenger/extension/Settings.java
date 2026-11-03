@@ -62,6 +62,8 @@ public final class Settings {
         preview = previewNow;
         bubbleRoutes = bubbleRoutesNow;
         installed = Collections.unmodifiableSet(features);
+        // A fresh start logs each failure's stack again.
+        hookErrorLogged.clear();
         // Set last: a hook that sees preferences also sees the installed controls.
         preferences = appContext.getSharedPreferences("hushmessenger", Context.MODE_PRIVATE);
         // Only the main process writes the log; its lock doesn't reach other processes.
@@ -80,7 +82,13 @@ public final class Settings {
 
     public static boolean enabled(String key) {
         boolean on = wouldUse(key);
-        if (on) activeAt.put(key, System.currentTimeMillis());
+        if (on) {
+            // Per-draw hooks call this constantly, so a healthy control's time moves once a second. One that failed this
+            // run keeps the exact time, which is what tells a use after the failure from the failure.
+            long now = System.currentTimeMillis();
+            Long last = activeAt.get(key);
+            if (last == null || now - last >= 1000 || now < last || hookErrors.containsKey(key)) activeAt.put(key, now);
+        }
         return on;
     }
 
@@ -112,18 +120,36 @@ public final class Settings {
      */
     static final ConcurrentHashMap<String, String> hookErrors = new ConcurrentHashMap<>();
     private static final String HOOK_ERROR = "hook_error_";
+    /** The patched build that saved the failures. Outside HOOK_ERROR, so it never reads as a control's failure. */
+    static final String HOOK_ERRORS_BUILD = "failed_hooks_build";
+    /** When each control's failure, by kind, last went to the log. */
+    static final ConcurrentHashMap<String, Long> hookErrorLogged = new ConcurrentHashMap<>();
 
+    // Logged before it's recorded, so the log still has it if saving the record fails.
     static void hookFailed(String key, String what, Throwable error) {
-        android.util.Log.e("HushMessenger", what, error);
-        recordHookError(key, error);
+        String failure = describeHookError(error);
+        if (logDue(key, failure)) android.util.Log.e("HushMessenger", what, error);
+        recordHookError(key, failure);
     }
 
     /** For hooks that handle file paths or chat content: logs only the error's type and where it happened. */
     static void hookFailedPrivately(String key, String what, Throwable error) {
-        android.util.Log.e("HushMessenger", what + ": " + recordHookError(key, error));
+        String failure = describeHookError(error);
+        if (logDue(key, failure)) android.util.Log.e("HushMessenger", what + ": " + failure);
+        recordHookError(key, failure);
     }
 
-    private static synchronized String recordHookError(String key, Throwable error) {
+    /** A hook can fail on every screen draw, so each kind of failure goes to the log once a minute. */
+    private static synchronized boolean logDue(String key, String failure) {
+        long now = System.currentTimeMillis();
+        Long last = hookErrorLogged.get(key + "|" + failure);
+        if (last != null && now - last < 60_000 && now >= last) return false;
+        hookErrorLogged.put(key + "|" + failure, now);
+        return true;
+    }
+
+    /** "<exception class> at <first HushMessenger frame>", with no message. */
+    private static String describeHookError(Throwable error) {
         StackTraceElement[] stack = error.getStackTrace();
         StackTraceElement frame = stack.length == 0 ? null : stack[0];
         for (StackTraceElement element : stack) {
@@ -131,18 +157,40 @@ public final class Settings {
         }
         String where = frame == null ? "unknown" : frame.getClassName().substring(frame.getClassName().lastIndexOf('.') + 1)
             + "." + frame.getMethodName() + (frame.getLineNumber() >= 0 ? ":" + frame.getLineNumber() : "");
-        String failure = error.getClass().getName() + " at " + where;
+        return error.getClass().getName() + " at " + where;
+    }
+
+    private static synchronized void recordHookError(String key, String failure) {
         long now = System.currentTimeMillis();
         hookErrors.put(key, failure + "|" + now);
         SharedPreferences prefs = preferences;
-        // A hook can fail on every screen draw, so the saved copy changes only for a new failure or once a minute.
         if (prefs != null) {
-            String previous = prefs.getString(HOOK_ERROR + key, null);
-            if (previous == null || !previous.startsWith(failure + "|") || now - hookErrorTime(previous) >= 60_000
-                    || now < hookErrorTime(previous))
-                prefs.edit().putString(HOOK_ERROR + key, failure + "|" + now).apply();
+            String build = patchedBuild(appContext);
+            boolean olderBuild = build != null && !build.equals(prefs.getString(HOOK_ERRORS_BUILD, null));
+            // A hook can fail on every screen draw, and two failures can take turns, so the saved copy changes at most
+            // once a minute.
+            String previous = olderBuild ? null : prefs.getString(HOOK_ERROR + key, null);
+            if (previous == null || now - hookErrorTime(previous) >= 60_000 || now < hookErrorTime(previous)) {
+                SharedPreferences.Editor edit = prefs.edit();
+                // Failures an older build saved went with the update, so this build's first one starts the list again.
+                if (olderBuild) {
+                    for (String saved : prefs.getAll().keySet()) if (saved.startsWith(HOOK_ERROR)) edit.remove(saved);
+                    edit.putString(HOOK_ERRORS_BUILD, build);
+                }
+                edit.putString(HOOK_ERROR + key, failure + "|" + now).apply();
+            }
         }
-        return failure;
+    }
+
+    /** The control's failure an earlier run saved, unless an older build saved it. */
+    private static String savedHookError(SharedPreferences prefs, String key) {
+        return savedHookErrorsCurrent(prefs) ? prefs.getString(HOOK_ERROR + key, null) : null;
+    }
+
+    /** Whether this patched build saved the failures. When the build can't be told, they're kept. */
+    private static boolean savedHookErrorsCurrent(SharedPreferences prefs) {
+        String build = patchedBuild(appContext);
+        return build == null || build.equals(prefs.getString(HOOK_ERRORS_BUILD, null));
     }
 
     static long hookErrorTime(String record) {
@@ -157,7 +205,7 @@ public final class Settings {
     static long hookErrorAt(String key) {
         String record = hookErrors.get(key);
         SharedPreferences prefs = preferences;
-        if (record == null && prefs != null) record = prefs.getString(HOOK_ERROR + key, null);
+        if (record == null && prefs != null) record = savedHookError(prefs, key);
         return record == null ? 0 : hookErrorTime(record);
     }
 
@@ -165,7 +213,7 @@ public final class Settings {
     static Map<String, String> lastHookErrors() {
         Map<String, String> errors = new java.util.TreeMap<>();
         SharedPreferences prefs = preferences;
-        if (prefs != null) for (Map.Entry<String, ?> saved : prefs.getAll().entrySet()) {
+        if (prefs != null && savedHookErrorsCurrent(prefs)) for (Map.Entry<String, ?> saved : prefs.getAll().entrySet()) {
             if (saved.getKey().startsWith(HOOK_ERROR) && saved.getValue() instanceof String)
                 errors.put(saved.getKey().substring(HOOK_ERROR.length()), (String) saved.getValue());
         }
@@ -346,6 +394,7 @@ public final class Settings {
         for (String keep : KEEP_BADGES.values()) owners.put(keep, TAB_BADGES);
         owners.put(QuietCalls.CHOSEN_ONLY, QuietCalls.KEY);
         owners.put(MessageLog.SAVE_EXPIRING, MessageLog.KEY);
+        owners.put(MessageLogButton.KEY, MessageLog.KEY);
         SUB_SWITCHES = Collections.unmodifiableMap(owners);
     }
 
@@ -629,6 +678,12 @@ public final class Settings {
     public static Object shareStorySection(Object state, Object skip) {
         return state != skip && enabled(SHARE_STORY) ? skip : state;
     }
+    static final String BLOCKED_LIST_PICTURES = "blocked_list_pictures";
+    /**
+     * The blocked people list hands over each blocked person's picture before it goes on their row. Null gives the row
+     * Messenger builds for someone it can't look up, with no picture. Off, Pause and safe mode keep the picture.
+     */
+    public static Object blockedListPicture(Object picture) { return enabled(BLOCKED_LIST_PICTURES) ? null : picture; }
     static final String AVATAR_SHAPE = "avatar_shape";
     /** Under Square profile pictures: rounds the square's corners. */
     static final String AVATAR_ROUNDED = "avatar_shape_rounded";
@@ -974,7 +1029,7 @@ public final class Settings {
      * treats this one the same way, so the copy can move and the provider's walk over its folders stays alive.
      */
     public static boolean inboundFolderRefused(java.io.File folder) {
-        return folder.exists() && !(folder.isDirectory() && folder.canRead() && folder.canWrite()) && enabled(GalleryPicker.KEY);
+        return folder != null && folder.exists() && !(folder.isDirectory() && folder.canRead() && folder.canWrite()) && enabled(GalleryPicker.KEY);
     }
 
     /**
@@ -1139,6 +1194,8 @@ public final class Settings {
     public static boolean allowScreenshot() { return enabled("allow_screenshot"); }
     /** Messenger's subscription check for its built-in launcher icons. Off, paused or safe mode keeps Messenger's answer. */
     public static boolean unlockAppIcons() { return enabled("app_icons"); }
+    /** Messenger's subscription check for its paid app themes (#132). Off, paused or safe mode keeps Messenger's answer. */
+    public static boolean unlockAppThemes() { return enabled("app_themes"); }
     public static void addScreenshotFlags(Window window, int flags) {
         window.addFlags(allowScreenshot() ? flags & ~WindowManager.LayoutParams.FLAG_SECURE : flags);
     }

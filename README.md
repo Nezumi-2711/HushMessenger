@@ -94,10 +94,10 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Stop live connection logging | Drops the health reports and push logging Messenger sends over its live connection (MQTT). Messenger sends most of its traffic another way, so there's often little for it to drop. Messages and calls keep working. |
 | Stop nearby scans | Stops Messenger from reading the list of Wi-Fi networks around you, and hides the name and hardware address of the one you're connected to, the way Android does when Messenger can't see your location. Also stops the timer it can run while it's open to check your location and scan for Wi-Fi networks and Bluetooth devices. Experimental, since Messenger hasn't started those scans on the test phones yet. |
 | Stop app list and device ID sharing | Stops Messenger from going through your installed apps to find other Meta apps, and from asking them for the device ID Meta uses to link its apps on one phone. Messenger keeps the ID it already has. Experimental. |
-| Keep a message log | Saves a copy of each message that raised a notification, encrypted chats included, so an unsend can't take it back. Messages that get unsent are marked Unsent, and **Show only unsent** lists just those. It stays on your phone, encrypted. **View log** and **Clear log** sit under the switch. The log can be searched by words or names (accents don't matter) and grouped by chat, and **Save as text** or **Save as CSV** writes what's showing to a file you pick. **Save messages before they're removed** adds each message to a file in Download/Messenger right before the log drops it, one file a month. Those files aren't encrypted, so that switch starts off, and it needs Android 10 or newer. |
+| Keep a message log | Saves a copy of each message that raised a notification, encrypted chats included, so an unsend can't take it back. Messages that get unsent are marked Unsent, and **Show only unsent** lists just those. It stays on your phone, encrypted. **View log** and **Clear log** sit under the switch. The log can be searched by words or names (accents don't matter) and grouped by chat, and **Save as text** or **Save as CSV** writes what's showing to a file you pick. **Save messages before they're removed** adds each message to a file in Download/Messenger right before the log drops it, one file a month. Those files aren't encrypted, so that switch starts off, and it needs Android 10 or newer. **Direct** and **Groups** split one-to-one chats from group chats, and a chat that shows up with no name can get one you pick. Photos get their own entry, with the notification's preview picture when Messenger sends one. You pick how long messages stay (30 days, 90 days, a year or until you clear the log), up to 5,000 of them. **Button at the top of Chats** puts a clock next to the new message button that opens the log. |
 | Auto reply | Answers messages with a reply you write, for certain words or for any message. One reply per chat every five minutes, and group chats only when you allow it. |
 | Quiet incoming calls | Calls still come in, but Messenger doesn't ring, vibrate or pop the call up over your screen. It waits in the notification shade with Answer and Decline, and a call you miss still shows in the chat. **Only chosen chats** under the switch keeps this to the chats you pick, so every other call rings. If the Facebook app is on your phone, it can still ring for the same call. Experimental. |
-| Android Auto messages | Android Auto reads your Messenger messages out loud and sends the reply you speak, from its own messaging screen. Android Auto only lists apps from the Play Store. Unknown sources in its developer settings opens that up on a desktop head unit, and a real car can still leave Messenger out. |
+| Android Auto messages | Android Auto reads your Messenger messages out loud and sends the reply you speak, from its own messaging screen. Android Auto only lists apps from the Play Store. Unknown sources in its developer settings opens that up on a desktop head unit, and a real car can still leave Messenger out. Playing a message aloud marks the chat read, so the sender sees Seen even with Hide read receipts on. |
 | Search saved messages | Adds a button to a chat's search results that searches the messages saved on this phone. It helps with old chats Messenger's own search finds nothing in. It works in chats that aren't end-to-end encrypted, and it can only find what the phone has loaded, so scroll up in the chat first. |
 | Jump to the first message or a date | Long press a chat's name at the top of the chat and pick **The first message** or **A date**. Messenger only loads a chat a page at a time, so it scrolls back with a count on screen until it gets there, and **Cancel** stops it. It can only go as far back as Messenger can load. |
 | Record calls | Adds a Record button over Messenger during a call. The call goes into one sound file in Recordings/Messenger Calls on your phone (Music/Messenger Calls on Android 10 and 11). While it's on, calls use Android's regular audio path instead of Messenger's own, and Messenger needs a restart after you change it. Messenger doesn't tell the other people, and recording laws differ from place to place, so get everyone's OK first. Needs Android 10 or newer. |
@@ -109,6 +109,7 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Save any story | Adds **Save** to the **More options** menu on other people's stories. |
 | Keep unsent messages | Keeps messages on the older unsend routes and marks them "[unsent]". An encrypted chat can't keep the message itself, so its notification stays up instead. |
 | Allow screenshots | Lets you screenshot protected photos and media, view-once included, with no screenshot notice to the sender. |
+| Hide pictures on the Blocked list | The list of people you've blocked, under Privacy and safety, shows their names and Unblock without their profile pictures. |
 | Use system emoji | Draws emoji with your phone's own set on Android 12 and newer. |
 | Send photos at original quality | With HD on, a JPEG photo up to 20 MB goes out at its full size instead of Messenger's smaller copy. Location and camera details are stripped, as Messenger does. |
 | Send videos without re-encoding | A video up to 25 MB goes out as it is. |
@@ -126,9 +127,10 @@ These screenshots come from the code on this page, so they can be a step ahead o
 | Hide Your story when sharing | Sharing into Messenger from another app, the Send to list no longer offers Your story, so a tap on Add can't post it. Chats and groups stay. |
 | Allow chat bubbles | **Stock**, **Chat heads** or **Android bubbles** (Android 11 and newer). See [Chat heads and bubbles](#chat-heads-and-bubbles). |
 | Unlock app icons | Every icon in Messenger's App icon setting becomes selectable without a subscription. |
+| Unlock app themes | Every theme in Messenger's own Theme setting becomes selectable without a subscription, and the check moves to the one you tap right away. |
 | Square profile pictures | Profile pictures show as squares instead of circles, and their story rings follow the square. Turn on **Round the corners** for rounded squares. Restart Messenger after a change. |
 | Your own home header | Puts your own words or picture at the top of the chat list where the "messenger" wordmark is. Words take the wordmark's colors, so they follow dark mode, and a picture shows instead of the words when you've set both. Restart Messenger after a change. |
-| Material You theme | In dark mode on Android 12 and newer, Messenger takes the accent color from your wallpaper. A **Pure black dark mode** switch sits under Appearance. You can paste your own colors there too, as text like `{"name": "Sunset", "accent": "#E1306C", "neutral": "#1A1418"}`, and share them with **Copy theme**. |
+| Material You theme | In dark mode on Android 12 and newer, Messenger takes the accent color from your wallpaper. A **Pure black dark mode** switch sits under Appearance. You can paste your own colors there too, as text like `{"name": "Sunset", "accent": "#E1306C", "neutral": "#1A1418"}`, and share them with **Copy theme**. **Light mode accent** gives Messenger's blues in light mode your accent too, from the row of colors in Appearance or your wallpaper's. |
 | Use your own font | Replaces Meta's font with your phone's, or with a .ttf or .otf file you pick, with size and position adjustments. Restart Messenger after a change. |
 | Bold and italic text | Adds Bold and Italic to the text selection menu. They change the letters A to Z, accented ones included, and Bold changes digits too. Other alphabets stay as they are. |
 | Open settings from menu | Adds the HushMessenger row to Messenger's Menu tab and side menu, and makes a long press on the Messenger logo at the top of Chats or the Menu tab's title open settings. On by default. The App tab can turn off each way in, as long as one stays on. |
@@ -173,7 +175,7 @@ Messenger and Android handle this without a switch. In Messenger's app info, set
 
 ### Chat heads and bubbles
 
-**Allow chat bubbles** offers three modes. **Stock** leaves Messenger alone. **Chat heads** uses Messenger's own overlay, so turn on Messenger's **Settings > Chat heads** and grant **Appear on top**. On a Samsung phone, chat heads needed **Unrestricted** battery use to arrive in the background. **Android bubbles** uses Android's own bubbles on Android 11 and newer, and the **Android bubble settings** link under the mode buttons takes you to the switch Android needs. Restart Messenger after changing modes.
+**Allow chat bubbles** offers three modes. **Stock** leaves Messenger alone. **Chat heads** uses Messenger's own overlay, so turn on Messenger's **Settings > Chat heads** and grant **Appear on top**. Chat heads also need **Unrestricted** battery use. On Optimized, Android only lets a chat head show if Messenger was closed when the message came in, so tap **Allow unrestricted battery use** under the mode buttons. Once it's on, the button reads **Battery use: Unrestricted** and opens app info if you want to change it back. **Android bubbles** uses Android's own bubbles on Android 11 and newer, and the **Android bubble settings** link under the mode buttons takes you to the switch Android needs. Restart Messenger after changing modes.
 
 ### Read receipts
 
@@ -184,26 +186,18 @@ With **Hide read receipts** on, a chat you open stays unread on your phone, beca
 | Field | Value |
 | --- | --- |
 | Package | `com.facebook.orca` |
-| Version | `585.0.0.53.94` |
-| Version codes, arm64-v8a | `347014996`, `347015062`, `347015064`, `347015065`, `347015067` |
-| Version codes, armeabi-v7a | `347014974`, `347014990` |
-| Icons for every screen density | `347015062` |
-| Icons for one screen density | 240 dpi `347015064`. 320 dpi `347015065`. 480 dpi `347014996` and both armeabi-v7a builds. 640 dpi `347015067` |
+| Version | `586.0.0.55.92` |
+| Version code, arm64-v8a | `347215348` |
+| Screen density | 560-640 dpi on APKMirror |
 | Minimum Android version | Android 9 (API 28) |
-| APKMirror download | [585.0.0.53.94](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-585-0-0-53-94-release/) |
+| APKMirror download | [586.0.0.55.92](https://www.apkmirror.com/apk/facebook-2/messenger/facebook-messenger-586-0-0-55-92-release/) |
 
-HushMessenger takes all 7 builds APKMirror lists for 585.0.0.53.94. The patch checks the version code before it changes anything and stops on a build that isn't listed. Older Messenger versions aren't supported by current bundles. v0.27.0 still takes 584.1.0.61.98, v0.26.0 takes 584.0.0.49.98, v0.25.0 takes 583.0.0.29.95 and v0.23.0 takes 582.0.0.61.92.
+APKMirror lists one build for 586.0.0.55.92, for arm64 phones, and HushMessenger takes it. There's no armeabi-v7a build of 586. The patch checks the version code before it changes anything and stops on a build that isn't listed. Older Messenger versions aren't supported by current bundles. v0.28.0 still takes 585.0.0.53.94 (armv7 too), v0.27.0 takes 584.1.0.61.98, v0.26.0 takes 584.0.0.49.98, v0.25.0 takes 583.0.0.29.95 and v0.23.0 takes 582.0.0.61.92.
 
-SHA-256 of the stock APKs the checks ran against:
+SHA-256 of the stock APK the checks ran against:
 
 ```text
-347014974  5f012086183db46c6ad378e28086da1e5e16e99ff9b77aa6c7689aaaebdba2d8
-347014990  64459c2a982ef14d7aae71d49f342fb0d7d5e99912a722d04fd6152adcffa652
-347014996  b2c15b18456f23016688f0616466f23789b1da2e35f34dea23fcf46cf749f245
-347015062  a2b052a5d245e86c3c1545957dbd866b0987e0bcac8ddd03bdb8c400bb3f576b
-347015064  e89f0d76a5186916d7ff28ea7a503feee75afce4a781fd4aa8622a938bf1460a
-347015065  a2ff26d061d067959bec55c7f336415fe70b726ba8c4638db1bc25e5312fda99
-347015067  a80797f05b60a57f5e852ecce00b081000b95bf03b92e27ba3784d72139e0125
+347215348  ee4bee15fe07eecc933aacfb7ec8d8d3f8ace8f4d7ccf517c6bd1ff0b63aae7e
 ```
 
 On Windows, compare your file with `Get-FileHash -Algorithm SHA256 .\messenger.apk`. Meta sometimes publishes different APKs under one version name.
@@ -247,11 +241,11 @@ $env:GITHUB_TOKEN = gh auth token
 python -m unittest discover -s scripts/tests -v
 ```
 
-The bundle lands in `patches/build/libs/`, and clean builds from the same source give the same checksum. `:patches:check` wants the exact stock APK of every supported build in a folder named by `HUSH_NATIVE_FIXTURES`, each file named with its version code after the last dash, like `messenger-585.0-347015062.apk`. `:patches:test` runs without them and skips the tests that replay on those APKs.
+The bundle lands in `patches/build/libs/`, and clean builds from the same source give the same checksum. `:patches:check` wants the exact stock APK of every supported build in a folder named by `HUSH_NATIVE_FIXTURES`, each file named with its version code after the last dash, like `messenger-586.0-347215348.apk`. `:patches:test` runs without them and skips the tests that replay on those APKs.
 
 The development bundle names its discovery stages in the patch log and reports their elapsed time. To compare Wi-Fi finder time, allocation and heap peaks against the previous implementation on one stock APK, run `:patches:benchmarkWifiIdentity -PapkPath=<apk>`.
 
-To exercise Messenger itself, use ARM64 Android or an emulator image with ARM translation. The Android 12L Google APIs x86_64 image with `libndk_translation.so` runs the arm64 builds. Keep separate emulator data directories for Meta-signed stock and re-signed builds. Android users and work profiles share the installed APK and its signing key. The armv7 builds have passed the compatibility checks and a full Desktop rebuild, but haven't been walked on an armv7 phone yet.
+To exercise Messenger itself, use ARM64 Android or an emulator image with ARM translation. The Android 12L Google APIs x86_64 image with `libndk_translation.so` runs the arm64 build. Keep separate emulator data directories for Meta-signed stock and re-signed builds. Android users and work profiles share the installed APK and its signing key.
 
 For a low-RAM check, verify `ActivityManager.isLowRamDevice()` inside the app. A userdebug image can apply `debug.force_low_ram` temporarily after a framework restart. Reducing the emulator's RAM alone doesn't establish that classification. Restore the property and verify the original result afterward.
 

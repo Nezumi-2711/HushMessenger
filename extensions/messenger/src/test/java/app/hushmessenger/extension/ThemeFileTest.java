@@ -2,6 +2,8 @@ package app.hushmessenger.extension;
 
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.graphics.Rect;
+import android.graphics.drawable.InsetDrawable;
 import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.TextView;
@@ -172,7 +174,7 @@ public class ThemeFileTest {
         try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
             View root = screen.get().getWindow().getDecorView();
             TextView status = root.findViewWithTag("theme_status");
-            assertEquals("Material You takes its colors from your wallpaper. Paste a theme to pick your own.", status.getText().toString());
+            assertEquals("Material You takes its colors from your wallpaper. Pick an accent or paste a theme to use your own.", status.getText().toString());
             assertEquals(View.GONE, root.findViewWithTag("theme_clear").getVisibility());
 
             copy("not a theme");
@@ -187,7 +189,7 @@ public class ThemeFileTest {
             copy(SUNSET);
             root.findViewWithTag("theme_paste").performClick();
             assertEquals("Theme saved", ShadowToast.getTextOfLatestToast());
-            assertEquals("Your Sunset theme is saved. It colors dark mode while Material You is on.", status.getText().toString());
+            assertEquals("Your Sunset theme is saved. Material You uses it while it's on.", status.getText().toString());
             assertEquals(View.VISIBLE, root.findViewWithTag("theme_clear").getVisibility());
             // The pure black choice sets its switch and isn't kept with the colors.
             assertTrue(Settings.preferences.getBoolean(MaterialYouTheme.BLACK_KEY, false));
@@ -219,7 +221,72 @@ public class ThemeFileTest {
             // A theme without a name still says it's saved.
             copy("{\"accent\": \"#E1306C\"}");
             root.findViewWithTag("theme_paste").performClick();
-            assertEquals("Your theme is saved. It colors dark mode while Material You is on.", status.getText().toString());
+            assertEquals("Your theme is saved. Material You uses it while it's on.", status.getText().toString());
+        }
+    }
+
+    @Test public void settingsAccentSwatchesSaveTheAccentAndKeepAPastedNeutral() {
+        MaterialYouTheme.bind();
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = screen.get().getWindow().getDecorView();
+            TextView status = root.findViewWithTag("theme_status");
+            View pink = root.findViewWithTag("theme_accent_E1306C");
+            View green = root.findViewWithTag("theme_accent_2E7D32");
+            assertEquals(ThemeColors.ACCENTS.length, ThemeColors.ACCENT_NAMES.length);
+            assertEquals("Pink", pink.getContentDescription().toString());
+            assertFalse(pink.isSelected());
+            assertTrue(root.findViewWithTag(MaterialYouTheme.LIGHT_KEY) instanceof CompoundButton);
+
+            pink.performClick();
+            assertEquals("Accent color saved", ShadowToast.getTextOfLatestToast());
+            ThemeFile saved = ThemeFile.saved();
+            assertEquals(Integer.valueOf(0xFFE1306C), saved.accent);
+            assertNull(saved.neutral);
+            assertTrue(pink.isSelected());
+            assertEquals("Your theme is saved. Material You uses it while it's on.", status.getText().toString());
+            assertEquals(View.VISIBLE, root.findViewWithTag("theme_clear").getVisibility());
+            idle();
+            assertEquals(TonePalette.fromAccent(0xFFE1306C).sameLightness(TonePalette.NEUTRAL, 0xFF333334), MaterialYouTheme.DARK_333334);
+
+            // A pasted theme keeps its neutral when an accent is tapped, and loses the name that no longer fits.
+            copy(SUNSET);
+            root.findViewWithTag("theme_paste").performClick();
+            green.performClick();
+            saved = ThemeFile.saved();
+            assertEquals("", saved.name);
+            assertEquals(Integer.valueOf(0xFF2E7D32), saved.accent);
+            assertEquals(Integer.valueOf(0xFF1A1418), saved.neutral);
+            assertTrue(green.isSelected());
+            assertFalse(pink.isSelected());
+
+            root.findViewWithTag("theme_clear").performClick();
+            assertFalse(green.isSelected());
+        }
+    }
+
+    @Test public void eachAccentSwatchIsAFullSizeTargetAroundTheSameDot() {
+        MaterialYouTheme.bind();
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            View root = screen.get().getWindow().getDecorView();
+            float dp = root.getResources().getDisplayMetrics().density;
+            // Laid out the way its scroll view lays it out, as wide as the swatches want.
+            View row = (View) root.findViewWithTag("theme_accent_E1306C").getParent();
+            row.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+            row.layout(0, 0, row.getMeasuredWidth(), row.getMeasuredHeight());
+            View last = null;
+            for (int accent : ThemeColors.ACCENTS) {
+                View swatch = root.findViewWithTag(String.format("theme_accent_%06X", accent & 0xFFFFFF));
+                assertTrue(swatch.getWidth() + " x " + swatch.getHeight(), swatch.getWidth() >= 48 * dp && swatch.getHeight() >= 48 * dp);
+                // The dot itself stays 36 dp. No target overlaps the one before it, which would take part of its tap.
+                Rect inset = new Rect();
+                assertTrue(swatch.getBackground() instanceof InsetDrawable && swatch.getBackground().getPadding(inset));
+                assertEquals(36 * dp, swatch.getWidth() - inset.left - inset.right, 0.5f);
+                if (last != null) {
+                    assertTrue(last.getRight() + " > " + swatch.getLeft(), swatch.getLeft() >= last.getRight());
+                    assertEquals(12 * dp, swatch.getLeft() + inset.left - (last.getRight() - inset.right), 0.5f);
+                }
+                last = swatch;
+            }
         }
     }
 }

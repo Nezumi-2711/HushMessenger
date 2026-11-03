@@ -58,6 +58,20 @@ public class SettingsDialogTest {
         return dialog;
     }
 
+    @Test @SuppressWarnings("deprecation") public void theSheetsBarIconsFollowThePalettesThemeNotItsColor() throws Exception {
+        android.app.Activity owner = Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        SettingsUi dark = new SettingsUi(owner, false), light = new SettingsUi(owner, true);
+        // A dark palette that isn't pure black, the kind a softer dark mode would bring.
+        java.lang.reflect.Field background = SettingsUi.class.getDeclaredField("background");
+        background.setAccessible(true);
+        background.setInt(dark, 0xff10151d);
+        int bars = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        SettingsDialog sheet = new SettingsDialog(owner, dark, new SettingsText(owner), "Title", "Hint");
+        assertEquals(0, sheet.dialog.getWindow().getDecorView().getSystemUiVisibility() & bars);
+        sheet = new SettingsDialog(owner, light, new SettingsText(owner), "Title", "Hint");
+        assertEquals(bars, sheet.dialog.getWindow().getDecorView().getSystemUiVisibility() & bars);
+    }
+
     @Test public void anIncompleteRuleStaysOpenUntilItsReplyIsWritten() {
         try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
             Dialog dialog = open(screen.get());
@@ -325,6 +339,49 @@ public class SettingsDialogTest {
         }
     }
 
+    @Test public void theHintSaysWhatOrderEachViewIsIn() throws Exception {
+        MessageLog.write(Settings.appContext, List.of(new MessageLog.Entry(System.currentTimeMillis() - 1000, "t1", "hello", "Ana", "", "mid.1", false)));
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            SettingsText text = new SettingsText(screen.get());
+            screen.get().getWindow().getDecorView().findViewWithTag("message_log_view").performClick();
+            View root = ShadowDialog.getLatestDialog().getWindow().getDecorView();
+            awaitText(root, "hello");
+            TextView hint = root.findViewWithTag("dialog_hint");
+            assertEquals(text.get("message_log_hint"), hint.getText().toString());
+            root.findViewWithTag("message_log_by_chat").performClick();
+            assertEquals(text.get("message_log_hint_by_chat"), hint.getText().toString());
+            // An opened chat lists its messages, newest first, and All chats goes back to the cards.
+            root.findViewWithTag("message_log_chat").performClick();
+            assertEquals(text.get("message_log_hint"), hint.getText().toString());
+            root.findViewWithTag("message_log_all_chats").performClick();
+            assertEquals(text.get("message_log_hint_by_chat"), hint.getText().toString());
+            root.findViewWithTag("message_log_by_chat").performClick();
+            assertEquals(text.get("message_log_hint"), hint.getText().toString());
+        }
+    }
+
+    @Test public void aPhotoTheLogCantOpenSaysSoInItsPlace() throws Exception {
+        // A kept photo's name with nothing under it, as when its file was lost.
+        String gone = "ab".repeat(32);
+        MessageLog.write(Settings.appContext, List.of(
+            new MessageLog.Entry(System.currentTimeMillis() - 1000, "t1", "look at this", "Ana", "", "mid.1", false, true, gone)));
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            SettingsText text = new SettingsText(screen.get());
+            screen.get().getWindow().getDecorView().findViewWithTag("message_log_view").performClick();
+            View root = ShadowDialog.getLatestDialog().getWindow().getDecorView();
+            awaitText(root, "look at this");
+            View missing = root.findViewWithTag("message_log_photo_missing");
+            assertEquals(text.get("message_log_photo_missing"), ((TextView) missing).getText().toString());
+            long deadline = System.currentTimeMillis() + 3000;
+            while (missing.getVisibility() != View.VISIBLE && System.currentTimeMillis() < deadline) {
+                Shadows.shadowOf(Looper.getMainLooper()).idle();
+                Thread.sleep(10);
+            }
+            assertEquals(View.VISIBLE, missing.getVisibility());
+            assertEquals(View.GONE, root.findViewWithTag("message_log_photo").getVisibility());
+        }
+    }
+
     @Test public void eachSaveButtonWritesWhatTheLogIsShowingToThePickedFile() throws Exception {
         long now = System.currentTimeMillis();
         MessageLog.write(Settings.appContext, List.of(
@@ -388,6 +445,17 @@ public class SettingsDialogTest {
             copy.performClick();
             assertTrue(Settings.preferences.getBoolean(MessageLog.SAVE_EXPIRING, false));
             assertEquals(MessageLog.KEY, Settings.SUB_SWITCHES.get(MessageLog.SAVE_EXPIRING));
+        }
+    }
+
+    @Test public void theChatsButtonSwitchStartsOffAndSitsUnderTheLog() {
+        try (var screen = Robolectric.buildActivity(SettingsActivity.class).setup()) {
+            android.widget.Switch button = screen.get().getWindow().getDecorView().findViewWithTag(MessageLogButton.KEY);
+            assertNotNull(button);
+            assertFalse(button.isChecked());
+            button.performClick();
+            assertTrue(Settings.preferences.getBoolean(MessageLogButton.KEY, false));
+            assertEquals(MessageLog.KEY, Settings.SUB_SWITCHES.get(MessageLogButton.KEY));
         }
     }
 
