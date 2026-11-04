@@ -100,6 +100,14 @@ final class SettingsText {
         ENGLISH.put("preview_notice", "UI preview. These controls don't change Messenger.");
         ENGLISH.put("open", "Open");
         ENGLISH.put("open_messenger", "Open Messenger");
+        ENGLISH.put("back", "Back");
+        ENGLISH.put("search_settings", "Search settings");
+        // The list switch says what a tap shows.
+        ENGLISH.put("show_as_list", "Show all settings as a list");
+        ENGLISH.put("show_by_category", "Show settings by category");
+        // The patches' version, then Messenger's.
+        ENGLISH.put("header_version", "Version %1$s for Messenger %2$s");
+        ENGLISH.put("header_version_alone", "Version %s");
         ENGLISH.put("reopen", "Some changes apply after App > Restart Messenger.");
         ENGLISH.put("quick_access", "Quick access");
         ENGLISH.put("access_help", "Long-press Messenger's home screen icon for Patch controls or Restart Messenger. You can also open HushMessenger settings from your app drawer.");
@@ -175,6 +183,7 @@ final class SettingsText {
         ENGLISH.put("local_search_nothing", "This phone has no saved text for this chat. Scroll up in the chat to load older messages, then search again.");
         ENGLISH.put("local_search_failed", "Couldn't read the saved messages. Try again in a moment.");
         ENGLISH.put("local_search_open_failed", "Couldn't open that message");
+        ENGLISH.put("local_search_empty", "Type a word to look for first.");
         ENGLISH.put("call_recording_unsupported", "This needs Android 10 or newer. Your choice is saved.");
         ENGLISH.put("call_recording_start", "Record");
         ENGLISH.put("call_recording_stop_pill", "Recording, tap to stop");
@@ -268,6 +277,7 @@ final class SettingsText {
         ENGLISH.put("theme_copied", "Theme copied");
         ENGLISH.put("theme_copy_failed", "Couldn't copy the theme. Try again.");
         ENGLISH.put("theme_cleared", "Back to your wallpaper colors");
+        ENGLISH.put("theme_change", "theme change");
         ENGLISH.put("theme_file_help", "A theme is a bit of text like {\"name\": \"Sunset\", \"accent\": \"#E1306C\", \"neutral\": \"#1A1418\", \"pure_black\": true}. Accent tints Messenger's blues and neutral tints its grays. Both keep Messenger's own brightness, so text stays easy to read. Copy theme gives you the colors in use to edit or share.");
         ENGLISH.put("about", "About HushMessenger");
         ENGLISH.put("version", "Version");
@@ -477,6 +487,8 @@ final class SettingsText {
         ENGLISH.put("message_log_photo_missing", "This photo couldn't be shown.");
         ENGLISH.put("message_log_button", "Button at the top of Chats");
         ENGLISH.put("message_log_button_help", "Puts a clock next to the new message button. Tap it to open the log.");
+        ENGLISH.put("message_log_menu_row", "Row in the Menu tab");
+        ENGLISH.put("message_log_menu_row_help", "Adds Message log under Settings in Messenger's Menu tab. Tap it to open the log.");
         ENGLISH.put("auto_reply_edit", "Edit replies");
         ENGLISH.put("auto_reply_title", "Auto replies");
         ENGLISH.put("auto_reply_hint", "Replies are tried from top to bottom. The first matching reply is sent.");
@@ -489,7 +501,7 @@ final class SettingsText {
         ENGLISH.put("auto_reply_count", "%1$s of %2$s replies");
         ENGLISH.put("auto_reply_number", "Reply %s");
         ENGLISH.put("auto_reply_remove_number", "Remove reply %s");
-        ENGLISH.put("auto_reply_required", "Write a reply, or remove this rule before saving.");
+        ENGLISH.put("auto_reply_required", "Write a reply here, or remove this one before saving.");
         ENGLISH.put("auto_reply_cancel", "Cancel");
         ENGLISH.put("auto_reply_remove", "Remove");
         ENGLISH.put("auto_reply_add", "Add a reply");

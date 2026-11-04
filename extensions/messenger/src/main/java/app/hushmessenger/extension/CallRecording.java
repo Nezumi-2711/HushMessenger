@@ -260,9 +260,11 @@ public final class CallRecording {
             boolean recording = session != null;
             pill.setText(new SettingsText(top).get(recording ? "call_recording_stop_pill" : "call_recording_start"));
             GradientDrawable shape = new GradientDrawable();
-            shape.setCornerRadius(pill.getResources().getDisplayMetrics().density * 24);
-            shape.setColor(recording ? 0xFFD32F2F : 0xE6202124);
-            pill.setBackground(shape);
+            shape.setCornerRadius(pill.getResources().getDisplayMetrics().density * 12);
+            shape.setColor(recording ? SettingsUi.RECORDING : SettingsUi.CALL_SCRIM);
+            // Shows the tap, so a press during a call reads as taken before the recording starts or stops.
+            pill.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(SettingsUi.CALL_RIPPLE), shape, null));
         } catch (RuntimeException error) {
             Settings.hookFailedPrivately(KEY, "Couldn't show the Record button", error);
         }
