@@ -197,6 +197,14 @@ final class SettingsText {
         ENGLISH.put("save_voice_menu_failed", "Couldn't save this voice message");
         ENGLISH.put("local_pin_kept", "Pinned on this phone");
         ENGLISH.put("local_pin_removed", "Unpinned");
+        ENGLISH.put("hidden_chats_hide", "Hide from chat list");
+        ENGLISH.put("hidden_chats_show", "Show in chat list");
+        ENGLISH.put("hidden_chats_hidden", "Hidden from your chat list");
+        ENGLISH.put("hidden_chats_shown", "Back on your chat list");
+        ENGLISH.put("hidden_chats_failed", "Couldn't hide this chat");
+        ENGLISH.put("hidden_chats_empty", "Chats you hide from your chat list show up here.");
+        ENGLISH.put("hidden_chats_unhide", "Unhide");
+        ENGLISH.put("hidden_chats_unnamed", "Chat");
         ENGLISH.put("text_style_bold", "Bold");
         ENGLISH.put("text_style_italic", "Italic");
         ENGLISH.put("text_style_read_only","Bold and Italic only work on text you're typing.");
@@ -314,6 +322,9 @@ final class SettingsText {
         ENGLISH.put("quick_quiet_help", "Hides ads, promotions, suggested people and growth prompts.");
         ENGLISH.put("quick_privacy", "Privacy");
         ENGLISH.put("quick_privacy_help", "Stops the uploads that tell Meta how you use Messenger, your advertising ID included.");
+        ENGLISH.put("quick_iphone", "iPhone look");
+        ENGLISH.put("quick_iphone_help", "Puts a Chats title at the top of your chat list in place of the wordmark and keeps the search bar under it, the way Messenger looks on an iPhone. Restart Messenger to see it.");
+        ENGLISH.put("quick_iphone_words", "Chats");
         ENGLISH.put("quick_defaults", "Back to defaults");
         ENGLISH.put("quick_defaults_help", "Turns every control off. Pause and the theme stay as they are.");
         ENGLISH.put("quick_changed_one", "Changed %d control");
