@@ -193,6 +193,7 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     var changedViewer = false
     val drawerReaders = mutableListOf<Method>()
     val drawerAnchors = mutableListOf<Method>()
+    val drawerInterfaces = mutableMapOf<String, List<String>>()
     val searchIconReaders = mutableListOf<Method>()
     val searchIconAnchors = mutableListOf<Method>()
     for (cls in classes) {
@@ -215,7 +216,10 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
             val refs = instructions.mapNotNull { (it as? ReferenceInstruction)?.reference }
             val strings = refs.filterIsInstance<StringReference>().map { it.string }.toSet()
             val gate = method.returnType == "Z" && method.parameterTypes.isEmpty()
-            if (instructions.any { it.isEmojiDrawerFlag() }) drawerReaders.add(method)
+            if (instructions.any { it.isEmojiDrawerFlag() }) {
+                drawerReaders.add(method)
+                drawerInterfaces[cls.type] = cls.interfaces.toList()
+            }
             if (EMOJI_DRAWER_ANCHOR in strings) drawerAnchors.add(method)
             if (instructions.any { it.isSearchIconFlag() }) searchIconReaders.add(method)
             if (SEARCH_ICON_ANCHOR in strings) searchIconAnchors.add(method)
@@ -377,7 +381,7 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
             ?.let { found.getValue("ai_search_chip").add(it) }
     }
     if (changedViewer) found.getValue("screenshot_viewers").clear() else screenshotViewerRefusal = null
-    found.getValue(EMOJI_DRAWER).addAll(connectEmojiDrawer(drawerReaders, drawerAnchors))
+    found.getValue(EMOJI_DRAWER).addAll(connectEmojiDrawer(drawerReaders, drawerAnchors, drawerInterfaces))
     found.getValue(INBOX_SEARCH_BAR).addAll(connectSearchBar(searchIconReaders, searchIconAnchors))
     found.getValue(EMOJI_SEARCH).addAll(findEmojiSearch(classes))
     found.getValue(TAB_BADGES).addAll(findTabBadges(classes))
@@ -397,6 +401,8 @@ internal fun findControls(classes: Iterable<ClassDef>, community: CommunityInbox
     found.getValue(INSTANTS_BUTTON).addAll(findInstantsButton(classes))
     found.getValue(SAVE_VOICE).addAll(findSaveVoice(classes))
     found.getValue(SAVE_VOICE_MENU).addAll(findSaveVoiceMenu(classes))
+    found.getValue(MESSAGE_ACTIONS).addAll(findMessageActions(classes))
+    found.getValue(MESSAGE_ACTIONS_MORE).addAll(findMessageActionsMore(classes))
     found.getValue(ANALYTICS_UPLOADS).addAll(findAnalyticsUploads(classes) + findBoundUploadTasks(classes) +
         findXAnalyticsUploadTimers(classes) + findInProcessUploadStarts(classes))
     found.getValue(ATTRIBUTION_UPLOADS).addAll(findAttributionUploads(classes))
